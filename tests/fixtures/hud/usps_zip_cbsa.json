@@ -1,0 +1,8 @@
+{
+  "__note": "# VERIFY against live response",
+  "data": {
+    "results": [
+      {"zip": "78701", "geoid": "12420", "res_ratio": 1.0}
+    ]
+  }
+}

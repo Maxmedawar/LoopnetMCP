@@ -10,7 +10,7 @@ Fable reviews independently after each phase before advancing.
 | 1 | Foundation refactor | 🟢 complete | 167 passed, 1 warning |
 | 2 | Source abstraction + LoopNet adapter | 🟢 complete | 178 passed, 1 warning |
 | 3 | Crexi + multi-source search | 🟢 complete | 199 passed, 1 warning |
-| 4 | Geo + market intelligence | ⚪ not started | — |
+| 4 | Geo + market intelligence | 🟢 complete | 225 passed, 1 warning |
 | 5 | Underwriting + scoring + flagship tools | ⚪ not started | — |
 | 6 | Distressed sources | ⚪ not started | — |
 | 7 | Owner/parcel enrichment | ⚪ not started | — |
@@ -41,3 +41,13 @@ Fable reviews independently after each phase before advancing.
     The current Crexi UI uses `universal-search/v2/search`; legacy `assets/search`
     fixtures remain covered, and asset detail continues through `assets/{id}`.
   - Pytest: `======================= 199 passed, 1 warning in 21.25s ========================`
+- 2026-07-13 — Phase 4 geo and market intelligence complete.
+  - Status: GREEN; persistent government-data caching, keyless geo resolution,
+    fault-isolated market coverage, scoring, comparison, and legacy contracts verified.
+  - Files changed: added SQLite write-through caching and government host policies;
+    added geo models, HUD USPS crosswalk persistence/static fallbacks, and Census
+    resolution; added normalized market models, auth client, Census/BLS/FRED/HUD/BEA/IRS
+    providers, MarketIntel/scoring, and `market_intel`/`compare_markets` tools; added
+    captured/representative fixtures and Phase 4 acceptance tests under
+    `tests/{cache,geo,market,tools}/`.
+  - Pytest: `======================= 225 passed, 1 warning in 21.09s ========================`

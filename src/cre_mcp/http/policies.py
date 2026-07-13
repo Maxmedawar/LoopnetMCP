@@ -60,7 +60,63 @@ def build_crexi_policy(config: CreConfig | None = None) -> FetchPolicy:
     )
 
 
+def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy]:
+    """Build conservative, persistent policies for government data hosts."""
+    config = config or CreConfig()
+    common = {
+        "max_retries": config.max_retries,
+        "impersonate": None,
+        "browser_fallback": False,
+        "persist": True,
+    }
+    return {
+        "api.census.gov": FetchPolicy(
+            host="api.census.gov",
+            delay_seconds=0.2,
+            cache_namespace="census",
+            cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
+        "geocoding.geo.census.gov": FetchPolicy(
+            host="geocoding.geo.census.gov",
+            delay_seconds=0.2,
+            cache_namespace="census-geocoder",
+            cache_ttl_seconds=90 * 24 * 60 * 60,
+            **common,
+        ),
+        "api.bls.gov": FetchPolicy(
+            host="api.bls.gov",
+            delay_seconds=0.2,
+            cache_namespace="bls",
+            cache_ttl_seconds=7 * 24 * 60 * 60,
+            **common,
+        ),
+        "api.stlouisfed.org": FetchPolicy(
+            host="api.stlouisfed.org",
+            delay_seconds=0.2,
+            cache_namespace="fred",
+            cache_ttl_seconds=6 * 60 * 60,
+            **common,
+        ),
+        "www.huduser.gov": FetchPolicy(
+            host="www.huduser.gov",
+            delay_seconds=0.5,
+            cache_namespace="hud",
+            cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
+        "apps.bea.gov": FetchPolicy(
+            host="apps.bea.gov",
+            delay_seconds=0.2,
+            cache_namespace="bea",
+            cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
+    }
+
+
 POLICY_REGISTRY: dict[str, FetchPolicy] = {
     "www.loopnet.com": build_loopnet_policy(),
     "api.crexi.com": build_crexi_policy(),
+    **build_gov_policies(),
 }

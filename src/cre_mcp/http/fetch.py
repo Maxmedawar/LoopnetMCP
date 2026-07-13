@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import sqlite3
 import time
 from collections.abc import Mapping
 from typing import Any
@@ -11,7 +12,7 @@ from urllib.parse import urlparse
 
 from curl_cffi.requests import AsyncSession, RequestsError
 
-from cre_mcp.cache import Cache, TTLCache
+from cre_mcp.cache import Cache, SQLiteCache, TTLCache
 from cre_mcp.config import CreConfig
 from cre_mcp.http.errors import (
     FetchBlockedError,
@@ -22,6 +23,7 @@ from cre_mcp.http.policies import (
     POLICY_REGISTRY,
     FetchPolicy,
     build_crexi_policy,
+    build_gov_policies,
     build_loopnet_policy,
 )
 
@@ -35,6 +37,7 @@ class FetchClient:
         self,
         config: CreConfig | None = None,
         cache: Cache | None = None,
+        persistent_cache: SQLiteCache | None = None,
         policies: Mapping[str, FetchPolicy] | None = None,
     ):
         self._config = config or CreConfig()
@@ -42,10 +45,14 @@ class FetchClient:
             ttl_seconds=self._config.cache_ttl_seconds,
             max_entries=self._config.cache_max_entries,
         )
+        self._persistent_cache = persistent_cache or SQLiteCache(
+            self._config.cache_db_path
+        )
 
         self._policies = dict(POLICY_REGISTRY)
         self._policies["www.loopnet.com"] = build_loopnet_policy(self._config)
         self._policies["api.crexi.com"] = build_crexi_policy(self._config)
+        self._policies.update(build_gov_policies(self._config))
         if policies is not None:
             self._policies.update(policies)
 
@@ -171,7 +178,7 @@ class FetchClient:
             return policy.detail_cache_ttl_seconds
         return policy.cache_ttl_seconds
 
-    def _cache_response(
+    async def _cache_response(
         self,
         key: str,
         value: str,
@@ -183,6 +190,39 @@ class FetchClient:
             value,
             ttl_seconds=self._cache_ttl(policy, method),
         )
+        if policy.persist:
+            try:
+                await self._persistent_cache.set(
+                    key,
+                    value,
+                    ttl_seconds=self._cache_ttl(policy, method),
+                )
+            except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
+                logger.warning("Persistent cache write failed for %s: %s", key, exc)
+
+    async def _cached_response(
+        self,
+        key: str,
+        policy: FetchPolicy,
+        method: str,
+    ) -> str | None:
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        if not policy.persist:
+            return None
+        try:
+            persisted = await self._persistent_cache.get(key)
+        except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
+            logger.warning("Persistent cache read failed for %s: %s", key, exc)
+            return None
+        if persisted is not None:
+            self._cache.set(
+                key,
+                persisted,
+                ttl_seconds=self._cache_ttl(policy, method),
+            )
+        return persisted
 
     async def get_text(self, url: str) -> str:
         return await self._request_text("GET", url)
@@ -194,12 +234,13 @@ class FetchClient:
         *,
         body: Any = None,
         expects_json: bool = False,
+        headers: Mapping[str, str] | None = None,
     ) -> str:
         """Run any request through the shared policy, cache, and retry path."""
         policy = self._policy_for_url(url)
         method = method.upper()
         cache_key = self._cache_key(policy, method, url, body)
-        cached = self._cache.get(cache_key)
+        cached = await self._cached_response(cache_key, policy, method)
         if cached is not None:
             return cached
 
@@ -207,7 +248,7 @@ class FetchClient:
 
         async with self._semaphore_for(policy.host):
             # Double-check cache after acquiring the host semaphore.
-            cached = self._cache.get(cache_key)
+            cached = await self._cached_response(cache_key, policy, method)
             if cached is not None:
                 return cached
             return await self._fetch_with_retries(
@@ -217,24 +258,39 @@ class FetchClient:
                 method=method,
                 body=body,
                 expects_json=expects_json,
+                headers=headers,
             )
 
     async def fetch(self, url: str) -> str:
         """Backward-compatible alias for ``get_text``."""
         return await self.get_text(url)
 
-    async def get_json(self, url: str) -> Any:
+    async def get_json(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+    ) -> Any:
         """Fetch and decode a JSON response through the per-host policy path."""
-        text = await self._request_text("GET", url, expects_json=True)
+        text = await self._request_text(
+            "GET", url, expects_json=True, headers=headers
+        )
         return self._decode_json(text, url)
 
-    async def post_json(self, url: str, body: Any) -> Any:
+    async def post_json(
+        self,
+        url: str,
+        body: Any,
+        *,
+        headers: Mapping[str, str] | None = None,
+    ) -> Any:
         """POST a JSON body and decode the response through the shared policy path."""
         text = await self._request_text(
             "POST",
             url,
             body=body,
             expects_json=True,
+            headers=headers,
         )
         return self._decode_json(text, url)
 
@@ -256,6 +312,7 @@ class FetchClient:
         method: str = "GET",
         body: Any = None,
         expects_json: bool = False,
+        headers: Mapping[str, str] | None = None,
     ) -> str:
         policy = policy or self._policy_for_url(url)
         method = method.upper()
@@ -268,9 +325,17 @@ class FetchClient:
             await self._enforce_rate_limit(policy)
             try:
                 if method == "GET":
-                    response = await client.get(url)
+                    if headers:
+                        response = await client.get(url, headers=dict(headers))
+                    else:
+                        response = await client.get(url)
                 elif method == "POST":
-                    response = await client.post(url, json=body)
+                    if headers:
+                        response = await client.post(
+                            url, json=body, headers=dict(headers)
+                        )
+                    else:
+                        response = await client.post(url, json=body)
                 else:
                     raise FetchClientError(f"Unsupported HTTP method: {method}")
 
@@ -290,7 +355,7 @@ class FetchClient:
                             body=body,
                             expects_json=expects_json,
                         )
-                    self._cache_response(cache_key, text, policy, method)
+                    await self._cache_response(cache_key, text, policy, method)
                     return text
 
                 text = response.text
@@ -371,7 +436,7 @@ class FetchClient:
             )
         else:
             text = await self._browser_fetcher.fetch(url)
-        self._cache_response(
+        await self._cache_response(
             cache_key or self._cache_key(policy, method, url, body),
             text,
             policy,

@@ -1,0 +1,14 @@
+{
+  "__note": "# VERIFY against live response",
+  "data": {
+    "basicdata": {
+      "year": "2026",
+      "area_name": "Austin-Round Rock-Georgetown, TX MSA",
+      "Efficiency": 1376,
+      "One-Bedroom": 1548,
+      "Two-Bedroom": 1902,
+      "Three-Bedroom": 2428,
+      "Four-Bedroom": 2864
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "__note": "# VERIFY against live response",
+  "data": {
+    "year": "2026",
+    "area_name": "Austin-Round Rock-Georgetown, TX MSA",
+    "median_income": 133800,
+    "very_low": {"il50_p4": 66850}
+  }
+}

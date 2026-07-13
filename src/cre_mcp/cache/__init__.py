@@ -3,6 +3,7 @@
 from typing import Any, Protocol
 
 from cre_mcp.cache.memory import TTLCache
+from cre_mcp.cache.sqlite import SQLiteCache
 
 
 class Cache(Protocol):
@@ -20,4 +21,4 @@ class Cache(Protocol):
     def clear(self) -> None: ...
 
 
-__all__ = ["Cache", "TTLCache"]
+__all__ = ["Cache", "SQLiteCache", "TTLCache"]
