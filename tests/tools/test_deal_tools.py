@@ -6,9 +6,12 @@ import pytest
 
 from cre_mcp.models import (
     AggregatedSearchResult,
+    DealAttributes,
     GeoLevel,
     GeoRef,
     Listing,
+    MetricValue,
+    RentComps,
     SourceCapabilities,
 )
 from cre_mcp.tools.deal_tools import analyze_deal, find_deals
@@ -143,6 +146,85 @@ async def test_analyze_deal_extracts_asset_id_from_crexi_url():
     assert "error" not in result
     source.get_detail.assert_awaited_once()
     assert source.get_detail.await_args.args[0].source_id == "2622985"
+
+
+@pytest.mark.asyncio
+async def test_analyze_deal_populates_phase8_attributes_rent_and_signals():
+    listing = _listing("phase8").model_copy(
+        update={
+            "property_type": "multifamily",
+            "lat": 30.2182,
+            "lon": -97.6833,
+            "parking": "80 Spaces (4.0/1,000 SF)",
+            "raw": {"in_place_rent_monthly": 1760},
+        }
+    )
+    source = Mock(capabilities=SourceCapabilities(detail_is_expensive=True))
+    source.get_detail = AsyncMock(return_value=listing)
+    fake_registry = Mock()
+    fake_registry.get.return_value = source
+    market_engine = Mock()
+    market_engine.get_market_pack = AsyncMock(return_value=_market())
+    owner_engine = Mock()
+    owner_engine.lookup = AsyncMock(return_value=None)
+    attribute_engine = Mock()
+    attribute_engine.attributes_for_listing = AsyncMock(
+        return_value=DealAttributes(
+            drive_thru=True,
+            parking=listing.parking,
+            size_sqft=listing.size_sqft_num,
+        )
+    )
+    traffic = Mock()
+    traffic.nearest_aadt = AsyncMock(
+        return_value=MetricValue(
+            value=51_053,
+            unit="vehicles/day",
+            as_of="2025",
+            source="TX DOT AADT",
+        )
+    )
+    rent_engine = Mock()
+    rent_engine.get_rent_comps = AsyncMock(
+        return_value=RentComps(
+            geo=_geo(),
+            market_rent_estimate=MetricValue(
+                value=2200,
+                unit="USD/month",
+                source="Zillow ZORI",
+            ),
+        )
+    )
+
+    with patch("cre_mcp.tools.deal_tools.registry", fake_registry), patch(
+        "cre_mcp.tools.deal_tools.resolve", new=AsyncMock(return_value=_geo())
+    ), patch(
+        "cre_mcp.tools.deal_tools._market_engine", return_value=market_engine
+    ), patch(
+        "cre_mcp.tools.deal_tools._owner_engine", return_value=owner_engine
+    ), patch(
+        "cre_mcp.tools.deal_tools._attribute_engine", return_value=attribute_engine
+    ), patch(
+        "cre_mcp.tools.deal_tools.TrafficProvider", return_value=traffic
+    ), patch(
+        "cre_mcp.tools.deal_tools._rent_engine", return_value=rent_engine
+    ):
+        result = await analyze_deal("phase8", strategy="value_add_multifamily")
+
+    assert "error" not in result
+    assert result["attributes"] == {
+        "traffic_aadt": 51_053.0,
+        "drive_thru": True,
+        "parking": "80 Spaces (4.0/1,000 SF)",
+        "size_sqft": 8_000.0,
+    }
+    assert result["rent_comps"]["market_rent_estimate"]["value"] == 2200
+    signal = next(
+        item
+        for item in result["scores"][0]["rubric_result"]["signal_results"]
+        if item["key"] == "rent_gap_to_market"
+    )
+    assert signal["raw_value"] == 20.0
 
 
 @pytest.mark.asyncio

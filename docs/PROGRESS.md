@@ -14,7 +14,8 @@ Fable reviews independently after each phase before advancing.
 | 5 | Underwriting + scoring + flagship tools | 🟢 complete | 253 passed, 1 warning |
 | 6 | Distressed sources | 🟢 complete | 285 passed, 1 warning |
 | 7 | Owner/parcel enrichment | 🟢 complete | 304 passed, 1 warning |
-| **Overall** | **7-phase build** | **🟢 FEATURE-COMPLETE** | **304 passed, 1 warning** |
+| 8 | Attributes, traffic counts + rent comparables | 🟢 complete | 325 passed, 1 warning |
+| **Overall** | **8-phase build** | **🟢 FEATURE-COMPLETE — 10 tools** | **325 passed, 1 warning** |
 
 ## Log
 
@@ -84,3 +85,15 @@ Fable reviews independently after each phase before advancing.
     Yavapai AZ, and Douglas CO assessor endpoints were all reconfirmed through live provider
     queries; no Phase 7 fixture is marked `# VERIFY`.
   - Pytest: `======================= 304 passed, 1 warning in 21.38s ========================`
+- 2026-07-13 — Phase 8 attributes, traffic counts, and rent comparables complete.
+  - Status: GREEN; ten registered tools, non-fatal public-data enrichment, newly activated
+    traffic/visibility/parking/rent-gap signals, confidence-aware scoring, and legacy contracts
+    are verified.
+  - Files changed: extended the shared ArcGIS helper to preserve optional WGS84 geometry; added
+    config-driven, persistently cached NC/AZ/CO/TX/FL/CA DOT AADT lookup; added listing-text and
+    cached OpenStreetMap drive-thru/parking enrichment; added RentComps models, monthly persistent
+    Zillow ZORI ZIP/metro ingestion, Census ACS/HUD bedroom-tier assembly, optional keyed RentCast,
+    and the `get_rent_comparables` tool; wired compact deal attributes and Phase 8 signals; added
+    live-captured traffic/ZORI/OSM fixtures and acceptance tests. All six DOT layers and both ZORI
+    CSV endpoints were confirmed live. Only the paid-key RentCast fixture is marked `# VERIFY`.
+  - Pytest: `325 passed, 1 warning in 23.46s`

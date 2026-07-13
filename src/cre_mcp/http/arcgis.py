@@ -16,6 +16,8 @@ async def arcgis_query(
     where: str = "1=1",
     out_fields: str = "*",
     geometry: Any = None,
+    return_geometry: bool = False,
+    out_sr: int | None = None,
     result_offset: int = 0,
     result_count: int | None = None,
 ) -> list[dict]:
@@ -35,7 +37,7 @@ async def arcgis_query(
             "f": "json",
             "where": where,
             "outFields": out_fields,
-            "returnGeometry": "false",
+            "returnGeometry": "true" if return_geometry else "false",
             "resultOffset": offset,
             "resultRecordCount": page_size,
         }
@@ -45,10 +47,17 @@ async def arcgis_query(
             )
             params["spatialRel"] = "esriSpatialRelIntersects"
             if isinstance(geometry, dict):
+                spatial_reference = geometry.get("spatialReference")
+                if isinstance(spatial_reference, dict):
+                    wkid = spatial_reference.get("wkid")
+                    if wkid is not None:
+                        params["inSR"] = str(wkid)
                 if {"xmin", "ymin", "xmax", "ymax"} <= geometry.keys():
                     params["geometryType"] = "esriGeometryEnvelope"
                 elif {"x", "y"} <= geometry.keys():
                     params["geometryType"] = "esriGeometryPoint"
+        if out_sr is not None:
+            params["outSR"] = str(out_sr)
         payload = await get_fetch_client().get_json(
             f"{base_url}?{urlencode(params)}"
         )
@@ -67,6 +76,8 @@ async def arcgis_query(
                 continue
             item = feature.get("attributes")
             if isinstance(item, dict):
+                if return_geometry and isinstance(feature.get("geometry"), dict):
+                    item = {**item, "_geometry": feature["geometry"]}
                 page.append(item)
         attributes.extend(page)
         if not payload.get("exceededTransferLimit") or not features:

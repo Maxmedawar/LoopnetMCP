@@ -60,3 +60,37 @@ async def test_arcgis_query_honors_requested_count():
         )
     assert result == [{"OBJECTID": 1}]
     assert client.get_json.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_arcgis_query_optionally_preserves_wgs84_geometry():
+    client = Mock()
+    client.get_json = AsyncMock(
+        return_value={
+            "features": [
+                {
+                    "attributes": {"AADT": 42_000},
+                    "geometry": {"x": -97.7, "y": 30.2},
+                }
+            ]
+        }
+    )
+    with patch("cre_mcp.http.arcgis.get_fetch_client", return_value=client):
+        result = await arcgis_query(
+            "https://services.arcgis.com/example/FeatureServer/0",
+            geometry={
+                "xmin": -98,
+                "ymin": 30,
+                "xmax": -97,
+                "ymax": 31,
+                "spatialReference": {"wkid": 4326},
+            },
+            return_geometry=True,
+            out_sr=4326,
+        )
+
+    assert result == [{"AADT": 42_000, "_geometry": {"x": -97.7, "y": 30.2}}]
+    query = parse_qs(urlparse(client.get_json.await_args.args[0]).query)
+    assert query["returnGeometry"] == ["true"]
+    assert query["inSR"] == ["4326"]
+    assert query["outSR"] == ["4326"]

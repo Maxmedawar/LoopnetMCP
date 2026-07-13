@@ -77,6 +77,35 @@ class HudProvider(MarketDataProvider):
             source="HUD Fair Market Rents",
         )
 
+    async def fmr_by_bedroom(
+        self,
+        geo: GeoRef,
+        year: int,
+    ) -> dict[int, MetricValue]:
+        """Return every available HUD FMR bedroom tier from zero through four."""
+        if not self._has_key:
+            raise ProviderUnavailableError("HUD API token is not configured")
+        payload = await self.client.get(
+            f"fmr/data/{self._geo_id(geo)}", {"year": year}
+        )
+        keys = {
+            0: ("Efficiency", "efficiency", "fmr_0", "fmr0", "FMR_0"),
+            1: ("One-Bedroom", "one_bedroom", "fmr_1", "fmr1", "FMR_1"),
+            2: ("Two-Bedroom", "two_bedroom", "fmr_2", "fmr2", "FMR_2"),
+            3: ("Three-Bedroom", "three_bedroom", "fmr_3", "fmr3", "FMR_3"),
+            4: ("Four-Bedroom", "four_bedroom", "fmr_4", "fmr4", "FMR_4"),
+        }
+        return {
+            bedrooms: MetricValue(
+                value=value,
+                unit="USD/month",
+                as_of=str(year),
+                source="HUD Fair Market Rents",
+            )
+            for bedrooms, candidates in keys.items()
+            if (value := _find_number(payload, candidates)) is not None
+        }
+
     async def income_limits(self, geo: GeoRef, year: int) -> MetricValue:
         """Return HUD area median family income."""
         if not self._has_key:

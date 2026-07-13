@@ -12,7 +12,11 @@ from cre_mcp.tools.listing_tools import (
     get_property_details,
     search_properties,
 )
-from cre_mcp.tools.market_tools import compare_markets, market_intel
+from cre_mcp.tools.market_tools import (
+    compare_markets,
+    get_rent_comparables,
+    market_intel,
+)
 from cre_mcp.tools.owner_tools import owner_lookup
 
 # Route ALL logging to stderr — stdout is reserved for MCP protocol messages.
@@ -33,6 +37,7 @@ mcp = FastMCP(
         " Use analyze_deal for deep underwriting, find_deals for scored deal discovery,"
         " and find_distressed for REO, auction, foreclosure, and tax-sale opportunities."
         " Use owner_lookup for public assessor parcel and owner enrichment."
+        " Use get_rent_comparables for public ZORI, ACS, and HUD rent benchmarks."
     ),
 )
 register_all(mcp)
@@ -49,6 +54,7 @@ __all__ = [
     "find_distressed",
     "get_market_overview",
     "get_property_details",
+    "get_rent_comparables",
     "market_intel",
     "mcp",
     "owner_lookup",

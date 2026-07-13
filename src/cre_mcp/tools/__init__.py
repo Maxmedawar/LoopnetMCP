@@ -12,6 +12,7 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(listing_tools.get_market_overview)
     mcp.tool()(market_tools.market_intel)
     mcp.tool()(market_tools.compare_markets)
+    mcp.tool()(market_tools.get_rent_comparables)
     mcp.tool()(deal_tools.analyze_deal)
     mcp.tool()(deal_tools.find_deals)
     mcp.tool()(deal_tools.find_distressed)

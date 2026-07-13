@@ -4,11 +4,19 @@ import logging
 import re
 from typing import Any
 
+from cre_mcp.enrichment.attributes import (
+    AttributeEnricher,
+    drive_thru_from_text,
+    parking_from_listing,
+)
 from cre_mcp.enrichment.owner import OwnerLookup
+from cre_mcp.enrichment.traffic import TrafficProvider
 from cre_mcp.geo.resolver import resolve
 from cre_mcp.market.intel import MarketIntel
+from cre_mcp.market.rent_comps import RentCompsService
 from cre_mcp.models import (
     Deal,
+    DealAttributes,
     DealContext,
     DealScore,
     GeoRef,
@@ -17,6 +25,7 @@ from cre_mcp.models import (
     MarketPack,
     OwnerRecord,
     ParcelRecord,
+    RentComps,
     UnderwritingResult,
 )
 from cre_mcp.scoring.engine import score, score_all
@@ -30,6 +39,8 @@ logger = logging.getLogger(__name__)
 registry = SourceRegistry()
 _market_intel: MarketIntel | None = None
 _owner_lookup: OwnerLookup | None = None
+_attribute_enricher: AttributeEnricher | None = None
+_rent_comps: RentCompsService | None = None
 
 
 def _market_engine() -> MarketIntel:
@@ -44,6 +55,20 @@ def _owner_engine() -> OwnerLookup:
     if _owner_lookup is None:
         _owner_lookup = OwnerLookup()
     return _owner_lookup
+
+
+def _attribute_engine() -> AttributeEnricher:
+    global _attribute_enricher
+    if _attribute_enricher is None:
+        _attribute_enricher = AttributeEnricher()
+    return _attribute_enricher
+
+
+def _rent_engine() -> RentCompsService:
+    global _rent_comps
+    if _rent_comps is None:
+        _rent_comps = RentCompsService()
+    return _rent_comps
 
 
 def _location_for_listing(listing: Listing) -> str:
@@ -100,6 +125,91 @@ async def _owner_for(
         return None, str(exc)
 
 
+def _base_attributes(listing: Listing) -> DealAttributes:
+    return DealAttributes(
+        drive_thru=drive_thru_from_text(listing),
+        parking=parking_from_listing(listing),
+        size_sqft=listing.size_sqft_num,
+    )
+
+
+async def _attributes_for(
+    listing: Listing,
+    parcel: ParcelRecord | None = None,
+) -> tuple[DealAttributes, dict[str, str]]:
+    warnings: dict[str, str] = {}
+    lookup_listing = listing
+    if (
+        (listing.lat is None or listing.lon is None)
+        and parcel is not None
+        and parcel.lat is not None
+        and parcel.lon is not None
+    ):
+        lookup_listing = listing.model_copy(
+            update={"lat": parcel.lat, "lon": parcel.lon}
+        )
+    try:
+        attributes = await _attribute_engine().attributes_for_listing(lookup_listing)
+    except Exception as exc:
+        logger.warning("Property attributes unavailable for %s: %s", listing.address, exc)
+        attributes = _base_attributes(listing)
+        warnings["attributes"] = str(exc)
+    if (
+        lookup_listing.lat is not None
+        and lookup_listing.lon is not None
+        and listing.state
+    ):
+        try:
+            traffic = await TrafficProvider(listing.state).nearest_aadt(
+                lookup_listing.lat,
+                lookup_listing.lon,
+            )
+            if traffic is not None:
+                attributes.traffic_aadt = traffic.value
+        except Exception as exc:
+            logger.warning("Traffic enrichment unavailable for %s: %s", listing.address, exc)
+            warnings["traffic"] = str(exc)
+    return attributes, warnings
+
+
+def _is_multifamily(listing: Listing, strategy: str | None) -> bool:
+    property_type = (listing.property_type or "").casefold()
+    return strategy == "value_add_multifamily" or any(
+        value in property_type for value in ("multifamily", "multi-family", "apartment")
+    )
+
+
+async def _rent_for(
+    listing: Listing,
+    geo: GeoRef | None,
+    market: MarketPack | None,
+    strategy: str | None,
+) -> tuple[RentComps | None, str | None]:
+    if geo is None or not _is_multifamily(listing, strategy):
+        return None, None
+    bedrooms_raw = listing.raw.get("bedrooms")
+    try:
+        bedrooms = int(bedrooms_raw) if bedrooms_raw is not None else None
+    except (TypeError, ValueError):
+        bedrooms = None
+    location = _location_for_listing(listing)
+    try:
+        return (
+            await _rent_engine().get_rent_comps(
+                location,
+                geo,
+                bedrooms=bedrooms,
+                property_type=listing.property_type,
+                address=listing.address,
+                market_pack=market,
+            ),
+            None,
+        )
+    except Exception as exc:
+        logger.warning("Rent comparables unavailable for %s: %s", listing.address, exc)
+        return None, str(exc)
+
+
 def _assumptions_for(
     listing: Listing,
     market: MarketPack | None,
@@ -148,12 +258,16 @@ def _deal(
     *,
     parcel: ParcelRecord | None = None,
     owner: OwnerRecord | None = None,
+    attributes: DealAttributes | None = None,
+    rent_comps: RentComps | None = None,
 ) -> Deal:
     underwriting = _underwrite(listing, market, assumptions)
     context = DealContext(
         listing=listing,
         market=market,
         parcel=parcel,
+        attributes=attributes or _base_attributes(listing),
+        rent_comps=rent_comps,
         underwriting=underwriting,
     )
     scores = _scores(context, strategy)
@@ -162,6 +276,8 @@ def _deal(
         market_pack=market,
         parcel=parcel,
         owner=owner,
+        attributes=context.attributes,
+        rent_comps=rent_comps,
         underwriting=underwriting,
         scores=scores,
         best_strategy=scores[0].strategy if scores else None,
@@ -236,6 +352,8 @@ async def analyze_deal(
                 logger.warning("Owner geography unavailable for %s: %s", location, exc)
         owner, owner_error = await _owner_for(listing, geo)
         parcel = owner.parcels[0] if owner and owner.parcels else None
+        attributes, attribute_warnings = await _attributes_for(listing, parcel)
+        rent_comps, rent_error = await _rent_for(listing, geo, market, strategy)
         deal = _deal(
             listing,
             market,
@@ -243,6 +361,8 @@ async def analyze_deal(
             assumptions,
             parcel=parcel,
             owner=owner,
+            attributes=attributes,
+            rent_comps=rent_comps,
         )
         payload = deal.model_dump(mode="json")
         warnings = {}
@@ -250,6 +370,9 @@ async def analyze_deal(
             warnings["market"] = market_error
         if owner_error:
             warnings["owner"] = owner_error
+        warnings.update(attribute_warnings)
+        if rent_error:
+            warnings["rent_comps"] = rent_error
         if warnings:
             payload["warnings"] = warnings
         return payload

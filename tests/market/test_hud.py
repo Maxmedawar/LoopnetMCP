@@ -25,3 +25,20 @@ async def test_hud_fmr_bearer_url_and_mapping():
     assert metric.value == 1902
     assert metric.unit == "USD/month"
 
+
+@pytest.mark.asyncio
+async def test_hud_fmr_by_bedroom_maps_every_published_tier():
+    fetch = AsyncMock()
+    fetch.get_json.return_value = json.loads(load_fixture("hud/fmr.json"))
+    provider = HudProvider(config=CreConfig(hud_api_token="hud-key"), fetch=fetch)
+    geo = GeoRef(level=GeoLevel.CBSA, state_fips="48", cbsa="12420", name="Austin MSA")
+
+    tiers = await provider.fmr_by_bedroom(geo, 2026)
+
+    assert {bedrooms: metric.value for bedrooms, metric in tiers.items()} == {
+        0: 1376,
+        1: 1548,
+        2: 1902,
+        3: 2428,
+        4: 2864,
+    }

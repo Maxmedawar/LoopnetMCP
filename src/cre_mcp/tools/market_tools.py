@@ -6,10 +6,12 @@ from typing import Any
 
 from cre_mcp.geo.resolver import resolve
 from cre_mcp.market.intel import MarketIntel, market_score
+from cre_mcp.market.rent_comps import RentCompsService
 from cre_mcp.models.market import MarketPack
 
 logger = logging.getLogger(__name__)
 _intel: MarketIntel | None = None
+_rent_comps: RentCompsService | None = None
 
 
 def _engine() -> MarketIntel:
@@ -17,6 +19,13 @@ def _engine() -> MarketIntel:
     if _intel is None:
         _intel = MarketIntel()
     return _intel
+
+
+def _rent_engine() -> RentCompsService:
+    global _rent_comps
+    if _rent_comps is None:
+        _rent_comps = RentCompsService()
+    return _rent_comps
 
 
 def _serialize(pack: MarketPack) -> dict[str, Any]:
@@ -83,3 +92,39 @@ async def compare_markets(locations: list[str]) -> dict:
         market["rank"] = rank
     return {"markets": markets, "errors": errors, "count": len(markets)}
 
+
+async def get_rent_comparables(
+    location: str,
+    bedrooms: int | None = None,
+    property_type: str | None = None,
+) -> dict:
+    """Get free public rent benchmarks and optional paid rental comparables.
+
+    Args:
+        location: City/state, county/state, or five-digit ZIP code.
+        bedrooms: Optional bedroom count; zero represents a studio.
+        property_type: Optional RentCast-compatible residential property type.
+
+    Returns:
+        Coverage-aware ZORI, Census ACS, HUD FMR, and optional RentCast data.
+    """
+    logger.info(
+        "get_rent_comparables called: location=%s bedrooms=%s property_type=%s",
+        location,
+        bedrooms,
+        property_type,
+    )
+    if bedrooms is not None and bedrooms < 0:
+        return {"error": "bedrooms must be zero or greater"}
+    try:
+        geo = await resolve(location)
+        comps = await _rent_engine().get_rent_comps(
+            location,
+            geo,
+            bedrooms=bedrooms,
+            property_type=property_type,
+        )
+        return comps.model_dump(mode="json")
+    except Exception as exc:
+        logger.error("get_rent_comparables error for %s: %s", location, exc)
+        return {"error": str(exc)}

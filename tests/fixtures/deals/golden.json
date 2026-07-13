@@ -62,13 +62,13 @@
   ],
   "nnn_partial": [
     {
-      "confidence": 0.42,
+      "confidence": 0.4032,
       "disqualified": false,
       "disqualifier_hits": [],
-      "explanation": "Single-Tenant NNN Retail scored 45.09/100 (F) at 42% rubric coverage. Top strengths: tenant_credit_tier (0.75 \u2192 0.75), lease_years_remaining (10.00 \u2192 0.70), cap_rate_vs_band (0.70 \u2192 0.70). Top weaknesses: cap_rate_vs_band (0.70 \u2192 0.70), lease_years_remaining (10.00 \u2192 0.70), tenant_credit_tier (0.75 \u2192 0.75). Missing signals: rent_escalations, nnn_purity, corporate_vs_franchisee, traffic_count, demographics_3mi, visibility_corner. Market component unavailable and excluded from the blend. Core component 0.00/100. Path-of-progress permit data is unavailable. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "explanation": "Single-Tenant NNN Retail scored 45.09/100 (F) at 40% rubric coverage. Top strengths: tenant_credit_tier (0.75 \u2192 0.75), lease_years_remaining (10.00 \u2192 0.70), cap_rate_vs_band (0.70 \u2192 0.70). Top weaknesses: cap_rate_vs_band (0.70 \u2192 0.70), lease_years_remaining (10.00 \u2192 0.70), tenant_credit_tier (0.75 \u2192 0.75). Missing signals: rent_escalations, nnn_purity, corporate_vs_franchisee, traffic_count, demographics_3mi, visibility_corner. Market component unavailable and excluded from the blend. Core component 0.00/100. Path-of-progress permit data is unavailable. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
       "grade": "F",
       "market_score": null,
-      "rubric_coverage": 0.42,
+      "rubric_coverage": 0.4032,
       "rubric_raw_score": 72.14,
       "score": 45.09,
       "strategy": "nnn_retail"
@@ -76,13 +76,13 @@
   ],
   "nnn_strong": [
     {
-      "confidence": 1.0,
+      "confidence": 0.96,
       "disqualified": false,
       "disqualifier_hits": [],
-      "explanation": "Single-Tenant NNN Retail scored 90.50/100 (A) at 100% rubric coverage. Top strengths: lease_years_remaining (15.00 \u2192 1.00), tenant_credit_tier (0.60 \u2192 0.60), cap_rate_vs_band (1.00 \u2192 1.00). Top weaknesses: tenant_credit_tier (0.60 \u2192 0.60), rent_escalations (0.85 \u2192 0.85), visibility_corner (1.00 \u2192 1.00). Missing signals: none. Market component 96.83/100. Core component 84.45/100. Path of progress: 10000 permitted units as of 2024. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "explanation": "Single-Tenant NNN Retail scored 90.50/100 (A) at 96% rubric coverage. Top strengths: lease_years_remaining (15.00 \u2192 1.00), tenant_credit_tier (0.60 \u2192 0.60), cap_rate_vs_band (1.00 \u2192 1.00). Top weaknesses: tenant_credit_tier (0.60 \u2192 0.60), rent_escalations (0.85 \u2192 0.85), visibility_corner (1.00 \u2192 1.00). Missing signals: parking_adequacy. Market component 96.83/100. Core component 84.45/100. Path of progress: 10000 permitted units as of 2024. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
       "grade": "A",
       "market_score": 96.83,
-      "rubric_coverage": 1.0,
+      "rubric_coverage": 0.96,
       "rubric_raw_score": 91.6,
       "score": 90.5,
       "strategy": "nnn_retail"

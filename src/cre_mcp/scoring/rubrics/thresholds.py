@@ -23,7 +23,7 @@ GRADE_CUTOFFS = (
 FAIL_GRADE = "F"
 DISQUALIFIED_GRADE = "DQ"
 
-NNN_WEIGHTS = {
+NNN_BASE_WEIGHTS = {
     "tenant_credit_tier": 0.18,
     "lease_years_remaining": 0.14,
     "rent_escalations": 0.08,
@@ -37,6 +37,12 @@ NNN_WEIGHTS = {
     "residual_value_land": 0.05,
     "co_tenancy_quality": 0.05,
 }
+NNN_PARKING_WEIGHT = 0.04
+NNN_EXISTING_WEIGHT_SCALE = 1.0 - NNN_PARKING_WEIGHT
+NNN_WEIGHTS = {
+    key: weight * NNN_EXISTING_WEIGHT_SCALE
+    for key, weight in NNN_BASE_WEIGHTS.items()
+} | {"parking_adequacy": NNN_PARKING_WEIGHT}
 
 VAM_WEIGHTS = {
     "rent_gap_to_market": 0.15,
@@ -125,6 +131,7 @@ REQUIRED_SIGNALS = {
 SIGNAL_BANDS = {
     "lease_years_remaining": ((5.0, 0.0), (7.0, 0.15), (10.0, 0.40), (12.0, 0.70), (15.0, 0.85), (None, 1.0)),
     "traffic_count": ((10_000.0, 0.10), (15_000.0, 0.35), (20_000.0, 0.60), (30_000.0, 0.80), (None, 1.0)),
+    "parking_adequacy": ((2.0, 0.10), (3.0, 0.40), (4.0, 0.70), (None, 1.0)),
     "price_vs_replacement": ((0.85, 1.0), (1.0, 0.75), (1.15, 0.40), (None, 0.10)),
     "residual_value_land": ((0.15, 0.10), (0.25, 0.40), (0.40, 0.70), (None, 1.0)),
     "co_tenancy_quality": ((1.0, 0.25), (3.0, 0.60), (None, 1.0)),
@@ -254,6 +261,8 @@ VISIBILITY_SCORES = {
     "inline": 0.20,
     "in-line": 0.20,
 }
+DRIVE_THRU_VISIBILITY_SCORE = VISIBILITY_SCORES["drive-thru"]
+PARKING_PRESENT_EQUIVALENT_RATIO = 2.0
 
 UNIT_MIX_SCORES = {"workforce": 1.0, "b/c workforce": 1.0, "class a": 0.40}
 CAPEX_QUALITY_SCORES = {"line-itemed bids": 1.0, "line-itemed": 1.0, "generic": 0.60, "missing": 0.10}

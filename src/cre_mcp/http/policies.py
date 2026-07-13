@@ -101,6 +101,9 @@ def build_arcgis_policies(config: CreConfig | None = None) -> dict[str, FetchPol
         "services3.arcgis.com",
         "services6.arcgis.com",
         "gcgis.guilfordcountync.gov",
+        "dtdapps.codot.gov",
+        "gis.fdot.gov",
+        "caltrans-gis.dot.ca.gov",
     )
     return {
         host: FetchPolicy(
@@ -167,6 +170,27 @@ def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy
             delay_seconds=0.2,
             cache_namespace="bea",
             cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
+        "files.zillowstatic.com": FetchPolicy(
+            host="files.zillowstatic.com",
+            delay_seconds=0.2,
+            cache_namespace="zillow-zori",
+            cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
+        "overpass-api.de": FetchPolicy(
+            host="overpass-api.de",
+            delay_seconds=1.0,
+            cache_namespace="openstreetmap-overpass",
+            cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
+        "api.rentcast.io": FetchPolicy(
+            host="api.rentcast.io",
+            delay_seconds=0.2,
+            cache_namespace="rentcast",
+            cache_ttl_seconds=24 * 60 * 60,
             **common,
         ),
     }

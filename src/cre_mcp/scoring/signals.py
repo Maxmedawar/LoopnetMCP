@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import date, datetime, timezone
 from typing import Any
 
+from cre_mcp.enrichment.attributes import parking_ratio
 from cre_mcp.enrichment.owner import is_absentee
 from cre_mcp.models.deals import DealContext
 from cre_mcp.scoring.rubrics import thresholds as T
@@ -140,7 +141,10 @@ def corporate_vs_franchisee(ctx: DealContext) -> float | None:
 
 
 def traffic_count(ctx: DealContext) -> float | None:
-    return _number(ctx, "traffic_count")
+    direct = _number(ctx, "traffic_count")
+    if direct is not None:
+        return direct
+    return ctx.attributes.traffic_aadt if ctx.attributes else None
 
 
 def demographics_3mi(ctx: DealContext) -> float | None:
@@ -157,7 +161,25 @@ def demographics_3mi(ctx: DealContext) -> float | None:
 
 
 def visibility_corner(ctx: DealContext) -> float | None:
-    return _category(ctx, "visibility", T.VISIBILITY_SCORES)
+    direct = _category(ctx, "visibility", T.VISIBILITY_SCORES)
+    drive_thru = ctx.attributes.drive_thru if ctx.attributes else None
+    if drive_thru is True:
+        return max(direct or T.NORMALIZED_MIN, T.DRIVE_THRU_VISIBILITY_SCORE)
+    return direct
+
+
+def parking_adequacy(ctx: DealContext) -> float | None:
+    direct = _number(ctx, "parking_ratio")
+    if direct is not None:
+        return direct
+    if ctx.attributes is None:
+        return None
+    ratio = parking_ratio(ctx.attributes.parking, ctx.attributes.size_sqft)
+    if ratio is not None:
+        return ratio
+    if ctx.attributes.parking:
+        return T.PARKING_PRESENT_EQUIVALENT_RATIO
+    return None
 
 
 def price_vs_replacement(ctx: DealContext) -> float | None:
@@ -177,7 +199,32 @@ def co_tenancy_quality(ctx: DealContext) -> float | None:
 
 
 def rent_gap_to_market(ctx: DealContext) -> float | None:
-    return _number(ctx, "rent_gap_pct")
+    direct = _number(ctx, "rent_gap_pct")
+    if direct is not None:
+        return direct
+    market_rent = (
+        _metric_value(ctx.rent_comps.market_rent_estimate)
+        if ctx.rent_comps
+        else None
+    )
+    current_rent = next(
+        (
+            value
+            for key in (
+                "in_place_rent_monthly",
+                "current_rent_monthly",
+                "average_monthly_rent",
+                "rent_per_unit",
+                "current_rent",
+                "asking_rent",
+            )
+            if (value := _number(ctx, key)) is not None
+        ),
+        None,
+    )
+    if market_rent is None or market_rent <= 0 or current_rent is None:
+        return None
+    return 100 * (market_rent - current_rent) / market_rent
 
 
 def price_per_unit_vs_submarket(ctx: DealContext) -> float | None:
@@ -722,6 +769,7 @@ SIGNAL_EXTRACTORS: dict[str, Callable[[DealContext], float | None]] = {
     "traffic_count": traffic_count,
     "demographics_3mi": demographics_3mi,
     "visibility_corner": visibility_corner,
+    "parking_adequacy": parking_adequacy,
     "price_vs_replacement": price_vs_replacement,
     "residual_value_land": residual_value_land,
     "co_tenancy_quality": co_tenancy_quality,

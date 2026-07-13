@@ -98,6 +98,10 @@ class CreConfig(BaseSettings):
         default=None,
         validation_alias=_env_aliases("bea_api_key"),
     )
+    rentcast_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=_env_aliases("rentcast_api_key"),
+    )
     cache_db_path: Path = Field(
         default=Path.home() / ".cache" / "cre_mcp" / "cache.db",
         validation_alias=_env_aliases("cache_db_path"),

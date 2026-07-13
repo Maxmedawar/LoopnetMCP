@@ -22,6 +22,31 @@ class MetricSeries(BaseModel):
     source: str
 
 
+class RentComparable(BaseModel):
+    """One observed or modeled monthly rent comparable."""
+
+    source: str
+    rent: float
+    location: str | None = None
+    bedrooms: int | None = None
+    property_type: str | None = None
+    as_of: str | None = None
+
+
+class RentComps(BaseModel):
+    """Coverage-aware rent benchmarks assembled from free and optional sources."""
+
+    geo: GeoRef
+    market_rent_estimate: MetricValue | None = None
+    rent_index: MetricValue | None = None
+    rent_trend_yoy: MetricValue | None = None
+    median_gross_rent: MetricValue | None = None
+    fmr_by_bedroom: dict[int, MetricValue] = Field(default_factory=dict)
+    comps: list[RentComparable] = Field(default_factory=list)
+    coverage: dict[str, bool] = Field(default_factory=dict)
+    source: list[str] = Field(default_factory=list)
+
+
 class MarketPack(BaseModel):
     """Cross-provider market fundamentals for one normalized geography."""
 
@@ -49,4 +74,3 @@ class MarketPack(BaseModel):
 MARKET_METRIC_FIELDS = tuple(
     name for name in MarketPack.model_fields if name not in {"geo", "coverage"}
 )
-

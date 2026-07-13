@@ -1,0 +1,19 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {"timestamp_osm_base": "2026-07-13T22:54:02Z"},
+  "elements": [
+    {
+      "type": "way",
+      "id": 256526945,
+      "center": {"lat": 30.3541038, "lon": -97.7325620},
+      "tags": {"amenity": "fast_food", "drive_through": "yes", "name": "Panda Express"}
+    },
+    {
+      "type": "way",
+      "id": 313181105,
+      "center": {"lat": 30.2665325, "lon": -97.7438491},
+      "tags": {"access": "yes", "amenity": "parking", "fee": "yes", "parking": "surface"}
+    }
+  ]
+}
