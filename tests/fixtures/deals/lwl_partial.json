@@ -1,0 +1,17 @@
+{
+  "id": "lwl_partial",
+  "property_type": "retail",
+  "price": 800000,
+  "size": 1800,
+  "noi": 48000,
+  "raw": {
+    "strategy": "location_retail",
+    "frontage_type": "secondary",
+    "path_of_growth": "one",
+    "street_level": true
+  },
+  "market": {
+    "population": 300000,
+    "pop_growth_5yr": 0.5
+  }
+}

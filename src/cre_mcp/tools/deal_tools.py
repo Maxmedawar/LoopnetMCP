@@ -1,0 +1,280 @@
+"""Flagship deep-analysis and ranked deal-finding tools."""
+
+import logging
+import re
+from typing import Any
+
+from cre_mcp.geo.resolver import resolve
+from cre_mcp.market.intel import MarketIntel
+from cre_mcp.models import (
+    Deal,
+    DealContext,
+    DealScore,
+    Listing,
+    ListingRef,
+    MarketPack,
+    UnderwritingResult,
+)
+from cre_mcp.scoring.engine import score, score_all
+from cre_mcp.scoring.rubrics import RUBRIC_REGISTRY
+from cre_mcp.sources.base import SearchQuery
+from cre_mcp.sources.loopnet.urls import extract_listing_id, resolve_property_type
+from cre_mcp.sources.registry import SourceRegistry
+from cre_mcp.underwriting import UnderwritingAssumptions, underwrite_listing
+
+logger = logging.getLogger(__name__)
+registry = SourceRegistry()
+_market_intel: MarketIntel | None = None
+
+
+def _market_engine() -> MarketIntel:
+    global _market_intel
+    if _market_intel is None:
+        _market_intel = MarketIntel()
+    return _market_intel
+
+
+def _location_for_listing(listing: Listing) -> str:
+    if listing.city and listing.state:
+        return f"{listing.city}, {listing.state}"
+    if listing.zip_code:
+        return listing.zip_code
+    if listing.state:
+        return listing.state
+    return listing.address
+
+
+async def _market_for(location: str) -> tuple[MarketPack | None, str | None]:
+    try:
+        geo = await resolve(location)
+        return await _market_engine().get_market_pack(geo), None
+    except Exception as exc:
+        logger.warning("Market intelligence unavailable for %s: %s", location, exc)
+        return None, str(exc)
+
+
+def _assumptions_for(
+    listing: Listing,
+    market: MarketPack | None,
+    overrides: dict[str, Any] | None,
+) -> tuple[UnderwritingAssumptions, bool]:
+    values = dict(overrides or {})
+    used_market_rate = False
+    if "annual_interest_rate" not in values and market and market.mortgage_rate:
+        rate = market.mortgage_rate.value
+        if rate is not None:
+            values["annual_interest_rate"] = rate / 100
+            used_market_rate = True
+    return UnderwritingAssumptions.for_property_type(listing.property_type, values), used_market_rate
+
+
+def _underwrite(
+    listing: Listing,
+    market: MarketPack | None,
+    overrides: dict[str, Any] | None,
+) -> UnderwritingResult:
+    assumptions, used_market_rate = _assumptions_for(listing, market, overrides)
+    result = underwrite_listing(listing, assumptions)
+    for key in overrides or {}:
+        if key in result.assumptions_used:
+            result.assumptions_used[key]["source"] = "override"
+    if used_market_rate:
+        result.assumptions_used["annual_interest_rate"]["source"] = "market"
+    return result
+
+
+def _scores(ctx: DealContext, strategy: str | None) -> list[DealScore]:
+    if strategy is None:
+        return score_all(ctx)
+    try:
+        rubric = RUBRIC_REGISTRY[strategy]
+    except KeyError as exc:
+        raise ValueError(f"Unknown strategy: {strategy}") from exc
+    return [score(ctx, rubric)]
+
+
+def _deal(
+    listing: Listing,
+    market: MarketPack | None,
+    strategy: str | None,
+    assumptions: dict[str, Any] | None,
+) -> Deal:
+    underwriting = _underwrite(listing, market, assumptions)
+    context = DealContext(
+        listing=listing,
+        market=market,
+        underwriting=underwriting,
+    )
+    scores = _scores(context, strategy)
+    return Deal(
+        listing=listing,
+        market_pack=market,
+        underwriting=underwriting,
+        scores=scores,
+        best_strategy=scores[0].strategy if scores else None,
+    )
+
+
+def _listing_ref(listing: Listing) -> ListingRef:
+    for ref in listing.refs:
+        if ref.source == listing.source:
+            return ref
+    return ListingRef(
+        source=listing.source,
+        source_id=listing.source_id,
+        url=listing.url,
+    )
+
+
+def _input_ref(url_or_id: str, source: str) -> ListingRef:
+    is_url = url_or_id.startswith(("http://", "https://"))
+    source_id = url_or_id
+    if is_url and source == "loopnet":
+        source_id = extract_listing_id(url_or_id) or url_or_id
+    elif is_url and source == "crexi":
+        match = re.search(r"/(?:lease/)?properties/([^/?#]+)", url_or_id)
+        source_id = match.group(1) if match else url_or_id
+    return ListingRef(
+        source=source,
+        source_id=source_id,
+        url=url_or_id if is_url else None,
+    )
+
+
+def _best_score(deal: Deal) -> float:
+    return deal.scores[0].score if deal.scores else 0.0
+
+
+async def analyze_deal(
+    url_or_id: str,
+    source: str = "loopnet",
+    strategy: str | None = None,
+    assumptions: dict[str, Any] | None = None,
+) -> dict:
+    """Deep-fetch, underwrite, and score one commercial real-estate listing.
+
+    Args:
+        url_or_id: Source listing URL or source-specific identifier.
+        source: Registered source name. Defaults to LoopNet.
+        strategy: Optional rubric name; omit to score all applicable strategies.
+        assumptions: Optional underwriting assumption overrides.
+
+    Returns:
+        A full Deal including listing, market data, underwriting, scores, and explanations.
+    """
+    logger.info("analyze_deal called: source=%s listing=%s", source, url_or_id)
+    try:
+        listing_source = registry.get(source)
+        ref = _input_ref(url_or_id, source)
+        listing = await listing_source.get_detail(ref)
+        market, market_error = await _market_for(_location_for_listing(listing))
+        deal = _deal(listing, market, strategy, assumptions)
+        payload = deal.model_dump(mode="json")
+        if market_error:
+            payload["warnings"] = {"market": market_error}
+        return payload
+    except Exception as exc:
+        logger.error("analyze_deal error: %s", exc)
+        return {"error": str(exc)}
+
+
+async def find_deals(
+    location: str,
+    strategy: str | None = None,
+    property_type: str | None = None,
+    listing_type: str = "for-sale",
+    price_min: int | None = None,
+    price_max: int | None = None,
+    size_min: int | None = None,
+    size_max: int | None = None,
+    sources: list[str] = ["loopnet"],
+    min_score: float | None = None,
+    limit: int = 25,
+    deep: bool = False,
+) -> dict:
+    """Search, score, filter, and rank listings by Medawar Deal Score.
+
+    Args:
+        location: Market location accepted by listing sources and the geo resolver.
+        strategy: Optional rubric name; omit for property-type routing.
+        property_type: Optional listing property type.
+        listing_type: Listing platform, normally 'for-sale' or 'for-lease'.
+        price_min: Minimum asking price.
+        price_max: Maximum asking price.
+        size_min: Minimum building size in square feet.
+        size_max: Maximum building size in square feet.
+        sources: Listing sources to search. Defaults to LoopNet.
+        min_score: Optional minimum Medawar Deal Score.
+        limit: Maximum ranked deals returned.
+        deep: Deep-fetch and rescore the initially highest-ranked deals.
+
+    Returns:
+        Ranked Deals with explanations, shared market provenance, and isolated errors.
+    """
+    logger.info(
+        "find_deals called: location=%s strategy=%s sources=%s deep=%s",
+        location,
+        strategy,
+        sources,
+        deep,
+    )
+    if limit <= 0:
+        return {"error": "limit must be greater than zero"}
+    if strategy is not None and strategy not in RUBRIC_REGISTRY:
+        return {"error": f"Unknown strategy: {strategy}"}
+    try:
+        query = SearchQuery(
+            location=location,
+            property_type=resolve_property_type(property_type),
+            listing_type=listing_type,
+            price_min=price_min,
+            price_max=price_max,
+            size_min=size_min,
+            size_max=size_max,
+        )
+        aggregated = await registry.search_all(query, sources=sources)
+        market, market_error = await _market_for(location)
+        errors = dict(aggregated.errors)
+        if market_error:
+            errors["market"] = market_error
+
+        deals = [
+            _deal(listing, market, strategy, assumptions=None)
+            for listing in aggregated.listings
+        ]
+        total_scored = len(deals)
+        deals.sort(key=_best_score, reverse=True)
+        if min_score is not None:
+            deals = [deal for deal in deals if _best_score(deal) >= min_score]
+
+        if deep:
+            deepened: list[Deal] = []
+            for deal in deals[:limit]:
+                listing = deal.listing
+                try:
+                    listing_source = registry.get(listing.source)
+                    detail = await listing_source.get_detail(_listing_ref(listing))
+                    deepened.append(_deal(detail, market, strategy, assumptions=None))
+                except Exception as exc:
+                    key = f"detail:{listing.source}:{listing.source_id}"
+                    errors[key] = str(exc)
+                    deepened.append(deal)
+            deals = deepened + deals[limit:]
+            deals.sort(key=_best_score, reverse=True)
+            if min_score is not None:
+                deals = [deal for deal in deals if _best_score(deal) >= min_score]
+
+        selected = deals[:limit]
+        return {
+            "query_location": location,
+            "strategy": strategy,
+            "deals": [deal.model_dump(mode="json") for deal in selected],
+            "total_scored": total_scored,
+            "returned": len(selected),
+            "errors": errors,
+            "per_source_counts": aggregated.per_source_counts,
+            "deduped": aggregated.deduped,
+        }
+    except Exception as exc:
+        logger.error("find_deals error: %s", exc)
+        return {"error": str(exc)}

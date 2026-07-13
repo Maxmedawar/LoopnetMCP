@@ -11,7 +11,7 @@ Fable reviews independently after each phase before advancing.
 | 2 | Source abstraction + LoopNet adapter | 🟢 complete | 178 passed, 1 warning |
 | 3 | Crexi + multi-source search | 🟢 complete | 199 passed, 1 warning |
 | 4 | Geo + market intelligence | 🟢 complete | 225 passed, 1 warning |
-| 5 | Underwriting + scoring + flagship tools | ⚪ not started | — |
+| 5 | Underwriting + scoring + flagship tools | 🟢 complete | 253 passed, 1 warning |
 | 6 | Distressed sources | ⚪ not started | — |
 | 7 | Owner/parcel enrichment | ⚪ not started | — |
 
@@ -51,3 +51,12 @@ Fable reviews independently after each phase before advancing.
     captured/representative fixtures and Phase 4 acceptance tests under
     `tests/{cache,geo,market,tools}/`.
   - Pytest: `======================= 225 passed, 1 warning in 21.09s ========================`
+- 2026-07-13 — Phase 5 underwriting, Medawar scoring, and flagship tools complete.
+  - Status: GREEN; missing-data-aware underwriting and scoring, hard disqualifiers,
+    market/core composition, confidence, narratives, ranking, and legacy contracts verified.
+  - Files changed: added underwriting assumptions, pure metrics, and result models; added
+    declarative scoring models, centralized thresholds, signal/disqualifier registries,
+    core/NNN/value-add/location-retail rubrics, engine, and explanations; added deal models
+    and registered `analyze_deal`/`find_deals`; added hand-computed metric tests, engine edge
+    tests, nine golden deal snapshots with `--update-golden`, and mocked end-to-end tool tests.
+  - Pytest: `======================= 253 passed, 1 warning in 21.30s ========================`
