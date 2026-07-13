@@ -29,7 +29,7 @@ def _reset_singleton():
 async def test_search_properties_mocked(mcp_client):
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ):
@@ -47,7 +47,7 @@ async def test_search_properties_mocked(mcp_client):
 async def test_search_properties_with_filters(mcp_client):
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ) as mock_fetch:
@@ -77,7 +77,7 @@ async def test_search_properties_with_filters(mcp_client):
 async def test_get_property_details_with_url(mcp_client):
     fixture_html = load_fixture("property_detail.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ):
@@ -96,7 +96,7 @@ async def test_get_property_details_with_url(mcp_client):
 async def test_get_property_details_with_id(mcp_client):
     fixture_html = load_fixture("property_detail.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ) as mock_fetch:
@@ -114,7 +114,7 @@ async def test_get_property_details_with_id(mcp_client):
 async def test_get_market_overview_mocked(mcp_client):
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ):
@@ -133,7 +133,7 @@ async def test_get_market_overview_mocked(mcp_client):
 async def test_search_properties_with_page(mcp_client):
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ) as mock_fetch:
@@ -151,7 +151,7 @@ async def test_search_properties_with_page(mcp_client):
 async def test_search_properties_has_next_page(mcp_client):
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ):

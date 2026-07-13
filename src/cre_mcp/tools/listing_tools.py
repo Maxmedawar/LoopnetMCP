@@ -3,12 +3,33 @@
 import logging
 from typing import Optional
 
-from cre_mcp.models import SearchResult, PropertyDetail, MarketOverview
-from cre_mcp.scraper.client import get_client, LoopnetClientError
-from cre_mcp.scraper.parsers import parse_search_results, parse_total_results, parse_pagination, parse_property_detail, build_market_overview
-from cre_mcp.scraper.urls import build_search_url, build_detail_url
+from cre_mcp.models import Listing, ListingRef, MarketOverview, SearchResult
+from cre_mcp.sources.base import SearchQuery, SourceError
+from cre_mcp.sources.loopnet.parsers import build_market_overview
+from cre_mcp.sources.loopnet.source import (
+    property_detail_from_listing,
+    property_summary_from_listing,
+)
+from cre_mcp.sources.loopnet.urls import (
+    build_detail_url,
+    extract_listing_id,
+    resolve_property_type,
+)
+from cre_mcp.sources.registry import SourceRegistry
 
 logger = logging.getLogger(__name__)
+registry = SourceRegistry()
+
+
+def _loopnet_search_metadata(listings: list[Listing]) -> tuple[int | None, bool]:
+    for listing in listings:
+        metadata = listing.raw.get("loopnet_search")
+        if metadata:
+            return metadata.get("total_results"), bool(
+                metadata.get("has_next_page", False)
+            )
+    return None, False
+
 
 async def search_properties(
     location: str,
@@ -39,10 +60,10 @@ async def search_properties(
     """
     logger.info("search_properties called: location=%s, type=%s", location, property_type)
     try:
-        url = build_search_url(
-            location,
-            property_type,
-            listing_type or "for-sale",
+        query = SearchQuery(
+            location=location,
+            property_type=resolve_property_type(property_type),
+            listing_type=listing_type or "for-sale",
             page=page or 1,
             price_min=price_min,
             price_max=price_max,
@@ -50,10 +71,17 @@ async def search_properties(
             size_min=size_min,
             size_max=size_max,
         )
-        html = await get_client().fetch(url)
-        properties = parse_search_results(html)
-        total = parse_total_results(html)
-        has_next = parse_pagination(html)
+        aggregated = await registry.search_all(query, sources=["loopnet"])
+        if aggregated.errors and not aggregated.listings:
+            message = aggregated.errors.get("loopnet") or next(
+                iter(aggregated.errors.values())
+            )
+            return {"error": message, "query_location": location, "properties": []}
+        properties = [
+            property_summary_from_listing(listing)
+            for listing in aggregated.listings
+        ]
+        total, has_next = _loopnet_search_metadata(aggregated.listings)
         result = SearchResult(
             query_location=location,
             query_property_type=property_type,
@@ -64,7 +92,7 @@ async def search_properties(
             properties=properties,
         )
         return result.model_dump()
-    except LoopnetClientError as e:
+    except SourceError as e:
         logger.error("search_properties error: %s", e)
         return {"error": str(e), "query_location": location, "properties": []}
 
@@ -83,10 +111,14 @@ async def get_property_details(
     logger.info("get_property_details called: %s", url_or_id)
     url = url_or_id if url_or_id.startswith("http") else build_detail_url(url_or_id)
     try:
-        html = await get_client().fetch(url)
-        detail = parse_property_detail(html, url)
+        source_id = extract_listing_id(url) or url_or_id
+        source = registry.get("loopnet")
+        listing = await source.get_detail(
+            ListingRef(source="loopnet", source_id=source_id, url=url)
+        )
+        detail = property_detail_from_listing(listing)
         return detail.model_dump()
-    except LoopnetClientError as e:
+    except SourceError as e:
         logger.error("get_property_details client error: %s", e)
         return {"error": str(e), "url": url}
     except Exception as e:
@@ -108,13 +140,20 @@ async def get_market_overview(
         Market statistics including total listings, average price, price per sqft, and breakdowns by type.
     """
     logger.info("get_market_overview called: location=%s, type=%s", location, property_type)
-    url = build_search_url(location, property_type)
-    try:
-        html = await get_client().fetch(url)
-    except LoopnetClientError as e:
-        logger.error("Market overview fetch failed: %s", e)
-        return {"error": str(e), "location": location}
-
-    properties = parse_search_results(html)
+    query = SearchQuery(
+        location=location,
+        property_type=resolve_property_type(property_type),
+    )
+    aggregated = await registry.search_all(query, sources=["loopnet"])
+    if aggregated.errors and not aggregated.listings:
+        message = aggregated.errors.get("loopnet") or next(
+            iter(aggregated.errors.values())
+        )
+        logger.error("Market overview fetch failed: %s", message)
+        return {"error": message, "location": location}
+    properties = [
+        property_summary_from_listing(listing)
+        for listing in aggregated.listings
+    ]
     overview = build_market_overview(location, property_type, properties)
     return overview.model_dump()

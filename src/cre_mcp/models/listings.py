@@ -1,7 +1,7 @@
 """Pydantic data models for Loopnet commercial real estate data."""
 
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -104,3 +104,84 @@ class MarketOverview(BaseModel):
     listing_types_breakdown: dict[str, int] = Field(default_factory=dict)
     property_subtypes_breakdown: dict[str, int] = Field(default_factory=dict)
     sample_listings: list[PropertySummary] = Field(default_factory=list)
+
+
+class ListingRef(BaseModel):
+    """A source-specific reference for a unified listing."""
+
+    source: str
+    source_id: str
+    url: str | None = None
+
+
+class SourceCapabilities(BaseModel):
+    """Search and detail features supported by a listing source."""
+
+    supports_lease: bool = True
+    supports_distressed: bool = False
+    supports_price_filter: bool = True
+    supports_size_filter: bool = True
+    detail_is_expensive: bool = False
+
+
+class Listing(BaseModel):
+    """Unified cross-source commercial real estate listing."""
+
+    source: str
+    source_id: str
+    refs: list[ListingRef] = Field(default_factory=list)
+
+    name: str
+    address: str
+    city: str
+    state: str
+    zip_code: str | None = None
+    property_type: str | None = None
+    property_subtype: str | None = None
+    listing_type: str | None = None
+    price: str | None = None
+    price_per_sqft: str | None = None
+    cap_rate: str | None = None
+    noi: str | None = None
+    size_sqft: str | None = None
+    lot_size: str | None = None
+    year_built: str | None = None
+    building_class: str | None = None
+    zoning: str | None = None
+    parking: str | None = None
+    stories: int | None = None
+    units: int | None = None
+    description: str | None = None
+    highlights: list[str] = Field(default_factory=list)
+    images: list[str] = Field(default_factory=list)
+    image_url: str | None = None
+    broker_name: str | None = None
+    broker_company: str | None = None
+    broker_phone: str | None = None
+    url: str
+    last_updated: str | None = None
+
+    price_usd: float | None = None
+    size_sqft_num: float | None = None
+    cap_rate_pct: float | None = None
+    noi_usd: float | None = None
+    year_built_int: int | None = None
+    lat: float | None = None
+    lon: float | None = None
+    is_distressed: bool = False
+    distress_type: str | None = None
+    also_listed_on: list[str] = Field(default_factory=list)
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class AggregatedSearchResult(BaseModel):
+    """Listings and source-level metadata returned by registry fan-out."""
+
+    query_location: str
+    query_property_type: str | None = None
+    query_listing_type: str | None = None
+    page: int = 1
+    listings: list[Listing] = Field(default_factory=list)
+    per_source_counts: dict[str, int] = Field(default_factory=dict)
+    errors: dict[str, str] = Field(default_factory=dict)
+    deduped: int = 0

@@ -14,10 +14,11 @@ from tests.conftest import load_fixture
 
 @pytest.mark.asyncio
 async def test_search_properties_top_level_keys():
-    with patch("cre_mcp.tools.listing_tools.get_client") as get_client:
-        get_client.return_value.fetch = AsyncMock(
-            return_value=load_fixture("search_results.html")
-        )
+    with patch(
+        "cre_mcp.http.fetch.FetchClient.get_text",
+        new_callable=AsyncMock,
+        return_value=load_fixture("search_results.html"),
+    ):
         result = await search_properties("Dallas, TX")
 
     assert set(result) == {
@@ -33,10 +34,11 @@ async def test_search_properties_top_level_keys():
 
 @pytest.mark.asyncio
 async def test_get_property_details_top_level_keys():
-    with patch("cre_mcp.tools.listing_tools.get_client") as get_client:
-        get_client.return_value.fetch = AsyncMock(
-            return_value=load_fixture("property_detail.html")
-        )
+    with patch(
+        "cre_mcp.http.fetch.FetchClient.get_text",
+        new_callable=AsyncMock,
+        return_value=load_fixture("property_detail.html"),
+    ):
         result = await get_property_details(
             "https://www.loopnet.com/Listing/test/123/"
         )
@@ -75,10 +77,11 @@ async def test_get_property_details_top_level_keys():
 
 @pytest.mark.asyncio
 async def test_get_market_overview_top_level_keys():
-    with patch("cre_mcp.tools.listing_tools.get_client") as get_client:
-        get_client.return_value.fetch = AsyncMock(
-            return_value=load_fixture("search_results.html")
-        )
+    with patch(
+        "cre_mcp.http.fetch.FetchClient.get_text",
+        new_callable=AsyncMock,
+        return_value=load_fixture("search_results.html"),
+    ):
         result = await get_market_overview("Dallas, TX")
 
     assert set(result) == {

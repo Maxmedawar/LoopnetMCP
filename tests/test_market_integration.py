@@ -30,7 +30,7 @@ async def test_market_overview_returns_stats(mcp_client):
     """Full pipeline: MCP tool -> URL builder -> client (mocked) -> parser -> aggregation."""
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ):
@@ -49,7 +49,7 @@ async def test_market_overview_with_property_type(mcp_client):
     """property_type='office' -> URL uses 'office' slug."""
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ) as mock_fetch:
@@ -70,7 +70,7 @@ async def test_market_overview_empty_results(mcp_client):
     """Empty HTML returns total_listings=0, all averages None."""
     empty_html = "<html><body><div id='searchResults'></div></body></html>"
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=empty_html,
     ):
@@ -89,7 +89,7 @@ async def test_market_overview_empty_results(mcp_client):
 async def test_market_overview_fetch_error(mcp_client):
     """Mocked 403 returns error dict, no crash."""
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         side_effect=LoopnetBlockedError("Blocked by Loopnet (403)"),
     ):
@@ -107,7 +107,7 @@ async def test_market_overview_sample_listings_populated(mcp_client):
     """sample_listings contains PropertySummary-shaped dicts."""
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ):

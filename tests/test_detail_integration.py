@@ -30,7 +30,7 @@ async def test_get_property_details_with_url(mcp_client):
     """Full pipeline: MCP tool -> client (mocked) -> parser -> response."""
     fixture_html = load_fixture("property_detail.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ):
@@ -60,7 +60,7 @@ async def test_get_property_details_with_id(mcp_client):
     """Bare ID -> tool builds URL -> correct response."""
     fixture_html = load_fixture("property_detail.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ) as mock_fetch:
@@ -79,7 +79,7 @@ async def test_get_property_details_minimal_listing(mcp_client):
     """Minimal fixture -> optional fields are None, empty lists."""
     fixture_html = load_fixture("property_detail_minimal.html")
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ):
@@ -106,7 +106,7 @@ async def test_get_property_details_minimal_listing(mcp_client):
 async def test_get_property_details_blocked(mcp_client):
     """Mocked 403 returns error dict."""
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         side_effect=LoopnetBlockedError("Blocked by Loopnet (403)"),
     ):
@@ -123,7 +123,7 @@ async def test_get_property_details_blocked(mcp_client):
 async def test_get_property_details_not_found(mcp_client):
     """Mocked 404 returns error dict."""
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         side_effect=LoopnetClientError("Unexpected status 404"),
     ):
@@ -140,7 +140,7 @@ async def test_get_property_details_not_found(mcp_client):
 async def test_get_property_details_network_error(mcp_client):
     """Mocked timeout returns error dict."""
     with patch(
-        "cre_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         side_effect=LoopnetClientError("Connection timed out"),
     ):

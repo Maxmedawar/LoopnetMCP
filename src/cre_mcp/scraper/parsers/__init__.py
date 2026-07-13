@@ -1,25 +1,23 @@
-"""HTML parsers for Loopnet pages."""
+"""Backward-compatible LoopNet parser exports."""
 
-from cre_mcp.scraper.parsers.search import (
-    parse_search_results,
-    parse_pagination,
-    parse_total_results,
-)
-from cre_mcp.scraper.parsers.detail import parse_property_detail
-from cre_mcp.scraper.parsers.market import (
+from cre_mcp.sources.loopnet.parsers import (
     build_market_overview,
-    parse_price,
-    parse_size,
     parse_cap_rate,
+    parse_pagination,
+    parse_price,
+    parse_property_detail,
+    parse_search_results,
+    parse_size,
+    parse_total_results,
 )
 
 __all__ = [
-    "parse_search_results",
-    "parse_pagination",
-    "parse_total_results",
-    "parse_property_detail",
     "build_market_overview",
-    "parse_price",
-    "parse_size",
     "parse_cap_rate",
+    "parse_pagination",
+    "parse_price",
+    "parse_property_detail",
+    "parse_search_results",
+    "parse_size",
+    "parse_total_results",
 ]

@@ -3,7 +3,7 @@
 import pytest
 
 from cre_mcp.models import PropertySummary
-from cre_mcp.scraper.parsers.market import (
+from cre_mcp.sources.loopnet.parsers.market import (
     build_market_overview,
     parse_cap_rate,
     parse_price,

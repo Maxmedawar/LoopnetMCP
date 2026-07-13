@@ -8,7 +8,7 @@ Fable reviews independently after each phase before advancing.
 | Phase | Title | Status | Tests |
 |---|---|---|---|
 | 1 | Foundation refactor | 🟢 complete | 167 passed, 1 warning |
-| 2 | Source abstraction + LoopNet adapter | ⚪ not started | — |
+| 2 | Source abstraction + LoopNet adapter | 🟢 complete | 178 passed, 1 warning |
 | 3 | Crexi + multi-source search | ⚪ not started | — |
 | 4 | Geo + market intelligence | ⚪ not started | — |
 | 5 | Underwriting + scoring + flagship tools | ⚪ not started | — |
@@ -23,3 +23,11 @@ Fable reviews independently after each phase before advancing.
     `http/`, `cache/`, and `tools/`; added back-compat scraper/cache shims; renamed
     config and package metadata; updated source/test imports; added `tests/test_contract.py`.
   - Pytest: `======================= 167 passed, 1 warning in 20.19s ========================`
+- 2026-07-13 — Phase 2 source abstraction and LoopNet adapter complete.
+  - Status: GREEN; all three legacy tools now route through `SourceRegistry` and
+    `LoopnetSource` while retaining their Phase 1 signatures, docstrings, and dict shapes.
+  - Files changed: removed the dead `src/cre_mcp/cache.py`; added unified listing models
+    and `sources/{base,registry,dedupe}.py`; moved LoopNet URLs/parsers under
+    `sources/loopnet/`; added the LoopNet adapter and legacy-path shims; rewired tool
+    internals and HTTP-boundary mocks; added `tests/sources/` coverage.
+  - Pytest: `======================= 178 passed, 1 warning in 19.99s ========================`
