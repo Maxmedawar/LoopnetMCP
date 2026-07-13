@@ -1,5 +1,5 @@
 [project]
-name = "loopnet-mcp"
+name = "cre-mcp"
 version = "0.1.0"
 description = "MCP server for searching Loopnet commercial real estate listings"
 requires-python = ">=3.10"

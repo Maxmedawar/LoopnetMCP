@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from loopnet_mcp.config import LoopnetConfig
-from loopnet_mcp.scraper.browser import (
+from cre_mcp.config import LoopnetConfig
+from cre_mcp.scraper.browser import (
     BrowserFetchError,
     BrowserFetcher,
     is_challenge_page,

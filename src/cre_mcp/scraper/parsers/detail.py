@@ -4,8 +4,8 @@ import re
 
 from bs4 import BeautifulSoup
 
-from loopnet_mcp.models import PropertyDetail
-from loopnet_mcp.scraper.parsers.utils import parse_address
+from cre_mcp.models import PropertyDetail
+from cre_mcp.scraper.parsers.utils import parse_address
 
 
 def _extract_int(text: str) -> int | None:

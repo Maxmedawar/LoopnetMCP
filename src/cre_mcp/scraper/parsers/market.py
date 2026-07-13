@@ -3,7 +3,7 @@
 import re
 from typing import Optional
 
-from loopnet_mcp.models import MarketOverview, PropertySummary
+from cre_mcp.models import MarketOverview, PropertySummary
 
 
 def parse_price(raw: str | None) -> float | None:

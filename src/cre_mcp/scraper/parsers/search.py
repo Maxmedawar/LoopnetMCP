@@ -4,8 +4,8 @@ import re
 
 from bs4 import BeautifulSoup
 
-from loopnet_mcp.models import PropertySummary
-from loopnet_mcp.scraper.parsers.utils import parse_address
+from cre_mcp.models import PropertySummary
+from cre_mcp.scraper.parsers.utils import parse_address
 
 
 def parse_search_results(

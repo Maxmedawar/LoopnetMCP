@@ -1,6 +1,6 @@
 """Tests for URL construction."""
 
-from loopnet_mcp.scraper.urls import (
+from cre_mcp.scraper.urls import (
     normalize_location,
     build_search_url,
     extract_listing_id,

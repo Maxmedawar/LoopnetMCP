@@ -25,7 +25,7 @@ def load_fixture(name: str) -> str:
 def _skip_warmup():
     """Skip the homepage warmup request in all tests."""
     with patch(
-        "loopnet_mcp.scraper.client.LoopnetClient._warmup",
+        "cre_mcp.scraper.client.LoopnetClient._warmup",
         new_callable=AsyncMock,
     ):
         yield
@@ -35,7 +35,7 @@ def _skip_warmup():
 def _disable_browser_fetcher():
     """Prevent real browser launches in all tests."""
     with patch(
-        "loopnet_mcp.scraper.browser.BrowserFetcher._ensure_browser",
+        "cre_mcp.scraper.browser.BrowserFetcher._ensure_browser",
         new_callable=AsyncMock,
     ):
         yield

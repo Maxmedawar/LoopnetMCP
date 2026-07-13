@@ -1,36 +1,15 @@
-"""Loopnet MCP Server — commercial real estate search tools for Claude Code."""
+"""Legacy LoopNet listing tools."""
 
 import logging
-import sys
 from typing import Optional
 
-from fastmcp import FastMCP
+from cre_mcp.models import SearchResult, PropertyDetail, MarketOverview
+from cre_mcp.scraper.client import get_client, LoopnetClientError
+from cre_mcp.scraper.parsers import parse_search_results, parse_total_results, parse_pagination, parse_property_detail, build_market_overview
+from cre_mcp.scraper.urls import build_search_url, build_detail_url
 
-from loopnet_mcp.models import SearchResult, PropertyDetail, MarketOverview
-from loopnet_mcp.scraper.client import get_client, LoopnetClientError
-from loopnet_mcp.scraper.parsers import parse_search_results, parse_total_results, parse_pagination, parse_property_detail, build_market_overview
-from loopnet_mcp.scraper.urls import build_search_url, build_detail_url
-
-# Route ALL logging to stderr — stdout is reserved for MCP protocol messages
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    stream=sys.stderr,
-)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP(
-    name="loopnet",
-    instructions=(
-        "Loopnet MCP server for searching commercial real estate listings. "
-        "Use search_properties to find listings by location and filters. "
-        "Use get_property_details to get full details on a specific listing. "
-        "Use get_market_overview for aggregate market statistics."
-    ),
-)
-
-
-@mcp.tool()
 async def search_properties(
     location: str,
     property_type: Optional[str] = None,
@@ -90,7 +69,6 @@ async def search_properties(
         return {"error": str(e), "query_location": location, "properties": []}
 
 
-@mcp.tool()
 async def get_property_details(
     url_or_id: str,
 ) -> dict:
@@ -116,7 +94,6 @@ async def get_property_details(
         return {"error": f"Failed to parse property page: {e}", "url": url}
 
 
-@mcp.tool()
 async def get_market_overview(
     location: str,
     property_type: Optional[str] = None,
@@ -141,7 +118,3 @@ async def get_market_overview(
     properties = parse_search_results(html)
     overview = build_market_overview(location, property_type, properties)
     return overview.model_dump()
-
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")

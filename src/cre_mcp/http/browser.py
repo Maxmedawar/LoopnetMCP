@@ -3,8 +3,8 @@
 import asyncio
 import logging
 
-from loopnet_mcp.config import LoopnetConfig
-from loopnet_mcp.scraper.client import LoopnetClientError
+from cre_mcp.config import CreConfig
+from cre_mcp.http.errors import FetchClientError
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ _CHALLENGE_MARKERS = ("sec-if-cpt-container", "behavioral-content", "/akam/13/pi
 _CHALLENGE_MAX_LENGTH = 10_000
 
 
-class BrowserFetchError(LoopnetClientError):
+class BrowserFetchError(FetchClientError):
     """Raised when the browser-based fetch fails."""
 
 
@@ -31,8 +31,8 @@ def is_challenge_page(html: str) -> bool:
 class BrowserFetcher:
     """Lazy-initialized nodriver browser for solving JS challenges."""
 
-    def __init__(self, config: LoopnetConfig | None = None):
-        self._config = config or LoopnetConfig()
+    def __init__(self, config: CreConfig | None = None):
+        self._config = config or CreConfig()
         self._browser = None
         self._lock = asyncio.Lock()
 
@@ -91,3 +91,6 @@ class BrowserFetcher:
             except Exception:
                 pass
             self._browser = None
+
+
+CHALLENGE_DETECTORS = {"akamai": is_challenge_page}
