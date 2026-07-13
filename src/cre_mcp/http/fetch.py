@@ -21,6 +21,7 @@ from cre_mcp.http.errors import (
 from cre_mcp.http.policies import (
     POLICY_REGISTRY,
     FetchPolicy,
+    build_crexi_policy,
     build_loopnet_policy,
 )
 
@@ -44,6 +45,7 @@ class FetchClient:
 
         self._policies = dict(POLICY_REGISTRY)
         self._policies["www.loopnet.com"] = build_loopnet_policy(self._config)
+        self._policies["api.crexi.com"] = build_crexi_policy(self._config)
         if policies is not None:
             self._policies.update(policies)
 
@@ -163,9 +165,40 @@ class FetchClient:
             f"{self._stable_hash(body)}"
         )
 
+    @staticmethod
+    def _cache_ttl(policy: FetchPolicy, method: str) -> int:
+        if method.upper() == "GET" and policy.detail_cache_ttl_seconds is not None:
+            return policy.detail_cache_ttl_seconds
+        return policy.cache_ttl_seconds
+
+    def _cache_response(
+        self,
+        key: str,
+        value: str,
+        policy: FetchPolicy,
+        method: str,
+    ) -> None:
+        self._cache.set(
+            key,
+            value,
+            ttl_seconds=self._cache_ttl(policy, method),
+        )
+
     async def get_text(self, url: str) -> str:
+        return await self._request_text("GET", url)
+
+    async def _request_text(
+        self,
+        method: str,
+        url: str,
+        *,
+        body: Any = None,
+        expects_json: bool = False,
+    ) -> str:
+        """Run any request through the shared policy, cache, and retry path."""
         policy = self._policy_for_url(url)
-        cache_key = self._cache_key(policy, "GET", url)
+        method = method.upper()
+        cache_key = self._cache_key(policy, method, url, body)
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
@@ -177,28 +210,56 @@ class FetchClient:
             cached = self._cache.get(cache_key)
             if cached is not None:
                 return cached
-            return await self._fetch_with_retries(url, policy, cache_key)
+            return await self._fetch_with_retries(
+                url,
+                policy,
+                cache_key,
+                method=method,
+                body=body,
+                expects_json=expects_json,
+            )
 
     async def fetch(self, url: str) -> str:
         """Backward-compatible alias for ``get_text``."""
         return await self.get_text(url)
 
     async def get_json(self, url: str) -> Any:
-        """Fetch JSON content (implemented when JSON sources are introduced)."""
-        raise NotImplementedError("get_json is reserved for a later phase")
+        """Fetch and decode a JSON response through the per-host policy path."""
+        text = await self._request_text("GET", url, expects_json=True)
+        return self._decode_json(text, url)
 
     async def post_json(self, url: str, body: Any) -> Any:
-        """POST JSON content (implemented when JSON sources are introduced)."""
-        raise NotImplementedError("post_json is reserved for a later phase")
+        """POST a JSON body and decode the response through the shared policy path."""
+        text = await self._request_text(
+            "POST",
+            url,
+            body=body,
+            expects_json=True,
+        )
+        return self._decode_json(text, url)
+
+    @staticmethod
+    def _decode_json(text: str, url: str) -> Any:
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise FetchClientError(
+                f"Invalid JSON response for URL: {url}: {exc.msg}"
+            ) from exc
 
     async def _fetch_with_retries(
         self,
         url: str,
         policy: FetchPolicy | None = None,
         cache_key: str | None = None,
+        *,
+        method: str = "GET",
+        body: Any = None,
+        expects_json: bool = False,
     ) -> str:
         policy = policy or self._policy_for_url(url)
-        cache_key = cache_key or self._cache_key(policy, "GET", url)
+        method = method.upper()
+        cache_key = cache_key or self._cache_key(policy, method, url, body)
         client = self._get_client(policy)
         last_error: Exception | None = None
         source_name = "Loopnet" if policy.host == "www.loopnet.com" else policy.host
@@ -206,7 +267,12 @@ class FetchClient:
         for attempt in range(policy.max_retries):
             await self._enforce_rate_limit(policy)
             try:
-                response = await client.get(url)
+                if method == "GET":
+                    response = await client.get(url)
+                elif method == "POST":
+                    response = await client.post(url, json=body)
+                else:
+                    raise FetchClientError(f"Unsupported HTTP method: {method}")
 
                 if response.status_code == 200:
                     text = response.text
@@ -220,9 +286,32 @@ class FetchClient:
                             url,
                             policy,
                             cache_key,
+                            method=method,
+                            body=body,
+                            expects_json=expects_json,
                         )
-                    self._cache.set(cache_key, text)
+                    self._cache_response(cache_key, text, policy, method)
                     return text
+
+                text = response.text
+                detector = policy.challenge_detector
+                if (
+                    response.status_code in {403, 503}
+                    and detector is not None
+                    and detector(text)
+                ):
+                    logger.info(
+                        "Challenge response detected for %s, falling back to browser",
+                        url,
+                    )
+                    return await self._fetch_with_browser(
+                        url,
+                        policy,
+                        cache_key,
+                        method=method,
+                        body=body,
+                        expects_json=expects_json,
+                    )
 
                 if response.status_code == 403:
                     last_error = FetchBlockedError(
@@ -256,6 +345,10 @@ class FetchClient:
         url: str,
         policy: FetchPolicy | None = None,
         cache_key: str | None = None,
+        *,
+        method: str = "GET",
+        body: Any = None,
+        expects_json: bool = False,
     ) -> str:
         """Fall back to a browser to solve JavaScript challenges."""
         policy = policy or self._policy_for_url(url)
@@ -269,10 +362,20 @@ class FetchClient:
         if self._browser_fetcher is None:
             self._browser_fetcher = BrowserFetcher(self._config)
 
-        text = await self._browser_fetcher.fetch(url)
-        self._cache.set(
-            cache_key or self._cache_key(policy, "GET", url),
+        if expects_json:
+            text = await self._browser_fetcher.fetch_api(
+                url,
+                method=method,
+                body=body,
+                warmup_url=policy.warmup_url or "https://www.crexi.com/",
+            )
+        else:
+            text = await self._browser_fetcher.fetch(url)
+        self._cache_response(
+            cache_key or self._cache_key(policy, method, url, body),
             text,
+            policy,
+            method,
         )
         return text
 

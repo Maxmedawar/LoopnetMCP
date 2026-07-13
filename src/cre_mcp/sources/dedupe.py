@@ -74,8 +74,8 @@ def _completeness(listing: Listing) -> int:
 
 
 def _base_and_other(a: Listing, b: Listing) -> tuple[Listing, Listing]:
-    a_rank = (_completeness(a), _SOURCE_PRIORITY.get(a.source.lower(), 0))
-    b_rank = (_completeness(b), _SOURCE_PRIORITY.get(b.source.lower(), 0))
+    a_rank = (_SOURCE_PRIORITY.get(a.source.lower(), 0), _completeness(a))
+    b_rank = (_SOURCE_PRIORITY.get(b.source.lower(), 0), _completeness(b))
     return (b, a) if b_rank > a_rank else (a, b)
 
 

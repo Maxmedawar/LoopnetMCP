@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import AliasChoices, Field, SecretStr
+from pydantic import AliasChoices, BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,6 +10,12 @@ def _env_aliases(field_name: str) -> AliasChoices:
     """Accept current CRE variables and their legacy LoopNet equivalents."""
     suffix = field_name.upper()
     return AliasChoices(f"CRE_{suffix}", f"LOOPNET_{suffix}")
+
+
+class SourceToggle(BaseModel):
+    """Enable or disable one configured listing source."""
+
+    enabled: bool = True
 
 
 class CreConfig(BaseSettings):
@@ -60,6 +66,13 @@ class CreConfig(BaseSettings):
     browser_headless: bool = Field(
         default=True,
         validation_alias=_env_aliases("browser_headless"),
+    )
+    sources: dict[str, SourceToggle] = Field(
+        default_factory=lambda: {
+            "loopnet": SourceToggle(enabled=True),
+            "crexi": SourceToggle(enabled=True),
+        },
+        validation_alias=_env_aliases("sources"),
     )
 
     census_api_key: SecretStr | None = Field(

@@ -40,7 +40,7 @@ def test_dedupe_key_uses_zip5_and_falls_back_to_name():
     assert dedupe_key(no_address) == "DOWNTOWN OFFICE TOWER|DALLAS|TX"
 
 
-def test_merge_uses_more_complete_listing_and_fills_gaps():
+def test_merge_prefers_crexi_base_and_fills_its_gaps():
     sparse = _listing("crexi", "cx-1")
     complete = _listing(
         "loopnet",
@@ -52,11 +52,11 @@ def test_merge_uses_more_complete_listing_and_fills_gaps():
 
     merged = merge_listings(sparse, complete)
 
-    assert merged.source == "loopnet"
+    assert merged.source == "crexi"
     assert merged.price == "$2,000,000"
     assert merged.size_sqft == "10,000 SF"
     assert {ref.source for ref in merged.refs} == {"crexi", "loopnet"}
-    assert merged.also_listed_on == ["crexi"]
+    assert merged.also_listed_on == ["loopnet"]
 
 
 def test_merge_prefers_crexi_when_completeness_is_tied():

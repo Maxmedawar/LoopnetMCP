@@ -1,7 +1,10 @@
 """Tests for source registry fan-out and failure isolation."""
 
+import pytest
+
+from cre_mcp.config import CreConfig
 from cre_mcp.models import Listing, ListingRef, SourceCapabilities
-from cre_mcp.sources.base import ListingSource, SearchQuery
+from cre_mcp.sources.base import ListingSource, SearchQuery, SourceError
 from cre_mcp.sources.registry import SourceRegistry
 
 
@@ -91,3 +94,18 @@ async def test_search_all_dedupes_collision_and_unions_refs():
     assert {ref.source for ref in merged.refs} == {"loopnet", "crexi"}
     assert merged.also_listed_on == ["loopnet"]
     assert merged.source == "crexi"
+
+
+def test_registry_instantiates_only_enabled_configured_sources():
+    registry = SourceRegistry(
+        config=CreConfig(
+            sources={
+                "loopnet": {"enabled": False},
+                "crexi": {"enabled": True},
+            }
+        )
+    )
+
+    assert registry.get("crexi").name == "crexi"
+    with pytest.raises(SourceError, match="Unknown listing source: loopnet"):
+        registry.get("loopnet")

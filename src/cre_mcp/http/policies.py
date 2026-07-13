@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from cre_mcp.config import CreConfig
-from cre_mcp.http.browser import is_challenge_page
+from cre_mcp.http.browser import is_challenge_page, is_cloudflare_challenge
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class FetchPolicy:
     default_headers: dict[str, str] = field(default_factory=dict)
     cache_namespace: str = "http"
     cache_ttl_seconds: int = 300
+    detail_cache_ttl_seconds: int | None = None
     persist: bool = False
 
 
@@ -38,6 +39,28 @@ def build_loopnet_policy(config: CreConfig | None = None) -> FetchPolicy:
     )
 
 
+def build_crexi_policy(config: CreConfig | None = None) -> FetchPolicy:
+    """Build the Cloudflare-aware policy for Crexi's JSON API."""
+    config = config or CreConfig()
+    return FetchPolicy(
+        host="api.crexi.com",
+        delay_seconds=config.request_delay_seconds,
+        max_retries=config.max_retries,
+        impersonate="chrome136",
+        warmup_url="https://www.crexi.com/",
+        challenge_detector=is_cloudflare_challenge,
+        browser_fallback=config.browser_enabled,
+        default_headers={
+            "Origin": "https://www.crexi.com",
+            "Referer": "https://www.crexi.com/",
+        },
+        cache_namespace="crexi",
+        cache_ttl_seconds=15 * 60,
+        detail_cache_ttl_seconds=2 * 60 * 60,
+    )
+
+
 POLICY_REGISTRY: dict[str, FetchPolicy] = {
     "www.loopnet.com": build_loopnet_policy(),
+    "api.crexi.com": build_crexi_policy(),
 }

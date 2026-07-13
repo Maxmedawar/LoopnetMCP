@@ -21,9 +21,17 @@ class SourceRegistry:
         self._sources: dict[str, ListingSource] = {}
 
         if sources is None:
+            from cre_mcp.sources.crexi.source import CrexiSource
             from cre_mcp.sources.loopnet.source import LoopnetSource
 
-            self.register(LoopnetSource())
+            configured_sources: dict[str, ListingSource] = {
+                "loopnet": LoopnetSource(),
+                "crexi": CrexiSource(),
+            }
+            for name, source in configured_sources.items():
+                toggle = self._config.sources.get(name)
+                if toggle is None or toggle.enabled:
+                    self.register(source)
         else:
             for source in sources:
                 self.register(source)

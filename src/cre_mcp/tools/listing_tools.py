@@ -41,8 +41,9 @@ async def search_properties(
     size_min: Optional[int] = None,
     size_max: Optional[int] = None,
     page: Optional[int] = None,
+    sources: list[str] | None = None,
 ) -> dict:
-    """Search Loopnet for commercial real estate listings by location and filters.
+    """Search commercial real estate listings by location and filters.
 
     Args:
         location: City and state (e.g. 'Houston, TX'), state abbreviation ('TX'), or zip code ('77001').
@@ -54,11 +55,17 @@ async def search_properties(
         size_min: Minimum size filter in square feet.
         size_max: Maximum size filter in square feet.
         page: Page number (1-indexed). Check has_next_page in the response to know if more pages are available.
+        sources: Optional source names such as ['loopnet', 'crexi']. Omit to preserve the legacy LoopNet-only response. When provided, the response contains unified listings plus per_source_counts, errors, and deduped metadata.
 
     Returns:
-        Search results with matching property listings.
+        Legacy LoopNet search results when sources is omitted; otherwise a rich unified multi-source result.
     """
-    logger.info("search_properties called: location=%s, type=%s", location, property_type)
+    logger.info(
+        "search_properties called: location=%s, type=%s, sources=%s",
+        location,
+        property_type,
+        sources,
+    )
     try:
         query = SearchQuery(
             location=location,
@@ -71,7 +78,10 @@ async def search_properties(
             size_min=size_min,
             size_max=size_max,
         )
-        aggregated = await registry.search_all(query, sources=["loopnet"])
+        requested_sources = ["loopnet"] if sources is None else sources
+        aggregated = await registry.search_all(query, sources=requested_sources)
+        if sources is not None:
+            return aggregated.model_dump(mode="json")
         if aggregated.errors and not aggregated.listings:
             message = aggregated.errors.get("loopnet") or next(
                 iter(aggregated.errors.values())

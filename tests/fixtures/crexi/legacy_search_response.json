@@ -1,0 +1,89 @@
+{
+  "data": [
+    {
+      "id": 2622976,
+      "name": "1300 North 15th Street",
+      "thumbnailUrl": "https://images.crexi.com/assets/2622976/f42205d04351415fb8303489c620c62e_716x444.jpg",
+      "urlSlug": "florida-1300-north-15th-street",
+      "activatedOn": "2026-07-13T12:29:40.013Z",
+      "isInOpportunityZone": true,
+      "hasVideo": false,
+      "numberOfGalleryItems": 31,
+      "squareFootage": 2000,
+      "showCountdownAsDate": false,
+      "askingPrice": 950000.0,
+      "userIsAssetOwner": false,
+      "updatedOn": "2026-07-13T12:32:31.954Z",
+      "numberOfImages": 31,
+      "types": [
+        "Retail",
+        "Mixed Use",
+        "Office"
+      ],
+      "hasOM": false,
+      "hasFlyer": false,
+      "status": "On-Market",
+      "hasVirtualTour": false,
+      "locations": [
+        {
+          "address": "1300 North 15th Street",
+          "city": "Immokalee",
+          "county": "Collier County",
+          "state": {
+            "code": "FL",
+            "name": "Florida"
+          },
+          "zip": "34142",
+          "latitude": 26.4352938,
+          "longitude": -81.4332311,
+          "fullAddress": "1300 North 15th Street, Immokalee, Collier County, FL 34142"
+        }
+      ],
+      "isNew": true
+    },
+    {
+      "id": 2622985,
+      "name": "Brand New Dollar General",
+      "description": "Retail | 6.65% CAP | 9,100 SqFt",
+      "thumbnailUrl": "https://images.crexi.com/assets/2622985/90adcbeb826f4bf29ed5a8e115e5e916_716x444.jpg",
+      "urlSlug": "georgia-brand-new-dollar-general",
+      "brokerTeamLogoUrl": "https://images.crexi.com/user-accounts/23183/8fd211f280194d9eb62a6ce21848f8a8_150x100_resize.jpg",
+      "brokerageName": "Fortis Net Lease",
+      "activatedOn": "2026-07-13T12:54:50.384Z",
+      "isInOpportunityZone": false,
+      "hasVideo": false,
+      "numberOfGalleryItems": 8,
+      "squareFootage": 9100,
+      "showCountdownAsDate": false,
+      "askingPrice": 2106767.0,
+      "userIsAssetOwner": false,
+      "updatedOn": "2026-07-13T12:54:50.384Z",
+      "numberOfImages": 8,
+      "types": [
+        "Retail"
+      ],
+      "investmentType": "Net Lease",
+      "hasOM": true,
+      "hasFlyer": false,
+      "status": "On-Market",
+      "hasVirtualTour": false,
+      "locations": [
+        {
+          "address": "127 US HWY 82",
+          "city": "Sasser",
+          "county": "Terrell",
+          "state": {
+            "code": "GA",
+            "name": "Georgia"
+          },
+          "zip": "39842",
+          "latitude": 31.7370079,
+          "longitude": -84.4802606,
+          "fullAddress": "127 US HWY 82, Sasser, Terrell, GA 39842"
+        }
+      ],
+      "isNew": true
+    }
+  ],
+  "totalCount": 243398
+}

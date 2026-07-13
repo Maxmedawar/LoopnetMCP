@@ -9,6 +9,7 @@ from cre_mcp.scraper.browser import (
     BrowserFetchError,
     BrowserFetcher,
     is_challenge_page,
+    is_cloudflare_challenge,
 )
 
 
@@ -44,6 +45,23 @@ def test_is_challenge_page_rejects_large_page_with_markers():
 def test_is_challenge_page_rejects_normal_small_page():
     html = "<html><body><h1>Hello</h1></body></html>"
     assert is_challenge_page(html) is False
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<title>Just a moment...</title>",
+        "<script>window.__cf_chl_opt = {}</script>",
+        "<div class='cf-challenge'>Checking your browser</div>",
+        "<meta name='cf-mitigated' content='challenge'>",
+    ],
+)
+def test_is_cloudflare_challenge_detects_interstitial(html):
+    assert is_cloudflare_challenge(html) is True
+
+
+def test_is_cloudflare_challenge_rejects_json():
+    assert is_cloudflare_challenge('{"data": [], "totalCount": 0}') is False
 
 
 # --- BrowserFetcher tests ---
@@ -106,3 +124,31 @@ async def test_browser_fetcher_close_noop_when_not_started():
     fetcher = BrowserFetcher()
     await fetcher.close()  # Should not raise
     assert fetcher._browser is None
+
+
+@pytest.mark.asyncio
+async def test_browser_fetcher_fetch_api_runs_in_page_and_returns_text():
+    mock_page = AsyncMock()
+    mock_page.evaluate = AsyncMock(
+        return_value='{"status": 200, "text": "{\\"data\\":[]}"}'
+    )
+    mock_page.close = AsyncMock()
+
+    fetcher = BrowserFetcher()
+    mock_browser = MagicMock()
+    mock_browser.get = AsyncMock(return_value=mock_page)
+    fetcher._browser = mock_browser
+
+    result = await fetcher.fetch_api(
+        "https://api.crexi.com/assets/search",
+        method="POST",
+        body={"count": 1},
+    )
+
+    assert result == '{"data":[]}'
+    mock_browser.get.assert_awaited_once_with("https://www.crexi.com/")
+    expression = mock_page.evaluate.await_args.args[0]
+    assert "fetch(" in expression
+    assert "api.crexi.com/assets/search" in expression
+    assert '\\"count\\": 1' in expression
+    mock_page.close.assert_awaited_once()

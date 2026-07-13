@@ -10,7 +10,12 @@ class Cache(Protocol):
 
     def get(self, key: str) -> Any | None: ...
 
-    def set(self, key: str, value: Any) -> None: ...
+    def set(
+        self,
+        key: str,
+        value: Any,
+        ttl_seconds: int | None = None,
+    ) -> None: ...
 
     def clear(self) -> None: ...
 

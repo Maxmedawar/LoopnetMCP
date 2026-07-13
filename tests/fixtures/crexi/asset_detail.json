@@ -1,0 +1,137 @@
+{
+  "id": 2622985,
+  "name": "Brand New Dollar General",
+  "askingPrice": 2106767.0,
+  "capRate": 6.65,
+  "types": [
+    "Retail"
+  ],
+  "investmentHighlights": "<ul><li>15 Year Absolute NNN Lease</li><li>5% Rent Increases Every 5 Years</li></ul>",
+  "marketingDescription": "<p>Fortis Net Lease is pleased to present this 2025 BTS Dollar General store in Sasser, Georgia.</p>",
+  "details": {
+    "Asking Price": "$2,106,767",
+    "Property Type": "Retail",
+    "Sub Type": "Dollar, General, Dollar general",
+    "Investment Type": "Net Lease",
+    "Square Footage": "9,100",
+    "Price per SqFt": "$231.51",
+    "Cap Rate": "6.65%",
+    "NOI": "$140,100",
+    "Units": "1",
+    "Year Built": "2025",
+    "Stories": "1",
+    "Zoning": "Commercial",
+    "Lot Size (acres)": "2.23",
+    "Parking (spaces)": "30"
+  },
+  "summaryDetails": [
+    {
+      "key": "AskingPrice",
+      "value": 2106767.0,
+      "valueType": "Money",
+      "label": "Asking Price",
+      "display": "$2,106,767"
+    },
+    {
+      "key": "PropertyType",
+      "value": [
+        "Retail"
+      ],
+      "valueType": "Array",
+      "label": "Property Type",
+      "display": "Retail"
+    },
+    {
+      "key": "SubType",
+      "value": [
+        "Dollar",
+        "General",
+        "Dollar general"
+      ],
+      "valueType": "Array",
+      "label": "Subtype",
+      "display": "Dollar, General, Dollar general"
+    },
+    {
+      "key": "SquareFootage",
+      "value": 9100,
+      "valueType": "IntegerType",
+      "label": "Square Footage",
+      "display": "9,100"
+    },
+    {
+      "key": "PriceSqFt",
+      "value": 231.51,
+      "valueType": "Money",
+      "label": "Price/SqFt",
+      "display": "$231.51"
+    },
+    {
+      "key": "CapRate",
+      "value": 6.65,
+      "valueType": "Percentage",
+      "label": "Cap Rate",
+      "display": "6.65%"
+    },
+    {
+      "key": "Noi",
+      "value": 140100.0,
+      "valueType": "Money",
+      "label": "NOI",
+      "display": "$140,100"
+    },
+    {
+      "key": "Units",
+      "value": 1,
+      "valueType": "IntegerType",
+      "label": "Units",
+      "display": "1"
+    },
+    {
+      "key": "YearBuilt",
+      "value": "2025",
+      "valueType": "Text",
+      "label": "Year Built",
+      "display": "2025"
+    },
+    {
+      "key": "Stories",
+      "value": 1,
+      "valueType": "IntegerType",
+      "label": "Stories",
+      "display": "1"
+    },
+    {
+      "key": "LotSize",
+      "value": 2.23,
+      "valueType": "IntegerType",
+      "label": "Lot Size (acres)",
+      "display": "2.23"
+    }
+  ],
+  "locations": [
+    {
+      "cityVerified": "Dawson",
+      "stateVerified": {
+        "code": "GA",
+        "name": "Georgia"
+      },
+      "address": "127 US HWY 82",
+      "city": "Sasser",
+      "county": "Terrell",
+      "state": {
+        "code": "GA",
+        "name": "Georgia"
+      },
+      "zip": "39842",
+      "latitude": 31.7370079,
+      "longitude": -84.4802606,
+      "povLatitude": 31.7370079,
+      "povLongitude": -84.4802606
+    }
+  ],
+  "status": "Active",
+  "thumbnailUrl": "https://images.crexi.com/assets/2622985/90adcbeb826f4bf29ed5a8e115e5e916_716x444.jpg",
+  "urlSlug": "georgia-brand-new-dollar-general",
+  "updatedOn": "2026-07-13T12:54:50.384Z"
+}

@@ -1,0 +1,122 @@
+{
+  "boundingBox": {
+    "latitudeMax": 31.638741201115202,
+    "latitudeMin": 28.93542612914959,
+    "longitudeMax": -97.37859092409053,
+    "longitudeMin": -98.0872090759095
+  },
+  "filters": {
+    "address": {
+      "mode": "Include",
+      "structuredValues": [
+        "austin, TX"
+      ],
+      "type": "Plain",
+      "values": []
+    }
+  },
+  "from": 0,
+  "items": [
+    {
+      "id": "sales-2247699",
+      "documentType": "Sales",
+      "tenancy": {
+        "tenancyType": "Single"
+      },
+      "propertyPrice": {
+        "total": 2506400.0,
+        "perSqft": 238.7
+      },
+      "financials": {
+        "capRatePercent": 6.0,
+        "netOperatingIncome": 150384.0,
+        "askingPricePerItem": 1253200.0
+      },
+      "propertyAttributes": {
+        "ceilingHeightFt": 25,
+        "buildingSqft": 10500,
+        "buildingsCount": 2,
+        "storiesCount": 1,
+        "dockHighDoorsCount": 1,
+        "loadingDocksCount": 7,
+        "classType": "B",
+        "type": "Industrial",
+        "subType": "Manufacturing, Warehouse"
+      },
+      "constructionYear": {
+        "built": 1984,
+        "renovated": 1982
+      },
+      "lotAttributes": {
+        "sizeSqft": 39160
+      },
+      "recordType": {
+        "isSalesComp": false,
+        "isPublicSalesComp": false,
+        "isBrokerReportedSalesComp": false,
+        "isLeaseComp": false
+      },
+      "gallery": {
+        "imageCount": 16,
+        "videoCount": 0,
+        "thumbnailUrls": [
+          "https://images.crexi.com/assets/2247699/ba726be3608248b289af8af3c49ccd09_620x400.jpg",
+          "https://images.crexi.com/assets/2247699/6b69ff4a40564cc3b9faf588c93e935d_620x400.jpg"
+        ],
+        "hasVirtualTour": false
+      },
+      "auction": {
+        "startingBid": 2506400.0,
+        "minimumBid": 2506400.0
+      },
+      "brokers": [
+        {
+          "globalId": "a0a58105-6306-48f6-91f7-fd2fba30930a",
+          "name": "Judd Dunning",
+          "brokerage": "DWG Capital Group"
+        }
+      ],
+      "listingAttributes": {
+        "status": "On-Market",
+        "hasSalesOm": false,
+        "hasSalesFlyer": false,
+        "hasLeaseFlyer": false,
+        "dateActivated": "2025-11-06T22:42:59.835",
+        "dateUpdated": "2026-07-07T17:40:15.413",
+        "isBrokerAgentCoOp": false
+      },
+      "address": [
+        {
+          "stateCode": "TX",
+          "stateName": "Texas",
+          "fullAddress": "9606 Old Manor Rd, Austin, TX 78724",
+          "streetAddress": "9606 Old Manor Rd",
+          "zip": "78724",
+          "city": "Austin",
+          "county": "Travis County",
+          "location": {
+            "lat": 30.3288571,
+            "lon": -97.6323503
+          },
+          "slug": "Austin-TX-78724"
+        }
+      ],
+      "investmentType": {
+        "name": "Sale/Leaseback",
+        "isOwnerUser": false
+      },
+      "hasCrexiFlyer": false,
+      "propertyName": "For Sale Austin Texas NNN Industrial 10,500 SF",
+      "urlSlug": "texas-austin-iron",
+      "matchedLeaseIds": [],
+      "description": "FOR SALE | 10,500 SF Rare Austin, TX Industrial Net Lease",
+      "updatedOn": "2026-07-07T17:40:15.413"
+    }
+  ],
+  "isExportable": true,
+  "searchTypes": [
+    "Sales"
+  ],
+  "size": 1,
+  "totalCount": 493
+}

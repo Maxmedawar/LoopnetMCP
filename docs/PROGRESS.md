@@ -9,7 +9,7 @@ Fable reviews independently after each phase before advancing.
 |---|---|---|---|
 | 1 | Foundation refactor | 🟢 complete | 167 passed, 1 warning |
 | 2 | Source abstraction + LoopNet adapter | 🟢 complete | 178 passed, 1 warning |
-| 3 | Crexi + multi-source search | ⚪ not started | — |
+| 3 | Crexi + multi-source search | 🟢 complete | 199 passed, 1 warning |
 | 4 | Geo + market intelligence | ⚪ not started | — |
 | 5 | Underwriting + scoring + flagship tools | ⚪ not started | — |
 | 6 | Distressed sources | ⚪ not started | — |
@@ -31,3 +31,13 @@ Fable reviews independently after each phase before advancing.
     `sources/loopnet/`; added the LoopNet adapter and legacy-path shims; rewired tool
     internals and HTTP-boundary mocks; added `tests/sources/` coverage.
   - Pytest: `======================= 178 passed, 1 warning in 19.99s ========================`
+- 2026-07-13 — Phase 3 Crexi source and multi-source search complete.
+  - Status: GREEN; live Crexi search/detail shapes confirmed, default LoopNet tool
+    contracts preserved, and explicit source selection returns fault-isolated unified results.
+  - Files changed: implemented policy-driven JSON GET/POST, per-request cache TTLs,
+    Cloudflare detection and in-page API fallback; added source toggles, the Crexi
+    adapter/mappers/fixtures, current universal-search filter mapping, registry wiring,
+    Crexi-preferred dedupe, rich multi-source tool output, and Phase 3 acceptance tests.
+    The current Crexi UI uses `universal-search/v2/search`; legacy `assets/search`
+    fixtures remain covered, and asset detail continues through `assets/{id}`.
+  - Pytest: `======================= 199 passed, 1 warning in 21.25s ========================`

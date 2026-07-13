@@ -1,0 +1,64 @@
+{
+  "excludeFilters": [],
+  "excludeSort": [],
+  "filters": {
+    "searchAttributes.status": {
+      "mode": "Include",
+      "structuredValues": [
+        "On-Market",
+        "Auction",
+        "Highest & Best",
+        "Call For Offers"
+      ],
+      "type": "Plain",
+      "values": []
+    },
+    "address": {
+      "mode": "Include",
+      "structuredValues": [
+        "Austin, TX"
+      ],
+      "type": "Plain",
+      "values": []
+    },
+    "propertyPrice.total": {
+      "mode": "Include",
+      "structuredValues": [
+        {
+          "min": 1000000,
+          "max": 5000000
+        }
+      ],
+      "type": "Plain",
+      "values": []
+    },
+    "propertyAttributes.buildingSqft": {
+      "mode": "Include",
+      "structuredValues": [
+        {
+          "min": 5000,
+          "max": 20000
+        }
+      ],
+      "type": "Plain",
+      "values": []
+    },
+    "propertyAttributes.type": {
+      "mode": "Include",
+      "structuredValues": [
+        "Retail"
+      ],
+      "type": "Plain",
+      "values": []
+    }
+  },
+  "from": 60,
+  "ids": [],
+  "searchTypes": [
+    "Sales"
+  ],
+  "size": 60,
+  "sorting": {
+    "searchAttributes.crexiSearchRank": "Descending"
+  }
+}
