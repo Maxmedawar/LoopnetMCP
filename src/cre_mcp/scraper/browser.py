@@ -6,6 +6,7 @@ from cre_mcp.http.browser import (
     BrowserFetcher,
     is_challenge_page,
     is_cloudflare_challenge,
+    is_imperva_challenge,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "CHALLENGE_DETECTORS",
     "is_challenge_page",
     "is_cloudflare_challenge",
+    "is_imperva_challenge",
 ]

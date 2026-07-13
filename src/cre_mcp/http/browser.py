@@ -20,6 +20,11 @@ _CLOUDFLARE_MARKERS = (
     "cf-mitigated",
     "cloudflare ray id",
 )
+_IMPERVA_MARKERS = (
+    "_incapsula_resource",
+    "incapsula incident id",
+    "imperva",
+)
 
 
 class BrowserFetchError(FetchClientError):
@@ -41,6 +46,12 @@ def is_cloudflare_challenge(text: str) -> bool:
     """Return whether a response is a Cloudflare 403/503 interstitial."""
     lowered = text.lower()
     return any(marker in lowered for marker in _CLOUDFLARE_MARKERS)
+
+
+def is_imperva_challenge(text: str) -> bool:
+    """Return whether a response is an Imperva/Incapsula interstitial."""
+    lowered = text.lower()
+    return any(marker in lowered for marker in _IMPERVA_MARKERS)
 
 
 class BrowserFetcher:
@@ -166,4 +177,5 @@ class BrowserFetcher:
 CHALLENGE_DETECTORS = {
     "akamai": is_challenge_page,
     "cloudflare": is_cloudflare_challenge,
+    "imperva": is_imperva_challenge,
 }

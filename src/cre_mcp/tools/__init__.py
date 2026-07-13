@@ -14,6 +14,7 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(market_tools.compare_markets)
     mcp.tool()(deal_tools.analyze_deal)
     mcp.tool()(deal_tools.find_deals)
+    mcp.tool()(deal_tools.find_distressed)
 
 
 __all__ = ["register_all"]

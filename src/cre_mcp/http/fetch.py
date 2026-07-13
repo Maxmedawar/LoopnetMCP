@@ -22,6 +22,8 @@ from cre_mcp.http.errors import (
 from cre_mcp.http.policies import (
     POLICY_REGISTRY,
     FetchPolicy,
+    build_arcgis_policies,
+    build_auctioncom_policies,
     build_crexi_policy,
     build_gov_policies,
     build_loopnet_policy,
@@ -52,6 +54,8 @@ class FetchClient:
         self._policies = dict(POLICY_REGISTRY)
         self._policies["www.loopnet.com"] = build_loopnet_policy(self._config)
         self._policies["api.crexi.com"] = build_crexi_policy(self._config)
+        self._policies.update(build_auctioncom_policies(self._config))
+        self._policies.update(build_arcgis_policies(self._config))
         self._policies.update(build_gov_policies(self._config))
         if policies is not None:
             self._policies.update(policies)

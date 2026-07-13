@@ -109,3 +109,11 @@ def test_registry_instantiates_only_enabled_configured_sources():
     assert registry.get("crexi").name == "crexi"
     with pytest.raises(SourceError, match="Unknown listing source: loopnet"):
         registry.get("loopnet")
+
+
+def test_registry_instantiates_default_distressed_sources():
+    registry = SourceRegistry()
+
+    assert registry.get("hud_reo").capabilities.supports_distressed is True
+    assert registry.get("auction_com").capabilities.supports_distressed is True
+    assert registry.get("county").capabilities.supports_distressed is True

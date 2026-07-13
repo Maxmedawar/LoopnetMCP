@@ -22,11 +22,19 @@ class SourceRegistry:
 
         if sources is None:
             from cre_mcp.sources.crexi.source import CrexiSource
+            from cre_mcp.sources.distressed import (
+                AuctionComSource,
+                CountySource,
+                HudReoSource,
+            )
             from cre_mcp.sources.loopnet.source import LoopnetSource
 
             configured_sources: dict[str, ListingSource] = {
                 "loopnet": LoopnetSource(),
                 "crexi": CrexiSource(),
+                "hud_reo": HudReoSource(),
+                "auction_com": AuctionComSource(),
+                "county": CountySource(),
             }
             for name, source in configured_sources.items():
                 toggle = self._config.sources.get(name)

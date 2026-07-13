@@ -6,7 +6,7 @@ import sys
 from fastmcp import FastMCP
 
 from cre_mcp.tools import register_all
-from cre_mcp.tools.deal_tools import analyze_deal, find_deals
+from cre_mcp.tools.deal_tools import analyze_deal, find_deals, find_distressed
 from cre_mcp.tools.listing_tools import (
     get_market_overview,
     get_property_details,
@@ -29,7 +29,8 @@ mcp = FastMCP(
         "Use get_property_details to get full details on a specific listing. "
         "Use get_market_overview for listing-derived market statistics. "
         "Use market_intel for government fundamentals and compare_markets to rank locations."
-        " Use analyze_deal for deep underwriting and find_deals for scored deal discovery."
+        " Use analyze_deal for deep underwriting, find_deals for scored deal discovery,"
+        " and find_distressed for REO, auction, foreclosure, and tax-sale opportunities."
     ),
 )
 register_all(mcp)
@@ -43,6 +44,7 @@ __all__ = [
     "analyze_deal",
     "compare_markets",
     "find_deals",
+    "find_distressed",
     "get_market_overview",
     "get_property_details",
     "market_intel",

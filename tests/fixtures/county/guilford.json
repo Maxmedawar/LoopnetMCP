@@ -1,0 +1,16 @@
+{
+  "features": [{"attributes": {
+    "Owner": "HATTEN, JOHNNY CARL JR;HATTEN, SHANIKA LATRESHE",
+    "LOCATION_ADDR": "120 WALNUT CROSSING DR",
+    "Total_Assessed": 322800.0,
+    "YEAR_BUILT": 2011.0,
+    "OBJECTID": 1,
+    "PARCEL_ID": "104732",
+    "Centroid_X": -79.55598747,
+    "Centroid_Y": 36.08991466,
+    "AuctionDate": null,
+    "Property_Type": "RESIDENTIAL",
+    "Structure_Size": 2040,
+    "Lot_Size": 0.28
+  }}]
+}

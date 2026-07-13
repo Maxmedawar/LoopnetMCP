@@ -134,6 +134,12 @@ def _input_ref(url_or_id: str, source: str) -> ListingRef:
     elif is_url and source == "crexi":
         match = re.search(r"/(?:lease/)?properties/([^/?#]+)", url_or_id)
         source_id = match.group(1) if match else url_or_id
+    elif is_url and source == "auction_com":
+        match = re.search(r"-(\d+)(?:[/?#]|$)", url_or_id)
+        source_id = match.group(1) if match else url_or_id
+    elif is_url and source == "hud_reo":
+        match = re.search(r"[?&]case=([^&#]+)", url_or_id)
+        source_id = match.group(1) if match else url_or_id
     return ListingRef(
         source=source,
         source_id=source_id,
@@ -277,4 +283,103 @@ async def find_deals(
         }
     except Exception as exc:
         logger.error("find_deals error: %s", exc)
+        return {"error": str(exc)}
+
+
+def _distressed_score(deal: Deal) -> float:
+    return next(
+        (item.score for item in deal.scores if item.strategy == "distressed"),
+        0.0,
+    )
+
+
+async def find_distressed(
+    location: str,
+    property_type: str | None = None,
+    distress_types: list[str] | None = None,
+    min_score: float | None = None,
+    limit: int = 25,
+) -> dict:
+    """Find and rank distressed, foreclosure, REO, and tax-sale inventory.
+
+    Args:
+        location: Market, state, ZIP, or configured county to search.
+        property_type: Optional commercial property-type filter.
+        distress_types: Optional subset of auction, foreclosure, reo, bank_owned,
+            or tax_sale.
+        min_score: Optional minimum NDE distressed score.
+        limit: Maximum ranked deals returned.
+
+    Returns:
+        Ranked Deals with distressed and asset-rubric scores plus isolated errors.
+    """
+    logger.info(
+        "find_distressed called: location=%s types=%s",
+        location,
+        distress_types,
+    )
+    if limit <= 0:
+        return {"error": "limit must be greater than zero"}
+    allowed_types = {"auction", "foreclosure", "reo", "bank_owned", "tax_sale"}
+    requested_types = (
+        {value.casefold() for value in distress_types}
+        if distress_types is not None
+        else None
+    )
+    if requested_types is not None and not requested_types <= allowed_types:
+        invalid = sorted(requested_types - allowed_types)
+        return {"error": f"Unknown distress type(s): {', '.join(invalid)}"}
+    try:
+        try:
+            geo = await resolve(location)
+        except Exception as exc:
+            logger.warning(
+                "Distressed query geo resolution unavailable for %s: %s",
+                location,
+                exc,
+            )
+            geo = None
+        query = SearchQuery(
+            location=location,
+            geo=geo,
+            property_type=resolve_property_type(property_type),
+            listing_type="for-sale",
+            distressed_only=True,
+        )
+        distressed_sources = ["hud_reo", "auction_com", "county"]
+        aggregated = await registry.search_all(query, sources=distressed_sources)
+        listings = [
+            listing
+            for listing in aggregated.listings
+            if listing.is_distressed
+            and (
+                requested_types is None
+                or (listing.distress_type or "").casefold() in requested_types
+            )
+        ]
+        market, market_error = await _market_for(location)
+        errors = dict(aggregated.errors)
+        if market_error:
+            errors["market"] = market_error
+        deals = [
+            _deal(listing, market, None, assumptions=None)
+            for listing in listings
+        ]
+        total_scored = len(deals)
+        deals.sort(key=_distressed_score, reverse=True)
+        if min_score is not None:
+            deals = [deal for deal in deals if _distressed_score(deal) >= min_score]
+        selected = deals[:limit]
+        return {
+            "query_location": location,
+            "strategy": "distressed",
+            "deals": [deal.model_dump(mode="json") for deal in selected],
+            "total_scored": total_scored,
+            "returned": len(selected),
+            "errors": errors,
+            "per_source_counts": aggregated.per_source_counts,
+            "deduped": aggregated.deduped,
+        }
+    except Exception as exc:
+        logger.error("find_distressed error: %s", exc)
         return {"error": str(exc)}

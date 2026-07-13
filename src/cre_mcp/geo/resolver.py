@@ -38,6 +38,9 @@ COUNTY_FIPS = {
     ("new york", "NY"): "36061",
     ("miami-dade", "FL"): "12086",
     ("cook", "IL"): "17031",
+    ("guilford", "NC"): "37081",
+    ("yavapai", "AZ"): "04025",
+    ("douglas", "CO"): "08035",
 }
 
 CITY_FALLBACKS = {
@@ -211,4 +214,3 @@ async def resolve(location: str) -> GeoRef:
     if _resolver is None:
         _resolver = GeoResolver()
     return await _resolver.resolve(location)
-

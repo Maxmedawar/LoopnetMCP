@@ -422,6 +422,132 @@ def sanity_dscr(ctx: DealContext) -> float | None:
     return ctx.underwriting.dscr if ctx.underwriting else None
 
 
+def _distressed_value(ctx: DealContext) -> float | None:
+    for key in ("bpo", "avm", "assessed_value"):
+        value = _number(ctx, key)
+        if value is not None and value > 0:
+            return value
+    return None
+
+
+def discount_to_upb(ctx: DealContext) -> float | None:
+    direct = _number(ctx, "discount_to_upb")
+    if direct is not None:
+        return direct
+    upb = _number(ctx, "upb")
+    return (
+        ctx.listing.price_usd / upb
+        if ctx.listing.price_usd is not None and upb
+        else None
+    )
+
+
+def discount_to_bpo(ctx: DealContext) -> float | None:
+    direct = _number(ctx, "discount_to_bpo")
+    if direct is not None:
+        return direct
+    value = _distressed_value(ctx)
+    return (
+        ctx.listing.price_usd / value
+        if ctx.listing.price_usd is not None and value
+        else None
+    )
+
+
+def ltv_at_entry(ctx: DealContext) -> float | None:
+    direct = _number(ctx, "ltv_at_entry")
+    if direct is not None:
+        return direct
+    value = _distressed_value(ctx)
+    basis = _number(ctx, "entry_basis")
+    if basis is None:
+        basis = ctx.listing.price_usd
+    return basis / value if basis is not None and value else None
+
+
+def lien_position(ctx: DealContext) -> float | None:
+    return _category(ctx, "lien_position", T.LIEN_POSITION_SCORES)
+
+
+def judicial_vs_nonjudicial_state(ctx: DealContext) -> float | None:
+    return _category(ctx, "foreclosure_process", T.JUDICIAL_PROCESS_SCORES)
+
+
+def borrower_engagement(ctx: DealContext) -> float | None:
+    return _category(ctx, "borrower_engagement", T.BORROWER_ENGAGEMENT_SCORES)
+
+
+def collateral_quality_carryover(ctx: DealContext) -> float | None:
+    value = _number(ctx, "collateral_score")
+    if value is None:
+        return None
+    return value / T.SCORE_SCALE if value > T.NORMALIZED_MAX else value
+
+
+def exit_optionality(ctx: DealContext) -> float | None:
+    exits = _number(ctx, "underwritten_exit_count")
+    if exits is not None:
+        if (
+            exits >= T.DISTRESSED_EXIT_FULL_MIN_COUNT
+            and ctx.listing.raw.get("exit_irr_underwritten") is True
+        ):
+            return T.DISTRESSED_EXIT_FULL_SCORE
+        if exits >= T.DISTRESSED_EXIT_GOOD_MIN_COUNT:
+            return T.DISTRESSED_EXIT_GOOD_SCORE
+        if exits >= T.DISTRESSED_EXIT_SINGLE_MIN_COUNT:
+            return T.DISTRESSED_EXIT_SINGLE_SCORE
+        return T.NORMALIZED_MIN
+    distress_type = (ctx.listing.distress_type or "").casefold()
+    return T.DISTRESS_EXIT_OPTIONALITY_SCORES.get(distress_type) or None
+
+
+def one_zero_three_one_backfill_readiness(ctx: DealContext) -> float | None:
+    category = _text(ctx, "1031_backfill_status")
+    if category:
+        return T.BACKFILL_1031_SCORES.get(category)
+    identified = ctx.listing.raw.get("1031_replacement_identified")
+    days = _number(ctx, "1031_days_remaining")
+    if identified is True and days is not None:
+        return (
+            T.DISTRESSED_BACKFILL_FULL_SCORE
+            if days >= T.DISTRESSED_BACKFILL_FULL_MIN_DAYS
+            else T.DISTRESSED_BACKFILL_URGENT_SCORE
+        )
+    if identified is False:
+        return T.DISTRESSED_BACKFILL_UNIDENTIFIED_SCORE
+    return None
+
+
+def oz_qof_layer(ctx: DealContext) -> float | None:
+    oz = ctx.listing.raw.get("opportunity_zone")
+    if oz is None:
+        oz = ctx.listing.raw.get("isInOpportunityZone")
+    qof = ctx.listing.raw.get("qof_layer")
+    if oz is True and qof is True:
+        return T.DISTRESSED_OZ_QOF_SCORE
+    if oz is True:
+        return T.DISTRESSED_OZ_ONLY_SCORE
+    if oz is False:
+        return T.DISTRESSED_NO_OZ_SCORE
+    return None
+
+
+def sponsor_track_record(ctx: DealContext) -> float | None:
+    deals = _number(ctx, "sponsor_deals")
+    dpi = _number(ctx, "sponsor_dpi")
+    if deals is None:
+        return None
+    if (
+        deals >= T.DISTRESSED_SPONSOR_FULL_MIN_DEALS
+        and dpi is not None
+        and dpi >= T.DISTRESSED_SPONSOR_FULL_MIN_DPI
+    ):
+        return T.DISTRESSED_SPONSOR_FULL_SCORE
+    if deals >= T.DISTRESSED_SPONSOR_GOOD_MIN_DEALS:
+        return T.DISTRESSED_SPONSOR_GOOD_SCORE
+    return T.DISTRESSED_SPONSOR_THIN_SCORE
+
+
 def _nnn_short_lease_sub_ig(ctx: DealContext) -> bool:
     years = lease_years_remaining(ctx)
     credit = _credit_score(ctx)
@@ -498,6 +624,39 @@ def _core_missing_financials(ctx: DealContext) -> bool:
     return bool(can_provide is False or (months is not None and months < T.CORE_REQUIRED_FINANCIAL_MONTHS and estoppel is False))
 
 
+def _distressed_title_defect(ctx: DealContext) -> bool:
+    return (
+        ctx.listing.raw.get("title_clear") is False
+        or ctx.listing.raw.get("title_defect") is True
+    )
+
+
+def _distressed_junior_lien_default(ctx: DealContext) -> bool:
+    position = _text(ctx, "lien_position")
+    junior = position in {"second", "2nd", "third", "3rd", "third+", "3rd+"}
+    return bool(
+        junior
+        and ctx.listing.raw.get("first_lien_default") is True
+        and ctx.listing.raw.get("first_lien_cure") is not True
+    )
+
+
+def _distressed_collateral_below_30(ctx: DealContext) -> bool:
+    value = _number(ctx, "collateral_score")
+    if value is not None and value <= T.NORMALIZED_MAX:
+        value *= T.SCORE_SCALE
+    return bool(value is not None and value < T.DISTRESSED_COLLATERAL_DQ_SCORE)
+
+
+def _distressed_1031_clock(ctx: DealContext) -> bool:
+    days = _number(ctx, "1031_days_remaining")
+    return bool(
+        days is not None
+        and days < T.DISTRESSED_1031_CLOCK_DQ_DAYS
+        and ctx.listing.raw.get("signed_psa") is not True
+    )
+
+
 SIGNAL_EXTRACTORS: dict[str, Callable[[DealContext], float | None]] = {
     "tenant_credit_tier": tenant_credit_tier,
     "lease_years_remaining": lease_years_remaining,
@@ -550,6 +709,17 @@ SIGNAL_EXTRACTORS: dict[str, Callable[[DealContext], float | None]] = {
     "debt_market_liquidity": debt_market_liquidity,
     "path_of_progress_score": path_of_progress_score,
     "sanity_dscr": sanity_dscr,
+    "discount_to_upb": discount_to_upb,
+    "discount_to_bpo": discount_to_bpo,
+    "ltv_at_entry": ltv_at_entry,
+    "lien_position": lien_position,
+    "judicial_vs_nonjudicial_state": judicial_vs_nonjudicial_state,
+    "borrower_engagement": borrower_engagement,
+    "collateral_quality_carryover": collateral_quality_carryover,
+    "exit_optionality": exit_optionality,
+    "1031_backfill_readiness": one_zero_three_one_backfill_readiness,
+    "oz_qof_layer": oz_qof_layer,
+    "sponsor_track_record": sponsor_track_record,
 }
 
 DISQUALIFIER_PREDICATES: dict[str, Callable[[DealContext], bool]] = {
@@ -567,4 +737,8 @@ DISQUALIFIER_PREDICATES: dict[str, Callable[[DealContext], bool]] = {
     "core_title_defect": _core_title_defect,
     "core_uninsured_extreme_hazard": _core_uninsured_extreme_hazard,
     "core_missing_financials": _core_missing_financials,
+    "distressed_title_defect": _distressed_title_defect,
+    "distressed_junior_lien_default": _distressed_junior_lien_default,
+    "distressed_collateral_below_30": _distressed_collateral_below_30,
+    "distressed_1031_clock": _distressed_1031_clock,
 }

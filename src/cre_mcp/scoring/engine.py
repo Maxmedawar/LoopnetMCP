@@ -241,7 +241,29 @@ def score(ctx: DealContext, rubric: Rubric) -> DealScore:
 
 def score_all(ctx: DealContext) -> list[DealScore]:
     """Score every applicable strategy and sort descending."""
-    scores = [score(ctx, rubric) for rubric in applicable_rubrics(ctx)]
+    rubrics = applicable_rubrics(ctx)
+    if ctx.listing.is_distressed:
+        distressed = [rubric for rubric in rubrics if rubric.strategy == "distressed"]
+        asset_scores = [
+            score(ctx, rubric)
+            for rubric in rubrics
+            if rubric.strategy != "distressed"
+        ]
+        covered_assets = [
+            item for item in asset_scores if item.confidence > T.NO_COVERAGE
+        ]
+        scoring_context = ctx
+        if covered_assets:
+            collateral = max(covered_assets, key=lambda item: item.score)
+            raw = dict(ctx.listing.raw)
+            raw["collateral_score"] = collateral.score
+            scoring_context = ctx.model_copy(
+                update={"listing": ctx.listing.model_copy(update={"raw": raw})}
+            )
+        scores = [score(scoring_context, rubric) for rubric in distressed]
+        scores.extend(asset_scores)
+    else:
+        scores = [score(ctx, rubric) for rubric in rubrics]
     return sorted(scores, key=lambda item: (item.score, item.confidence), reverse=True)
 
 

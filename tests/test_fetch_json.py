@@ -11,6 +11,7 @@ from tests.conftest import MockResponse
 
 CREXI_URL = "https://api.crexi.com/assets/search"
 CREXI_DETAIL_URL = "https://api.crexi.com/assets/2622985"
+AUCTIONCOM_URL = "https://graph.auction.com/graphql"
 
 
 def _client(cache=None) -> FetchClient:
@@ -69,6 +70,17 @@ def test_crexi_policy_has_cloudflare_headers_and_cache_windows():
     assert policy.cache_namespace == "crexi"
     assert policy.cache_ttl_seconds == 15 * 60
     assert policy.detail_cache_ttl_seconds == 2 * 60 * 60
+
+
+def test_auctioncom_policy_has_antibot_fallback_and_persistent_cache():
+    client = _client()
+    policy = client._policy_for_url(AUCTIONCOM_URL)
+
+    assert policy.impersonate == "chrome136"
+    assert policy.warmup_url == "https://www.auction.com/"
+    assert policy.browser_fallback is True
+    assert policy.cache_namespace == "auction-com"
+    assert policy.persist is True
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,7 @@ Fable reviews independently after each phase before advancing.
 | 3 | Crexi + multi-source search | 🟢 complete | 199 passed, 1 warning |
 | 4 | Geo + market intelligence | 🟢 complete | 225 passed, 1 warning |
 | 5 | Underwriting + scoring + flagship tools | 🟢 complete | 253 passed, 1 warning |
-| 6 | Distressed sources | ⚪ not started | — |
+| 6 | Distressed sources | 🟢 complete | 285 passed, 1 warning |
 | 7 | Owner/parcel enrichment | ⚪ not started | — |
 
 ## Log
@@ -60,3 +60,15 @@ Fable reviews independently after each phase before advancing.
     and registered `analyze_deal`/`find_deals`; added hand-computed metric tests, engine edge
     tests, nine golden deal snapshots with `--update-golden`, and mocked end-to-end tool tests.
   - Pytest: `======================= 253 passed, 1 warning in 21.30s ========================`
+- 2026-07-13 — Phase 6 distressed sources, NDE rubric, and deal discovery complete.
+  - Status: GREEN; live HUD REO, Auction.com, and three county ArcGIS feeds now
+    flow through the shared source seam, partial-data distressed scoring, asset-score
+    carryover, ranking, and the registered `find_distressed` tool.
+  - Files changed: added the reusable ArcGIS paging helper, persistent ArcGIS and
+    anti-bot Auction.com fetch policies, Imperva detection, HUD/Auction.com/county
+    source adapters and live-captured fixtures, configured county geo fallbacks, the
+    declarative A.4 distressed rubric/signals/disqualifiers, distressed asset routing,
+    and Phase 6 HTTP/source/scoring/tool acceptance tests. Auction.com GraphQL and the
+    Guilford NC, Yavapai AZ, and Douglas CO county schemas were confirmed live; no
+    Phase 6 fixture is marked `# VERIFY`.
+  - Pytest: `======================= 285 passed, 1 warning in 21.12s ========================`

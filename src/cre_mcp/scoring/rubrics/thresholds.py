@@ -86,6 +86,20 @@ CORE_WEIGHTS = {
     "sanity_dscr": 0.04,
 }
 
+DISTRESSED_WEIGHTS = {
+    "discount_to_upb": 0.15,
+    "discount_to_bpo": 0.15,
+    "ltv_at_entry": 0.10,
+    "lien_position": 0.08,
+    "judicial_vs_nonjudicial_state": 0.06,
+    "borrower_engagement": 0.08,
+    "collateral_quality_carryover": 0.15,
+    "exit_optionality": 0.08,
+    "1031_backfill_readiness": 0.06,
+    "oz_qof_layer": 0.03,
+    "sponsor_track_record": 0.06,
+}
+
 REQUIRED_SIGNALS = {
     "tenant_credit_tier",
     "lease_years_remaining",
@@ -128,6 +142,9 @@ SIGNAL_BANDS = {
     "supply_pipeline_ratio": ((2.0, 1.0), (5.0, 0.70), (8.0, 0.35), (None, 0.05)),
     "assessor_last_sale_delta": ((1.15, 1.0), (1.35, 0.70), (1.75, 0.35), (None, 0.10)),
     "sanity_dscr": ((1.15, 0.0), (1.25, 0.45), (1.35, 0.80), (None, 1.0)),
+    "discount_to_upb": ((0.55, 1.0), (0.70, 0.80), (0.85, 0.50), (None, 0.15)),
+    "discount_to_bpo": ((0.60, 1.0), (0.75, 0.75), (0.90, 0.40), (None, 0.05)),
+    "ltv_at_entry": ((0.55, 1.0), (0.65, 0.85), (0.75, 0.55), (None, 0.15)),
 }
 
 LOWER_IS_BETTER = {
@@ -141,6 +158,9 @@ LOWER_IS_BETTER = {
     "price_vs_avm",
     "supply_pipeline_ratio",
     "assessor_last_sale_delta",
+    "discount_to_upb",
+    "discount_to_bpo",
+    "ltv_at_entry",
 }
 
 # Number of leading bands whose upper edge is strict for signals that mix
@@ -239,6 +259,66 @@ SIGNAGE_SCORES = {"full": 1.0, "restricted": 0.70, "blocked": 0.10}
 PATH_GROWTH_SCORES = {"multiple": 1.0, "one": 0.60, "none": 0.25}
 PATH_PROGRESS_SCORES = {"multiple": 1.0, "one": 0.70, "none": 0.30, "negative": 0.05}
 
+LIEN_POSITION_SCORES = {
+    "first": 1.0,
+    "1st": 1.0,
+    "wrap": 0.60,
+    "second": 0.25,
+    "2nd": 0.25,
+    "third": 0.0,
+    "3rd": 0.0,
+    "third+": 0.0,
+    "3rd+": 0.0,
+}
+JUDICIAL_PROCESS_SCORES = {
+    "nonjudicial": 1.0,
+    "non-judicial": 1.0,
+    "judicial <9m": 0.70,
+    "judicial 9-18m": 0.40,
+    "judicial >18m": 0.10,
+}
+BORROWER_ENGAGEMENT_SCORES = {
+    "paying": 1.0,
+    "modifying": 1.0,
+    "contact not paying": 0.60,
+    "contacted not paying": 0.60,
+    "litigious": 0.20,
+}
+BACKFILL_1031_SCORES = {
+    "identified +15d": 1.0,
+    "identified 15+d": 1.0,
+    "identified <15d": 0.60,
+    "not identified": 0.10,
+}
+DISTRESS_EXIT_OPTIONALITY_SCORES = {
+    "reo": 0.75,
+    "bank_owned": 0.75,
+    "foreclosure": 0.40,
+    "auction": 0.40,
+    "tax_sale": 0.40,
+}
+DISTRESSED_EXIT_FULL_MIN_COUNT = 3.0
+DISTRESSED_EXIT_GOOD_MIN_COUNT = 2.0
+DISTRESSED_EXIT_SINGLE_MIN_COUNT = 1.0
+DISTRESSED_EXIT_FULL_SCORE = 1.0
+DISTRESSED_EXIT_GOOD_SCORE = 0.75
+DISTRESSED_EXIT_SINGLE_SCORE = 0.40
+DISTRESSED_BACKFILL_FULL_MIN_DAYS = 15.0
+DISTRESSED_BACKFILL_FULL_SCORE = 1.0
+DISTRESSED_BACKFILL_URGENT_SCORE = 0.60
+DISTRESSED_BACKFILL_UNIDENTIFIED_SCORE = 0.10
+DISTRESSED_OZ_QOF_SCORE = 1.0
+DISTRESSED_OZ_ONLY_SCORE = 0.70
+DISTRESSED_NO_OZ_SCORE = 0.40
+DISTRESSED_SPONSOR_FULL_MIN_DEALS = 10.0
+DISTRESSED_SPONSOR_GOOD_MIN_DEALS = 3.0
+DISTRESSED_SPONSOR_FULL_MIN_DPI = 1.60
+DISTRESSED_SPONSOR_FULL_SCORE = 1.0
+DISTRESSED_SPONSOR_GOOD_SCORE = 0.65
+DISTRESSED_SPONSOR_THIN_SCORE = 0.25
+DISTRESSED_COLLATERAL_DQ_SCORE = 30.0
+DISTRESSED_1031_CLOCK_DQ_DAYS = 10.0
+
 DEMAND_GENERATOR_MIN_ANNUAL_VISITS = 500_000.0
 DEMAND_GENERATOR_BELOW_MIN_DISTANCE_M = 1_500.000001
 
@@ -278,7 +358,14 @@ LWL_BOTTOM_QUARTILE_PERCENTILE = 0.25
 LWL_SPECIAL_ASSESSMENT_PCT = 20.0
 CORE_REQUIRED_FINANCIAL_MONTHS = 24.0
 
-SIGNAL_LABELS = {key: key.replace("_", " ").title() for key in set(NNN_WEIGHTS) | set(VAM_WEIGHTS) | set(LWL_WEIGHTS) | set(CORE_WEIGHTS)}
+SIGNAL_LABELS = {
+    key: key.replace("_", " ").title()
+    for key in set(NNN_WEIGHTS)
+    | set(VAM_WEIGHTS)
+    | set(LWL_WEIGHTS)
+    | set(CORE_WEIGHTS)
+    | set(DISTRESSED_WEIGHTS)
+}
 
 DISQUALIFIER_REASONS = {
     "nnn_short_lease_sub_ig": "Lease is under five years with no renewal option and sub-investment-grade credit.",
@@ -295,4 +382,8 @@ DISQUALIFIER_REASONS = {
     "core_title_defect": "Seller cannot deliver clear, insurable title.",
     "core_uninsured_extreme_hazard": "V-zone or active-wildfire exposure lacks an insurance quote.",
     "core_missing_financials": "Seller cannot provide 24 months of financials or an estoppel.",
+    "distressed_title_defect": "Title contains an incurable or uninsurable defect.",
+    "distressed_junior_lien_default": "Junior lien is exposed to an uncured first-lien default.",
+    "distressed_collateral_below_30": "Collateral quality score is below 30.",
+    "distressed_1031_clock": "The 1031 clock is under ten days without a signed PSA.",
 }

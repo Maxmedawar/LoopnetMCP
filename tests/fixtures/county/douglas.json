@@ -1,0 +1,15 @@
+{
+  "features": [{"attributes": {
+    "OBJECTID": 1329,
+    "Account_No": "R0624205",
+    "Owner_Name": null,
+    "Address1": null,
+    "City": null,
+    "State": "CO",
+    "ZipCode": 801180000,
+    "Tax_Year": 2024,
+    "Total_Due": 185.04,
+    "State_Parcel_No": 277129200001,
+    "Property_Description": "TR IN NE1/4NW1/4 29-10-67 0.494 AM/L AKA PART LOT 2 GRIFFIS EXEMPTION"
+  }}]
+}

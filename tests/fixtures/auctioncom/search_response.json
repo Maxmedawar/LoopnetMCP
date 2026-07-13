@@ -1,0 +1,111 @@
+{
+  "data": {
+    "seek_listings_from_filters": {
+      "total_count": 439,
+      "total_pages": 147,
+      "size": 3,
+      "current_page": 0,
+      "content": [
+        {
+          "listing_id": "2118168",
+          "urn": "adc:listing:2118168",
+          "listing_status": "AUCTION_IN_PROGRESS",
+          "listing_status_group": "ACTIVE",
+          "listing_page_path": "/details/11468-w-rolling-hills-rd-odessa-tx-2118168",
+          "formatted_address": ["11468 W Rolling Hills Rd", "Odessa, TX 79764, Ector County"],
+          "listing_configuration": {
+            "product_type": "DAY_1_REO",
+            "asset_type": "BANK_OWNED",
+            "occupancy_status": "OCCUPIED"
+          },
+          "seller_property": {
+            "street_description": "11468 W ROLLING HILLS RD",
+            "municipality": "Odessa",
+            "country_primary_subdivision": "TX",
+            "country_secondary_subdivision": "ECTOR",
+            "postal_code": "79764"
+          },
+          "valuation": {"seller_current_value_amount": null},
+          "primary_property": {
+            "property_id": "1299058",
+            "summary": {
+              "total_bedrooms": 3,
+              "total_bathrooms": 2,
+              "square_footage": 1680,
+              "lot_size": 1.02,
+              "year_built": 2006,
+              "valuation": null,
+              "structure_type_code": "MANUFACTURED_HOME",
+              "structure_type_group": "SINGLE_FAMILY",
+              "address": {"coordinates": {"lon": -102.5207838, "lat": 31.8811644}}
+            }
+          },
+          "auction": {
+            "start_date": "2026-07-13T12:00:00Z",
+            "end_date": "2026-07-15T14:01:30Z",
+            "starting_bid": 45000,
+            "is_online": true
+          },
+          "external_information": {
+            "collateral": {
+              "summary": [
+                {"estimated": 1600, "low": 1123, "high": 2077, "type": "rental"},
+                {"estimated": null, "low": null, "high": null, "type": "composite"}
+              ]
+            }
+          }
+        },
+        {
+          "listing_id": "2118171",
+          "urn": "adc:listing:2118171",
+          "listing_status": "AUCTION_IN_PROGRESS",
+          "listing_status_group": "ACTIVE",
+          "listing_page_path": "/details/205-s-san-antonio-st-sabinal-tx-2118171",
+          "formatted_address": ["205 S San Antonio Street", "Sabinal, TX 78881, Uvalde County"],
+          "listing_configuration": {
+            "product_type": "DAY_1_REO",
+            "asset_type": "BANK_OWNED",
+            "occupancy_status": "OCCUPIED"
+          },
+          "seller_property": {
+            "street_description": "205 S SAN ANTONIO STREET",
+            "municipality": "Sabinal",
+            "country_primary_subdivision": "TX",
+            "country_secondary_subdivision": "UVALDE",
+            "postal_code": "78881"
+          },
+          "valuation": {"seller_current_value_amount": null},
+          "primary_property": {
+            "property_id": "1390037",
+            "summary": {
+              "total_bedrooms": 4,
+              "total_bathrooms": 3.5,
+              "square_footage": 3685,
+              "lot_size": 0.39,
+              "year_built": 1941,
+              "valuation": 283454,
+              "structure_type_code": "SINGLE_FAMILY_HOME",
+              "structure_type_group": "SINGLE_FAMILY",
+              "address": {"coordinates": {"lon": -99.4677522, "lat": 29.3165185}}
+            }
+          },
+          "auction": {
+            "start_date": "2026-07-13T12:00:00Z",
+            "end_date": "2026-07-15T14:02:00Z",
+            "starting_bid": 60000,
+            "is_online": true
+          },
+          "external_information": {
+            "collateral": {
+              "summary": [
+                {"estimated": 1868, "low": 1096, "high": 2640, "type": "rental"},
+                {"estimated": 283454, "low": 225255, "high": 341653, "type": "composite"}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "extensions": {"requestId": "287ea34b-7366-4aca-8265-35faf22f1633", "requestCount": 1}
+}

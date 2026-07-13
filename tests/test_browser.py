@@ -10,6 +10,7 @@ from cre_mcp.scraper.browser import (
     BrowserFetcher,
     is_challenge_page,
     is_cloudflare_challenge,
+    is_imperva_challenge,
 )
 
 
@@ -62,6 +63,12 @@ def test_is_cloudflare_challenge_detects_interstitial(html):
 
 def test_is_cloudflare_challenge_rejects_json():
     assert is_cloudflare_challenge('{"data": [], "totalCount": 0}') is False
+
+
+def test_is_imperva_challenge_detects_auctioncom_interstitial():
+    html = '<meta name="robots" content="noindex"><script src="/_Incapsula_Resource"></script>'
+    assert is_imperva_challenge(html) is True
+    assert is_imperva_challenge('{"data":{"listings":[]}}') is False
 
 
 # --- BrowserFetcher tests ---

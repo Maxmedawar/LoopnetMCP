@@ -71,6 +71,9 @@ class CreConfig(BaseSettings):
         default_factory=lambda: {
             "loopnet": SourceToggle(enabled=True),
             "crexi": SourceToggle(enabled=True),
+            "hud_reo": SourceToggle(enabled=True),
+            "auction_com": SourceToggle(enabled=True),
+            "county": SourceToggle(enabled=True),
         },
         validation_alias=_env_aliases("sources"),
     )

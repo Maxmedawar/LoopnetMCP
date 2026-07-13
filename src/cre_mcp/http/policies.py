@@ -4,7 +4,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from cre_mcp.config import CreConfig
-from cre_mcp.http.browser import is_challenge_page, is_cloudflare_challenge
+from cre_mcp.http.browser import (
+    is_challenge_page,
+    is_cloudflare_challenge,
+    is_imperva_challenge,
+)
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,59 @@ def build_crexi_policy(config: CreConfig | None = None) -> FetchPolicy:
         cache_ttl_seconds=15 * 60,
         detail_cache_ttl_seconds=2 * 60 * 60,
     )
+
+
+def build_auctioncom_policies(
+    config: CreConfig | None = None,
+) -> dict[str, FetchPolicy]:
+    """Build anti-bot-aware policies for Auction.com pages and GraphQL."""
+    config = config or CreConfig()
+    common = {
+        "delay_seconds": max(config.request_delay_seconds, 3.0),
+        "max_retries": config.max_retries,
+        "impersonate": "chrome136",
+        "warmup_url": "https://www.auction.com/",
+        "challenge_detector": is_imperva_challenge,
+        "browser_fallback": config.browser_enabled,
+        "default_headers": {
+            "Origin": "https://www.auction.com",
+            "Referer": "https://www.auction.com/",
+        },
+        "cache_namespace": "auction-com",
+        "cache_ttl_seconds": 30 * 60,
+        "detail_cache_ttl_seconds": 6 * 60 * 60,
+        "persist": True,
+    }
+    return {
+        host: FetchPolicy(host=host, **common)
+        for host in ("www.auction.com", "graph.auction.com")
+    }
+
+
+def build_arcgis_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy]:
+    """Build low-delay, persistent policies for public ArcGIS hosts."""
+    config = config or CreConfig()
+    hosts = (
+        "services.arcgis.com",
+        "services1.arcgis.com",
+        "services2.arcgis.com",
+        "services3.arcgis.com",
+        "services6.arcgis.com",
+        "gcgis.guilfordcountync.gov",
+    )
+    return {
+        host: FetchPolicy(
+            host=host,
+            delay_seconds=0.2,
+            max_retries=config.max_retries,
+            impersonate=None,
+            browser_fallback=False,
+            cache_namespace="arcgis",
+            cache_ttl_seconds=24 * 60 * 60,
+            persist=True,
+        )
+        for host in hosts
+    }
 
 
 def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy]:
@@ -118,5 +175,7 @@ def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy
 POLICY_REGISTRY: dict[str, FetchPolicy] = {
     "www.loopnet.com": build_loopnet_policy(),
     "api.crexi.com": build_crexi_policy(),
+    **build_auctioncom_policies(),
+    **build_arcgis_policies(),
     **build_gov_policies(),
 }
