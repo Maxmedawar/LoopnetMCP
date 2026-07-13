@@ -1,8 +1,10 @@
 """Signal extraction and disqualifier predicate registries."""
 
 from collections.abc import Callable
+from datetime import date, datetime, timezone
 from typing import Any
 
+from cre_mcp.enrichment.owner import is_absentee
 from cre_mcp.models.deals import DealContext
 from cre_mcp.scoring.rubrics import thresholds as T
 
@@ -163,7 +165,9 @@ def price_vs_replacement(ctx: DealContext) -> float | None:
 
 
 def residual_value_land(ctx: DealContext) -> float | None:
-    land = _number(ctx, "land_value")
+    land = ctx.parcel.land_value if ctx.parcel else None
+    if land is None:
+        land = _number(ctx, "land_value")
     price = ctx.listing.price_usd
     return land / price if land is not None and price else None
 
@@ -402,8 +406,59 @@ def flood_wildfire_risk(ctx: DealContext) -> float | None:
 
 
 def assessor_last_sale_delta(ctx: DealContext) -> float | None:
-    last_sale = _number(ctx, "last_sale_price")
-    return ctx.listing.price_usd / last_sale if ctx.listing.price_usd is not None and last_sale else None
+    parcel_sale = ctx.parcel.last_sale_price if ctx.parcel else None
+    last_sale = parcel_sale if parcel_sale is not None else _number(ctx, "last_sale_price")
+    if ctx.listing.price_usd is None or not last_sale:
+        return None
+    sale_date = ctx.parcel.last_sale_date if ctx.parcel else None
+    if sale_date is None:
+        raw_date = ctx.listing.raw.get("last_sale_date")
+        sale_date = str(raw_date) if raw_date not in (None, "") else None
+    years = _years_since(sale_date)
+    if years is None:
+        return ctx.listing.price_usd / last_sale if parcel_sale is None else None
+    adjusted_sale = last_sale * (
+        (1 + T.ASSESSOR_LAST_SALE_ANNUAL_INFLATION_RATE) ** years
+    )
+    return ctx.listing.price_usd / adjusted_sale if adjusted_sale > 0 else None
+
+
+def _date_value(value: str | None) -> date | None:
+    if not value:
+        return None
+    text = value.strip()
+    try:
+        if text.isdigit():
+            timestamp = float(text)
+            if timestamp > 10_000_000_000:
+                timestamp /= 1000
+            return datetime.fromtimestamp(timestamp, tz=timezone.utc).date()
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except (OSError, OverflowError, ValueError):
+        for fmt in ("%m/%d/%Y", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(text, fmt).date()
+            except ValueError:
+                continue
+    return None
+
+
+def _years_since(value: str | None) -> float | None:
+    parsed = _date_value(value)
+    if parsed is None or parsed > date.today():
+        return None
+    return (date.today() - parsed).days / T.DAYS_PER_YEAR
+
+
+def owner_absentee(ctx: DealContext) -> float | None:
+    if ctx.parcel is None:
+        return None
+    absentee = is_absentee(ctx.parcel)
+    return float(absentee) if absentee is not None else None
+
+
+def owner_tenure_years(ctx: DealContext) -> float | None:
+    return _years_since(ctx.parcel.last_sale_date) if ctx.parcel else None
 
 
 def title_environmental_clean(ctx: DealContext) -> float | None:
@@ -705,6 +760,8 @@ SIGNAL_EXTRACTORS: dict[str, Callable[[DealContext], float | None]] = {
     "crime_index": crime_index,
     "flood_wildfire_risk": flood_wildfire_risk,
     "assessor_last_sale_delta": assessor_last_sale_delta,
+    "owner_absentee": owner_absentee,
+    "owner_tenure_years": owner_tenure_years,
     "title_environmental_clean": title_environmental_clean,
     "debt_market_liquidity": debt_market_liquidity,
     "path_of_progress_score": path_of_progress_score,

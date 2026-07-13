@@ -4,15 +4,19 @@ import logging
 import re
 from typing import Any
 
+from cre_mcp.enrichment.owner import OwnerLookup
 from cre_mcp.geo.resolver import resolve
 from cre_mcp.market.intel import MarketIntel
 from cre_mcp.models import (
     Deal,
     DealContext,
     DealScore,
+    GeoRef,
     Listing,
     ListingRef,
     MarketPack,
+    OwnerRecord,
+    ParcelRecord,
     UnderwritingResult,
 )
 from cre_mcp.scoring.engine import score, score_all
@@ -25,6 +29,7 @@ from cre_mcp.underwriting import UnderwritingAssumptions, underwrite_listing
 logger = logging.getLogger(__name__)
 registry = SourceRegistry()
 _market_intel: MarketIntel | None = None
+_owner_lookup: OwnerLookup | None = None
 
 
 def _market_engine() -> MarketIntel:
@@ -32,6 +37,13 @@ def _market_engine() -> MarketIntel:
     if _market_intel is None:
         _market_intel = MarketIntel()
     return _market_intel
+
+
+def _owner_engine() -> OwnerLookup:
+    global _owner_lookup
+    if _owner_lookup is None:
+        _owner_lookup = OwnerLookup()
+    return _owner_lookup
 
 
 def _location_for_listing(listing: Listing) -> str:
@@ -44,12 +56,47 @@ def _location_for_listing(listing: Listing) -> str:
     return listing.address
 
 
-async def _market_for(location: str) -> tuple[MarketPack | None, str | None]:
+async def _market_for(
+    location: str,
+) -> tuple[MarketPack | None, str | None]:
     try:
         geo = await resolve(location)
+    except Exception as exc:
+        logger.warning("Market intelligence unavailable for %s: %s", location, exc)
+        return None, str(exc)
+    try:
         return await _market_engine().get_market_pack(geo), None
     except Exception as exc:
         logger.warning("Market intelligence unavailable for %s: %s", location, exc)
+        return None, str(exc)
+
+
+def _geo_from_listing(listing: Listing) -> GeoRef | None:
+    county_fips = listing.raw.get("county_fips")
+    if county_fips is None and listing.source == "county":
+        county_fips = listing.source_id.partition(":")[0]
+    fips = str(county_fips or "")
+    if not re.fullmatch(r"\d{5}", fips):
+        return None
+    return GeoRef(
+        level="county",
+        state_fips=fips[:2],
+        county_fips=fips,
+        name=f"{listing.city or listing.address}, {listing.state}".strip(", "),
+    )
+
+
+async def _owner_for(
+    listing: Listing,
+    geo: GeoRef | None,
+) -> tuple[OwnerRecord | None, str | None]:
+    if geo is None:
+        return None, None
+    try:
+        owner = await _owner_engine().lookup(address=listing.address, geo=geo)
+        return owner, None
+    except Exception as exc:
+        logger.warning("Owner enrichment unavailable for %s: %s", listing.address, exc)
         return None, str(exc)
 
 
@@ -98,17 +145,23 @@ def _deal(
     market: MarketPack | None,
     strategy: str | None,
     assumptions: dict[str, Any] | None,
+    *,
+    parcel: ParcelRecord | None = None,
+    owner: OwnerRecord | None = None,
 ) -> Deal:
     underwriting = _underwrite(listing, market, assumptions)
     context = DealContext(
         listing=listing,
         market=market,
+        parcel=parcel,
         underwriting=underwriting,
     )
     scores = _scores(context, strategy)
     return Deal(
         listing=listing,
         market_pack=market,
+        parcel=parcel,
+        owner=owner,
         underwriting=underwriting,
         scores=scores,
         best_strategy=scores[0].strategy if scores else None,
@@ -173,11 +226,32 @@ async def analyze_deal(
         listing_source = registry.get(source)
         ref = _input_ref(url_or_id, source)
         listing = await listing_source.get_detail(ref)
-        market, market_error = await _market_for(_location_for_listing(listing))
-        deal = _deal(listing, market, strategy, assumptions)
+        location = _location_for_listing(listing)
+        market, market_error = await _market_for(location)
+        geo = _geo_from_listing(listing)
+        if geo is None:
+            try:
+                geo = await resolve(location)
+            except Exception as exc:
+                logger.warning("Owner geography unavailable for %s: %s", location, exc)
+        owner, owner_error = await _owner_for(listing, geo)
+        parcel = owner.parcels[0] if owner and owner.parcels else None
+        deal = _deal(
+            listing,
+            market,
+            strategy,
+            assumptions,
+            parcel=parcel,
+            owner=owner,
+        )
         payload = deal.model_dump(mode="json")
+        warnings = {}
         if market_error:
-            payload["warnings"] = {"market": market_error}
+            warnings["market"] = market_error
+        if owner_error:
+            warnings["owner"] = owner_error
+        if warnings:
+            payload["warnings"] = warnings
         return payload
     except Exception as exc:
         logger.error("analyze_deal error: %s", exc)

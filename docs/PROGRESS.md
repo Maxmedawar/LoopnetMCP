@@ -13,7 +13,8 @@ Fable reviews independently after each phase before advancing.
 | 4 | Geo + market intelligence | 🟢 complete | 225 passed, 1 warning |
 | 5 | Underwriting + scoring + flagship tools | 🟢 complete | 253 passed, 1 warning |
 | 6 | Distressed sources | 🟢 complete | 285 passed, 1 warning |
-| 7 | Owner/parcel enrichment | ⚪ not started | — |
+| 7 | Owner/parcel enrichment | 🟢 complete | 304 passed, 1 warning |
+| **Overall** | **7-phase build** | **🟢 FEATURE-COMPLETE** | **304 passed, 1 warning** |
 
 ## Log
 
@@ -72,3 +73,14 @@ Fable reviews independently after each phase before advancing.
     Guilford NC, Yavapai AZ, and Douglas CO county schemas were confirmed live; no
     Phase 6 fixture is marked `# VERIFY`.
   - Pytest: `======================= 285 passed, 1 warning in 21.12s ========================`
+- 2026-07-13 — Phase 7 owner and parcel enrichment complete; 7-phase build feature-complete.
+  - Status: GREEN; county parcel resolution, persistent owner caching, parcel-aware scoring,
+    non-fatal `analyze_deal` enrichment, and the ninth registered tool are verified.
+  - Files changed: added enrichment models and the source-agnostic `ParcelProvider`; added the
+    shared-ArcGIS-backed county provider, three-county registry, owner normalization/entity/
+    absentee orchestration, and persistent cache; wired parcel/owner output and scoring signals
+    into deals; added `owner_lookup` registration/export; added three live-captured parcel
+    fixtures and Phase 7 provider/county/owner/tool/scoring acceptance tests. Guilford NC,
+    Yavapai AZ, and Douglas CO assessor endpoints were all reconfirmed through live provider
+    queries; no Phase 7 fixture is marked `# VERIFY`.
+  - Pytest: `======================= 304 passed, 1 warning in 21.38s ========================`

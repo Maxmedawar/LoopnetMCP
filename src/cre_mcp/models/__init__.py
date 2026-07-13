@@ -2,6 +2,7 @@
 
 from cre_mcp.models.geo import GeoLevel, GeoRef
 from cre_mcp.models.deals import Deal, DealContext
+from cre_mcp.models.enrichment import OwnerRecord, ParcelRecord
 from cre_mcp.models.listings import (
     AggregatedSearchResult,
     Listing,
@@ -42,6 +43,8 @@ __all__ = [
     "MarketPack",
     "MetricSeries",
     "MetricValue",
+    "OwnerRecord",
+    "ParcelRecord",
     "PropertyDetail",
     "PropertySummary",
     "PropertyType",

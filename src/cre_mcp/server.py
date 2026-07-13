@@ -13,6 +13,7 @@ from cre_mcp.tools.listing_tools import (
     search_properties,
 )
 from cre_mcp.tools.market_tools import compare_markets, market_intel
+from cre_mcp.tools.owner_tools import owner_lookup
 
 # Route ALL logging to stderr — stdout is reserved for MCP protocol messages.
 logging.basicConfig(
@@ -31,6 +32,7 @@ mcp = FastMCP(
         "Use market_intel for government fundamentals and compare_markets to rank locations."
         " Use analyze_deal for deep underwriting, find_deals for scored deal discovery,"
         " and find_distressed for REO, auction, foreclosure, and tax-sale opportunities."
+        " Use owner_lookup for public assessor parcel and owner enrichment."
     ),
 )
 register_all(mcp)
@@ -49,5 +51,6 @@ __all__ = [
     "get_property_details",
     "market_intel",
     "mcp",
+    "owner_lookup",
     "search_properties",
 ]

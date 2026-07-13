@@ -68,7 +68,7 @@ LWL_WEIGHTS = {
     "tax_incentive_layer": 0.03,
 }
 
-CORE_WEIGHTS = {
+CORE_BASE_WEIGHTS = {
     "cap_rate_vs_treasury_spread": 0.15,
     "price_vs_avm": 0.12,
     "days_on_market": 0.06,
@@ -84,6 +84,15 @@ CORE_WEIGHTS = {
     "debt_market_liquidity": 0.05,
     "path_of_progress_score": 0.07,
     "sanity_dscr": 0.04,
+}
+CORE_ENRICHMENT_SIGNAL_WEIGHT = 0.03
+CORE_EXISTING_WEIGHT_SCALE = 1.0 - (2 * CORE_ENRICHMENT_SIGNAL_WEIGHT)
+CORE_WEIGHTS = {
+    key: weight * CORE_EXISTING_WEIGHT_SCALE
+    for key, weight in CORE_BASE_WEIGHTS.items()
+} | {
+    "owner_absentee": CORE_ENRICHMENT_SIGNAL_WEIGHT,
+    "owner_tenure_years": CORE_ENRICHMENT_SIGNAL_WEIGHT,
 }
 
 DISTRESSED_WEIGHTS = {
@@ -141,6 +150,7 @@ SIGNAL_BANDS = {
     "msa_median_hh_income": ((0.75, 0.10), (0.90, 0.40), (1.10, 0.70), (None, 1.0)),
     "supply_pipeline_ratio": ((2.0, 1.0), (5.0, 0.70), (8.0, 0.35), (None, 0.05)),
     "assessor_last_sale_delta": ((1.15, 1.0), (1.35, 0.70), (1.75, 0.35), (None, 0.10)),
+    "owner_tenure_years": ((3.0, 0.10), (7.0, 0.35), (12.0, 0.65), (20.0, 0.85), (None, 1.0)),
     "sanity_dscr": ((1.15, 0.0), (1.25, 0.45), (1.35, 0.80), (None, 1.0)),
     "discount_to_upb": ((0.55, 1.0), (0.70, 0.80), (0.85, 0.50), (None, 0.15)),
     "discount_to_bpo": ((0.60, 1.0), (0.75, 0.75), (0.90, 0.40), (None, 0.05)),
@@ -357,6 +367,8 @@ VAM_DEFERRED_MAINTENANCE_PCT = 25.0
 LWL_BOTTOM_QUARTILE_PERCENTILE = 0.25
 LWL_SPECIAL_ASSESSMENT_PCT = 20.0
 CORE_REQUIRED_FINANCIAL_MONTHS = 24.0
+ASSESSOR_LAST_SALE_ANNUAL_INFLATION_RATE = 0.03
+DAYS_PER_YEAR = 365.2425
 
 SIGNAL_LABELS = {
     key: key.replace("_", " ").title()
