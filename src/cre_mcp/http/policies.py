@@ -231,6 +231,20 @@ def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy
             cache_ttl_seconds=24 * 60 * 60,
             **common,
         ),
+        "comptroller.texas.gov": FetchPolicy(
+            host="comptroller.texas.gov",
+            delay_seconds=0.5,
+            cache_namespace="tx-business-registry",
+            cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
+        "api.realestateapi.com": FetchPolicy(
+            host="api.realestateapi.com",
+            delay_seconds=0.2,
+            cache_namespace="skiptrace",
+            cache_ttl_seconds=90 * 24 * 60 * 60,
+            **common,
+        ),
     }
 
 

@@ -7,7 +7,13 @@ from fastmcp import FastMCP
 
 from cre_mcp.tools import register_all
 from cre_mcp.tools.deal_tools import analyze_deal, find_deals, find_distressed
-from cre_mcp.tools.execution_tools import generate_loi, recommend_offer
+from cre_mcp.tools.execution_tools import (
+    draft_outreach,
+    find_contact,
+    generate_loi,
+    handle_counter,
+    recommend_offer,
+)
 from cre_mcp.tools.listing_tools import (
     get_market_overview,
     get_property_details,
@@ -43,6 +49,9 @@ mcp = FastMCP(
         " Use get_comps for county-limited sale comps and labeled value estimates."
         " Use recommend_offer for an explained negotiation range and generate_loi"
         " for a non-binding attorney-review draft."
+        " Use find_contact for source-labeled broker, owner, and public registry contacts,"
+        " draft_outreach for deterministic first-touch coaching, and handle_counter"
+        " for guarded counteroffer parsing and response coaching."
     ),
 )
 register_all(mcp)
@@ -56,12 +65,15 @@ __all__ = [
     "analyze_deal",
     "compare_markets",
     "find_deals",
+    "find_contact",
     "find_distressed",
     "get_market_overview",
     "get_comps",
     "get_property_details",
     "get_rent_comparables",
     "generate_loi",
+    "draft_outreach",
+    "handle_counter",
     "market_intel",
     "mcp",
     "owner_lookup",

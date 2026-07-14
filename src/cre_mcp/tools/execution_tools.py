@@ -1,10 +1,13 @@
-"""MCP boundaries for offer recommendations and non-binding LOI drafts."""
+"""MCP boundaries for offers, contacts, outreach, counters, and LOI drafts."""
 
 import logging
 from typing import Any
 
+from cre_mcp.execution.contacts import find_contact as assemble_contact
 from cre_mcp.execution.loi import generate_loi as draft_loi
+from cre_mcp.execution.negotiate import handle_counter as coach_counter
 from cre_mcp.execution.offer import recommend_offer as recommend_context_offer
+from cre_mcp.execution.outreach import draft_outreach as compose_outreach
 from cre_mcp.models import Deal, DealContext
 from cre_mcp.tools.deal_tools import analyze_deal
 
@@ -116,4 +119,90 @@ async def generate_loi(
         return {"error": str(exc)}
 
 
-__all__ = ["generate_loi", "recommend_offer"]
+async def find_contact(
+    url_or_id: str,
+    source: str = "loopnet",
+) -> dict:
+    """Find the listing broker, assessor owner, and available public entity contact.
+
+    Args:
+        url_or_id: Source listing URL or source-specific identifier.
+        source: Registered source name. Defaults to LoopNet.
+
+    Returns:
+        A source-labeled ContactInfo package; paid skip-trace is optional.
+    """
+    logger.info("find_contact called: source=%s listing=%s", source, url_or_id)
+    try:
+        ctx = await _deal_context(url_or_id, source)
+        return (await assemble_contact(ctx)).model_dump(mode="json")
+    except Exception as exc:
+        logger.error("find_contact error: %s", exc)
+        return {"error": str(exc)}
+
+
+async def draft_outreach(
+    url_or_id: str,
+    channel: str = "email",
+    angle: str | None = None,
+    source: str = "loopnet",
+) -> dict:
+    """Draft deterministic, deal-specific call, email, or letter outreach.
+
+    Args:
+        url_or_id: Source listing URL or source-specific identifier.
+        channel: One of call, email, or letter.
+        angle: Optional buyer_direct, via_broker, absentee_owner, or off_market frame.
+        source: Registered source name. Defaults to LoopNet.
+
+    Returns:
+        A complete OutreachDraft ending with the execution guardrail.
+    """
+    logger.info(
+        "draft_outreach called: source=%s listing=%s channel=%s angle=%s",
+        source,
+        url_or_id,
+        channel,
+        angle,
+    )
+    try:
+        ctx = await _deal_context(url_or_id, source)
+        return (
+            await compose_outreach(ctx, channel=channel, angle=angle)  # type: ignore[arg-type]
+        ).model_dump(mode="json")
+    except Exception as exc:
+        logger.error("draft_outreach error: %s", exc)
+        return {"error": str(exc)}
+
+
+async def handle_counter(
+    url_or_id: str,
+    counter_text: str,
+    source: str = "loopnet",
+) -> dict:
+    """Parse a seller counter and coach a guarded accept/counter/hold/walk response.
+
+    Args:
+        url_or_id: Source listing URL or source-specific identifier.
+        counter_text: Seller or broker counter terms in ordinary text.
+        source: Registered source name. Defaults to LoopNet.
+
+    Returns:
+        CounterAdvice with parsed meaning, verdict, reply, and explicit red flags.
+    """
+    logger.info("handle_counter called: source=%s listing=%s", source, url_or_id)
+    try:
+        ctx = await _deal_context(url_or_id, source)
+        return coach_counter(ctx, counter_text).model_dump(mode="json")
+    except Exception as exc:
+        logger.error("handle_counter error: %s", exc)
+        return {"error": str(exc)}
+
+
+__all__ = [
+    "draft_outreach",
+    "find_contact",
+    "generate_loi",
+    "handle_counter",
+    "recommend_offer",
+]

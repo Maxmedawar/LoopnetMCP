@@ -5,7 +5,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from cre_mcp.server import mcp
-from cre_mcp.tools.execution_tools import generate_loi, recommend_offer
+from cre_mcp.tools.execution_tools import (
+    draft_outreach,
+    find_contact,
+    generate_loi,
+    handle_counter,
+    recommend_offer,
+)
 from tests.scoring.builders import deal_context, market_pack
 
 
@@ -71,10 +77,47 @@ async def test_execution_tools_return_error_dicts():
     ):
         assert await recommend_offer("bad") == {"error": "unknown source"}
         assert await generate_loi("bad") == {"error": "unknown source"}
+        assert await find_contact("bad") == {"error": "unknown source"}
+        assert await draft_outreach("bad") == {"error": "unknown source"}
+        assert await handle_counter("bad", "counter") == {"error": "unknown source"}
 
 
 @pytest.mark.asyncio
-async def test_execution_tools_are_registered_and_tool_count_is_thirteen():
+async def test_execution_tools_are_registered_and_tool_count_is_sixteen():
     tools = await mcp.get_tools()
-    assert {"recommend_offer", "generate_loi"} <= set(tools)
-    assert len(tools) == 13
+    assert {
+        "recommend_offer",
+        "generate_loi",
+        "find_contact",
+        "draft_outreach",
+        "handle_counter",
+    } <= set(tools)
+    assert len(tools) == 16
+
+
+@pytest.mark.asyncio
+async def test_contact_outreach_and_counter_tools_run_over_enriched_context():
+    ctx = _context()
+    ctx.listing.broker_name = "Jordan Broker"
+    ctx.listing.broker_phone = "512-555-0100"
+    with patch(
+        "cre_mcp.tools.execution_tools._deal_context",
+        new=AsyncMock(return_value=ctx),
+    ):
+        contact = await find_contact("31948105")
+        outreach = await draft_outreach(
+            "31948105",
+            channel="email",
+            angle="via_broker",
+        )
+        counter = await handle_counter(
+            "31948105",
+            "Seller counters at $1.2M with $50k earnest, 10 days DD, and the "
+            "deposit goes hard day one.",
+        )
+
+    assert contact["broker"]["name"] == "Jordan Broker"
+    assert outreach["recipient"] == "Jordan Broker"
+    assert outreach["script"].endswith(outreach["guardrail"])
+    assert counter["verdict"] in {"counter", "walk"}
+    assert any("Day-one" in flag for flag in counter["red_flags"])

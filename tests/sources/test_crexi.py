@@ -9,7 +9,11 @@ import pytest
 
 from cre_mcp.models import ListingRef, ListingType, PropertyType
 from cre_mcp.sources.base import SearchQuery
-from cre_mcp.sources.crexi.mapping import build_search_body, map_asset
+from cre_mcp.sources.crexi.mapping import (
+    build_id_search_body,
+    build_search_body,
+    map_asset,
+)
 from cre_mcp.sources.crexi.source import DETAIL_URL, SEARCH_URL, CrexiSource
 
 FIXTURE_DIR = Path(__file__).parents[1] / "fixtures" / "crexi"
@@ -46,6 +50,13 @@ def test_build_search_body_maps_lease_platform_without_sale_statuses():
 
     assert body["searchTypes"] == ["Lease"]
     assert "searchAttributes.status" not in body["filters"]
+
+
+def test_build_id_search_body_uses_live_sales_identifier_shape():
+    body = build_id_search_body("1749592")
+    assert body["ids"] == ["sales-1749592"]
+    assert body["searchTypes"] == ["Sales"]
+    assert body["filters"] == {}
 
 
 def test_map_captured_search_assets_populates_numeric_fields():
@@ -102,6 +113,15 @@ def test_map_captured_detail_populates_structured_financials():
     ]
 
 
+def test_detail_mapping_preserves_live_broker_of_record_name():
+    asset = _fixture("asset_detail.json")
+    asset["brokerOfRecordName"] = "Max Freedman"
+
+    listing = map_asset(asset)
+
+    assert listing.broker_name == "Max Freedman"
+
+
 def test_map_asset_tolerates_missing_and_extra_fields(caplog):
     caplog.set_level(logging.DEBUG)
 
@@ -135,11 +155,37 @@ async def test_crexi_source_uses_shared_client_for_search_and_detail():
     )
 
     assert len(listings) == 1
-    client.post_json.assert_awaited_once_with(SEARCH_URL, build_search_body(query))
+    assert client.post_json.await_count == 2
+    assert client.post_json.await_args_list[0].args == (
+        SEARCH_URL,
+        build_search_body(query),
+    )
+    assert client.post_json.await_args_list[1].args == (
+        SEARCH_URL,
+        build_id_search_body("2622985"),
+    )
     client.get_json.assert_awaited_once_with(
         DETAIL_URL.format(source_id="2622985")
     )
     assert detail.cap_rate_pct == pytest.approx(6.65)
+
+
+@pytest.mark.asyncio
+async def test_crexi_detail_recovers_marketing_broker_from_targeted_search():
+    detail_payload = _fixture("asset_detail.json")
+    source_id = str(detail_payload["id"])
+    search_item = dict(_fixture("search_response.json")["items"][0])
+    search_item["id"] = f"sales-{source_id}"
+    client = AsyncMock()
+    client.get_json.return_value = detail_payload
+    client.post_json.return_value = {"items": [search_item]}
+
+    detail = await CrexiSource(client=client).get_detail(
+        ListingRef(source="crexi", source_id=source_id)
+    )
+
+    assert detail.broker_name == "Judd Dunning"
+    assert detail.broker_company == "DWG Capital Group"
 
 
 @pytest.mark.asyncio

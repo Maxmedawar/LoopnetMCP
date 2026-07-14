@@ -4,7 +4,16 @@ from cre_mcp.models.attributes import DealAttributes
 from cre_mcp.models.comps import SaleComp, ValueEstimate
 from cre_mcp.models.deals import Deal, DealContext
 from cre_mcp.models.enrichment import ListingFacts, OwnerRecord, ParcelRecord
-from cre_mcp.models.execution import LoiDraft, OfferRecommendation
+from cre_mcp.models.execution import (
+    BrokerContact,
+    BusinessPrincipal,
+    ContactInfo,
+    CounterAdvice,
+    LoiDraft,
+    OfferRecommendation,
+    OutreachDraft,
+    RegisteredAgentContact,
+)
 from cre_mcp.models.geo import GeoLevel, GeoRef
 from cre_mcp.models.listings import (
     AggregatedSearchResult,
@@ -39,6 +48,10 @@ from cre_mcp.models.underwriting import UnderwritingResult
 __all__ = [
     "AggregatedSearchResult",
     "Band",
+    "BrokerContact",
+    "BusinessPrincipal",
+    "ContactInfo",
+    "CounterAdvice",
     "Deal",
     "DealAttributes",
     "DealContext",
@@ -57,12 +70,14 @@ __all__ = [
     "MetricValue",
     "OwnerRecord",
     "OfferRecommendation",
+    "OutreachDraft",
     "ParcelRecord",
     "PropertyDetail",
     "PropertySummary",
     "PropertyType",
     "RentComparable",
     "RentComps",
+    "RegisteredAgentContact",
     "Rubric",
     "RubricResult",
     "SearchResult",

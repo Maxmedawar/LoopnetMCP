@@ -11,7 +11,11 @@ from cre_mcp.http.errors import (
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.models import Listing, ListingRef, SourceCapabilities
 from cre_mcp.sources.base import ListingSource, SearchQuery, SourceError
-from cre_mcp.sources.crexi.mapping import build_search_body, map_asset
+from cre_mcp.sources.crexi.mapping import (
+    build_id_search_body,
+    build_search_body,
+    map_asset,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,4 +108,39 @@ class CrexiSource(ListingSource):
             payload = payload["data"]
         if not isinstance(payload, dict):
             raise SourceError(self.name, "Crexi detail response was not an object")
-        return map_asset(payload)
+        listing = map_asset(payload)
+        if listing.broker_name is None:
+            # Crexi's detail payload often omits the marketing broker while the
+            # targeted universal-search record contains brokers[]. Broker recovery
+            # is supplementary: a search failure must not discard valid detail.
+            try:
+                search_payload = await self.client.post_json(
+                    SEARCH_URL,
+                    build_id_search_body(ref.source_id),
+                )
+                items = (
+                    search_payload.get("items", [])
+                    if isinstance(search_payload, dict)
+                    else []
+                )
+                for item in items if isinstance(items, list) else []:
+                    if not isinstance(item, dict):
+                        continue
+                    candidate = map_asset(item)
+                    if candidate.source_id != listing.source_id:
+                        continue
+                    listing = listing.model_copy(
+                        update={
+                            "broker_name": candidate.broker_name,
+                            "broker_company": candidate.broker_company,
+                            "broker_phone": candidate.broker_phone,
+                        }
+                    )
+                    break
+            except Exception as exc:
+                logger.warning(
+                    "Crexi broker recovery failed non-fatally for %s: %s",
+                    ref.source_id,
+                    exc,
+                )
+        return listing

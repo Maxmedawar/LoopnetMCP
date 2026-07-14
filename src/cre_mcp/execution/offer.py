@@ -105,6 +105,10 @@ def _cap_targets(ctx: DealContext, strategy: str) -> tuple[float, float]:
 
 
 def _sale_comp_value(ctx: DealContext) -> float | None:
+    if ctx.value_estimate is not None:
+        estimated = _number(ctx.value_estimate.mid or ctx.value_estimate.value)
+        if estimated is not None and estimated > 0:
+            return estimated
     direct = _raw_number(ctx, "market_value", "avm", "sale_comp_value")
     if direct is not None and direct > 0:
         return direct
@@ -410,7 +414,7 @@ def recommend_offer(ctx: DealContext) -> OfferRecommendation:
     caveats: list[str] = []
     if comp_value is None:
         caveats.append(
-            "Verified sale comps are unavailable until Phase 14; this range leans on NOI, "
+            "A usable sale-comp value estimate is unavailable; this range leans on NOI, "
             "strategy cap thresholds, market rates, and the ask."
         )
     if noi is None:

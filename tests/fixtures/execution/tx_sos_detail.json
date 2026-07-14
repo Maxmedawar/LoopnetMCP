@@ -1,0 +1,35 @@
+{
+  "success": true,
+  "data": {
+    "taxpayerId": "32073053129",
+    "name": "ELEGANT AUSTIN LLC",
+    "rightToTransactTX": "ACTIVE",
+    "sosRegistrationStatus": "ACTIVE",
+    "sosFileNumber": "0803515000",
+    "registeredAgentName": "IMRAN JAMAL",
+    "registeredOfficeAddressStreet": "17638 ROSE SUMMIT LN",
+    "registeredOfficeAddressCity": "RICHMOND",
+    "registeredOfficeAddressState": "TX",
+    "registeredOfficeAddressZip": "77407",
+    "officerInfo": [
+      {
+        "AGNT_NM": "AFTAB AZIZ",
+        "AGNT_TITL_TX": "MANAGER",
+        "AD_STR_POB_TX": "21419 SAUTON DR",
+        "CITY_NM": "KATY",
+        "ST_CD": "TX",
+        "AD_ZP": "77450",
+        "SOURCE": "SOS"
+      },
+      {
+        "AGNT_NM": "ZAHEER SHAIKH",
+        "AGNT_TITL_TX": "DIRECTOR",
+        "AD_STR_POB_TX": "26 STONEGATE PARK CT",
+        "CITY_NM": "SPRING",
+        "ST_CD": "TX",
+        "AD_ZP": "77379",
+        "SOURCE": "SOS"
+      }
+    ]
+  }
+}

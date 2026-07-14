@@ -16,11 +16,12 @@ Fable reviews independently after each phase before advancing.
 | 7 | Owner/parcel enrichment | 🟢 complete | 304 passed, 1 warning |
 | 8 | Attributes, traffic counts + rent comparables | 🟢 complete | 325 passed, 1 warning |
 | 9 | Offer & LOI engine | 🟢 complete | 343 passed, 1 warning |
+| 10 | Outreach & negotiation coach | 🟢 complete | 409 passed, 1 warning |
 | 14 | Listing intelligence + confidence gating | 🟢 complete | 352 passed, 1 warning |
 | 15 | Free comps engine + AVM | 🟢 complete | 371 passed, 1 warning |
 | 16 | Live-API hardening | 🟢 complete | 378 passed, 1 warning |
 | 17 | Completeness hardening | 🟢 complete | 385 passed, 1 warning |
-| **Overall** | **Phases 1–9 + 14–17 delivered** | **🟢 V2 TRUST LAYER IN PROGRESS — 13 tools** | **385 passed, 1 warning** |
+| **Overall** | **Phases 1–10 + 14–17 delivered** | **🟢 V2 EXECUTION LAYER IN PROGRESS — 16 tools** | **409 passed, 1 warning** |
 
 ## Log
 
@@ -163,3 +164,21 @@ Fable reviews independently after each phase before advancing.
     non-fatal fallback but timed out in the lab; the primary Overpass endpoint returned live OSM
     data. Score/value backtesting remains future work and was intentionally out of Phase 17 scope.
   - Pytest: `385 passed, 1 warning in 21.62s`
+- 2026-07-13 — Phase 10 outreach and negotiation coach complete.
+  - Status: GREEN; all 16 tools are registered, free broker/owner/public-registry contact
+    assembly is source-labeled and fault-isolated, every outreach channel/angle is a complete
+    deterministic guarded draft, and counter coaching parses economics and term traps against
+    the modeled target/walk price, cap-rate floor, and strategy DSCR threshold.
+  - Files changed: added execution contact/outreach/counter models and services; added the
+    per-state TX/AZ/NV/FL/GA public business-search registry, live Texas registered-agent and
+    officer adapter, optional keyed RealEstateAPI v2 skip-trace boundary, persistent host
+    policies, centralized counter thresholds, three MCP tools, exports/registration, real
+    Texas fixtures, and Phase 10 acceptance tests. Crexi detail enrichment now recovers the
+    marketing broker through its targeted universal-search ID record when detail omits it.
+  - Live verification: the official Texas Comptroller/SOS-backed JSON service returned ELEGANT
+    AUSTIN LLC's active registered agent and seven public officer rows. A real Crexi listing
+    (`1749592`) returned broker Travis Crow / Cushman & Wakefield plus Travis County owner
+    712 CONGRESS HOLDINGS LLC in one `find_contact` result. Arizona is a session-bound public
+    portal, Nevada presented Incapsula, and Florida/Georgia presented Cloudflare; those four
+    remain configured, logged, graceful automation gaps rather than brittle unverified scrapers.
+  - Pytest: `409 passed, 1 warning in 21.75s`

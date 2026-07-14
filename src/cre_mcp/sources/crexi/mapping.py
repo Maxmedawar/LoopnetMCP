@@ -38,6 +38,8 @@ _KNOWN_ASSET_KEYS = {
     "activatedOn",
     "askingPrice",
     "brokerName",
+    "brokerOfRecordLicense",
+    "brokerOfRecordName",
     "brokerTeamLogoUrl",
     "brokerageName",
     "capRate",
@@ -154,6 +156,21 @@ def build_search_body(query: SearchQuery) -> dict[str, Any]:
         "sorting": {"searchAttributes.crexiSearchRank": "Descending"},
     }
     return body
+
+
+def build_id_search_body(source_id: str) -> dict[str, Any]:
+    """Build the live universal-search request used to recover listing-broker data."""
+    normalized = source_id.removeprefix("sales-")
+    return {
+        "excludeFilters": [],
+        "excludeSort": [],
+        "filters": {},
+        "from": 0,
+        "ids": [f"sales-{normalized}"],
+        "searchTypes": ["Sales"],
+        "size": 1,
+        "sorting": {"searchAttributes.crexiSearchRank": "Descending"},
+    }
 
 
 def _as_float(value: Any) -> float | None:
@@ -350,7 +367,9 @@ def _map_legacy_asset(asset: dict[str, Any]) -> Listing:
         highlights=_highlights(asset.get("investmentHighlights")),
         images=[image_url] if image_url else [],
         image_url=image_url,
-        broker_name=_as_text(asset.get("brokerName")),
+        broker_name=_as_text(
+            _coalesce(asset.get("brokerName"), asset.get("brokerOfRecordName"))
+        ),
         broker_company=_as_text(asset.get("brokerageName")),
         url=url,
         last_updated=_as_text(asset.get("updatedOn")),

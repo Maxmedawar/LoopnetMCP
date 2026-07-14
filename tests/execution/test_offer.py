@@ -64,8 +64,11 @@ def test_missing_sale_comps_lowers_confidence_and_is_explicit():
     supported = recommend_offer(_context(raw={"market_value": 1_050_000}))
 
     assert thin.confidence < supported.confidence
-    assert any("Phase 14" in caveat for caveat in thin.caveats)
-    assert not any("Phase 14" in caveat for caveat in supported.caveats)
+    assert any("sale-comp value estimate is unavailable" in caveat for caveat in thin.caveats)
+    assert not any(
+        "sale-comp value estimate is unavailable" in caveat
+        for caveat in supported.caveats
+    )
 
 
 def test_value_add_multifamily_uses_stabilized_yield_on_cost():
