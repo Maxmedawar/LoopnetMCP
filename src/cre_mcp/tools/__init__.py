@@ -29,7 +29,10 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.command import tools as command_tools
     from cre_mcp.dataroom import tools as dataroom_tools
     from cre_mcp.debt import tools as debt_tools
+    from cre_mcp.envscreen import tools as envscreen_tools
     from cre_mcp.obligations import tools as obligation_tools
+    from cre_mcp.verifyreg import tools as verifyreg_tools
+    from cre_mcp.zoning import tools as zoning_tools
     from cre_mcp.leases import tools as lease_tools
     from cre_mcp.notes import tools as note_tools
     from cre_mcp.scenarios import tools as scenario_tools
@@ -152,6 +155,14 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(dataroom_tools.init_transaction_plan)
     mcp.tool()(dataroom_tools.transaction_critical_path)
     mcp.tool()(dataroom_tools.closing_runway)
+    mcp.tool()(zoning_tools.lookup_zoning)
+    mcp.tool()(zoning_tools.nearby_permits)
+    mcp.tool()(zoning_tools.zoning_code_link)
+    mcp.tool()(envscreen_tools.environmental_screen)
+    mcp.tool()(envscreen_tools.flood_zone)
+    mcp.tool()(envscreen_tools.hazard_profile)
+    mcp.tool()(verifyreg_tools.verify_license)
+    mcp.tool()(verifyreg_tools.counterparty_screen)
 
 
 __all__ = ["register_all"]
