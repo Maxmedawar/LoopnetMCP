@@ -1,0 +1,19 @@
+{
+  "displayFieldName": "FLD_AR_ID",
+  "fieldAliases": {
+    "FLD_ZONE": "FLD_ZONE",
+    "ZONE_SUBTY": "ZONE_SUBTY",
+    "SFHA_TF": "SFHA_TF",
+    "STATIC_BFE": "STATIC_BFE"
+  },
+  "features": [
+    {
+      "attributes": {
+        "FLD_ZONE": "X",
+        "ZONE_SUBTY": "AREA OF MINIMAL FLOOD HAZARD",
+        "SFHA_TF": "F",
+        "STATIC_BFE": -9999.0
+      }
+    }
+  ]
+}
