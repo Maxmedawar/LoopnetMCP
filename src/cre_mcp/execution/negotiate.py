@@ -54,15 +54,6 @@ def _days(text: str, labels: str) -> int | None:
 
 
 def _parse_counter(text: str) -> dict[str, Any]:
-    price = _context_money(
-        text,
-        r"purchase\s+price|counter(?:offer)?|seller\s+(?:wants|asks)|price",
-    )
-    if price is None:
-        candidates = [_money(item) for item in re.findall(_MONEY, text, re.IGNORECASE)]
-        values = [item for item in candidates if item is not None]
-        price = max(values) if values else None
-
     earnest_match = None
     earnest_patterns = (
         rf"(\d+(?:\.\d+)?\s*%|{_MONEY})\s*"
@@ -74,6 +65,22 @@ def _parse_counter(text: str) -> dict[str, Any]:
         earnest_match = re.search(pattern, text, re.IGNORECASE)
         if earnest_match:
             break
+    earnest_span = earnest_match.span(1) if earnest_match else None
+
+    price = _context_money(
+        text,
+        r"purchase\s+price|counter(?:offer)?|seller\s+(?:wants|asks)|price",
+    )
+    if price is None:
+        values: list[float] = []
+        for match in re.finditer(_MONEY, text, re.IGNORECASE):
+            if earnest_span and match.start() < earnest_span[1] and match.end() > earnest_span[0]:
+                continue
+            value = _money(match.group(0))
+            if value is not None and value >= T.COUNTER_MIN_PLAUSIBLE_PRICE:
+                values.append(value)
+        price = max(values) if values else None
+
     earnest_amount: float | None = None
     earnest_pct: float | None = None
     if earnest_match:

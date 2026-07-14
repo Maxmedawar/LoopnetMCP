@@ -8,9 +8,12 @@ from cre_mcp.server import mcp
 from cre_mcp.tools.execution_tools import (
     draft_outreach,
     find_contact,
+    financing_options,
     generate_loi,
     handle_counter,
+    qualify_me,
     recommend_offer,
+    size_debt,
 )
 from tests.scoring.builders import deal_context, market_pack
 
@@ -80,10 +83,13 @@ async def test_execution_tools_return_error_dicts():
         assert await find_contact("bad") == {"error": "unknown source"}
         assert await draft_outreach("bad") == {"error": "unknown source"}
         assert await handle_counter("bad", "counter") == {"error": "unknown source"}
+        assert await financing_options("bad") == {"error": "unknown source"}
+        assert await qualify_me("bad", 1, 1) == {"error": "unknown source"}
+        assert await size_debt("bad") == {"error": "unknown source"}
 
 
 @pytest.mark.asyncio
-async def test_execution_tools_are_registered_and_tool_count_is_sixteen():
+async def test_execution_tools_are_registered_and_tool_count_is_nineteen():
     tools = await mcp.get_tools()
     assert {
         "recommend_offer",
@@ -91,8 +97,11 @@ async def test_execution_tools_are_registered_and_tool_count_is_sixteen():
         "find_contact",
         "draft_outreach",
         "handle_counter",
+        "financing_options",
+        "qualify_me",
+        "size_debt",
     } <= set(tools)
-    assert len(tools) == 16
+    assert len(tools) == 19
 
 
 @pytest.mark.asyncio
@@ -121,3 +130,36 @@ async def test_contact_outreach_and_counter_tools_run_over_enriched_context():
     assert outreach["script"].endswith(outreach["guardrail"])
     assert counter["verdict"] in {"counter", "walk"}
     assert any("Day-one" in flag for flag in counter["red_flags"])
+
+
+@pytest.mark.asyncio
+async def test_financing_qualification_and_debt_tools_run_over_enriched_context():
+    ctx = _context()
+    with patch(
+        "cre_mcp.tools.execution_tools._deal_context",
+        new=AsyncMock(return_value=ctx),
+    ):
+        options = await financing_options("31948105")
+        qualification = await qualify_me(
+            "31948105",
+            net_worth=2_000_000,
+            liquid=2_000_000,
+            experience_deals=1,
+            credit_tier="good",
+        )
+        debt = await size_debt(
+            "31948105",
+            scenario="bank",
+            ltv=65,
+            rate=7,
+            amort_years=25,
+            min_dscr=1.25,
+        )
+
+    sba = next(option for option in options if option["type"] == "sba_504_7a")
+    assert sba["eligible"] is False
+    assert qualification["verdict"] == "qualifies"
+    assert all("pass" in gate for gate in qualification["gates"])
+    assert debt["max_loan"] == debt["proceeds"]
+    assert debt["binding_constraint"] in {"ltv", "dscr"}
+    assert "not a loan commitment" in debt["guardrail"]

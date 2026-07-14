@@ -10,9 +10,12 @@ from cre_mcp.tools.deal_tools import analyze_deal, find_deals, find_distressed
 from cre_mcp.tools.execution_tools import (
     draft_outreach,
     find_contact,
+    financing_options,
     generate_loi,
     handle_counter,
+    qualify_me,
     recommend_offer,
+    size_debt,
 )
 from cre_mcp.tools.listing_tools import (
     get_market_overview,
@@ -52,6 +55,8 @@ mcp = FastMCP(
         " Use find_contact for source-labeled broker, owner, and public registry contacts,"
         " draft_outreach for deterministic first-touch coaching, and handle_counter"
         " for guarded counteroffer parsing and response coaching."
+        " Use financing_options to screen lender types, qualify_me to test buyer cash and"
+        " sponsor gates, and size_debt for FRED-anchored LTV/DSCR proceeds."
     ),
 )
 register_all(mcp)
@@ -66,6 +71,7 @@ __all__ = [
     "compare_markets",
     "find_deals",
     "find_contact",
+    "financing_options",
     "find_distressed",
     "get_market_overview",
     "get_comps",
@@ -77,6 +83,8 @@ __all__ = [
     "market_intel",
     "mcp",
     "owner_lookup",
+    "qualify_me",
     "recommend_offer",
     "search_properties",
+    "size_debt",
 ]

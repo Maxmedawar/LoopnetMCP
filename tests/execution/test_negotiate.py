@@ -56,3 +56,14 @@ def test_missing_price_holds_for_complete_written_terms():
     assert result.verdict == "hold"
     assert result.suggested_counter["price"] is None
     assert "complete written counter" in result.reply_template
+
+
+def test_deposit_amount_is_not_misread_as_counter_price():
+    result = handle_counter(
+        _ctx(),
+        "Seller proposes $50,000 earnest money, 30 days of diligence, and will "
+        "send the purchase price separately.",
+    )
+    assert result.verdict == "hold"
+    assert "price not stated" in result.read
+    assert "earnest money $50,000" in result.read

@@ -597,3 +597,107 @@ COUNTER_MIN_DD_DAYS = OFFER_DD_DAYS_RANGE[0]
 COUNTER_MIN_CLOSE_DAYS = OFFER_CLOSE_DAYS_RANGE[0]
 COUNTER_ACCEPT_PRICE_TOLERANCE_PCT = 0.01
 COUNTER_PRICE_ROUNDING_INCREMENT = OFFER_PRICE_ROUNDING_INCREMENT
+COUNTER_MIN_PLAUSIBLE_PRICE = 100_000.0
+
+# FINANCING & BORROWER-QUALIFICATION POLICY
+# These are typical screening assumptions, not lender quotes or program promises.
+FINANCING_MIN_AGENCY_UNITS = 5
+FINANCING_STABILIZED_OCCUPANCY_PCT = 85.0
+FINANCING_CMBS_MIN_VALUE = 2_000_000.0
+FINANCING_SBA_EXISTING_OWNER_OCCUPANCY_PCT = 51.0
+FINANCING_FALLBACK_RATE_PCT = {
+    "treasury_10yr": 4.50,
+    "sofr": 4.35,
+}
+FINANCING_OPTION_LTV_RANGE_PCT = {
+    "agency": (65.0, 80.0),
+    "bank": (60.0, 75.0),
+    "cmbs": (65.0, 75.0),
+    "bridge": (60.0, 75.0),
+    "sba": (80.0, 90.0),
+}
+FINANCING_OPTION_RATE_ANCHOR = {
+    "agency": "treasury_10yr",
+    "bank": "treasury_10yr",
+    "cmbs": "treasury_10yr",
+    "bridge": "sofr",
+    "sba": "treasury_10yr",
+}
+FINANCING_OPTION_SPREAD_BPS = {
+    "agency": 200.0,
+    "bank": 300.0,
+    "cmbs": 225.0,
+    "bridge": 400.0,
+    "sba": 350.0,
+}
+FINANCING_OPTION_AMORT_YEARS = {
+    "agency": 30,
+    "bank": 25,
+    "cmbs": 30,
+    "bridge": 30,
+    "sba": 25,
+}
+FINANCING_OPTION_IO_AVAILABLE = {
+    "agency": True,
+    "bank": False,
+    "cmbs": True,
+    "bridge": True,
+    "sba": False,
+}
+FINANCING_OPTION_RECOURSE = {
+    "agency": "typically non-recourse with standard carve-outs",
+    "bank": "typically full or partial recourse",
+    "cmbs": "typically non-recourse with standard carve-outs",
+    "bridge": "varies; completion and carry guarantees are common",
+    "sba": "personal guarantees and available collateral are typically required",
+}
+FINANCING_DEBT_SCENARIOS = {
+    "agency": {
+        "ltv": 0.75,
+        "rate_anchor": "treasury_10yr",
+        "spread_bps": 200.0,
+        "amort_years": 30,
+        "interest_only": False,
+        "min_dscr": 1.25,
+    },
+    "bank": {
+        "ltv": 0.65,
+        "rate_anchor": "treasury_10yr",
+        "spread_bps": 300.0,
+        "amort_years": 25,
+        "interest_only": False,
+        "min_dscr": 1.25,
+    },
+    "bridge": {
+        "ltv": 0.70,
+        "rate_anchor": "sofr",
+        "spread_bps": 400.0,
+        "amort_years": 30,
+        "interest_only": True,
+        "min_dscr": 1.10,
+    },
+}
+QUALIFY_CLOSING_COST_PCT = 0.03
+QUALIFY_RESERVE_MONTHS = 9
+QUALIFY_NET_WORTH_LOAN_RATIO = {
+    "agency": 1.00,
+    "bank": 0.50,
+    "bridge": 0.50,
+}
+QUALIFY_MIN_EXPERIENCE_DEALS = {
+    "agency": 2,
+    "bank": 0,
+    "bridge": 1,
+}
+QUALIFY_CREDIT_TIER_RANK = {
+    "poor": 0,
+    "fair": 1,
+    "good": 2,
+    "very_good": 3,
+    "excellent": 4,
+}
+QUALIFY_MIN_CREDIT_TIER = {
+    "agency": "good",
+    "bank": "fair",
+    "bridge": "fair",
+}

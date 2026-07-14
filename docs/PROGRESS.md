@@ -17,11 +17,12 @@ Fable reviews independently after each phase before advancing.
 | 8 | Attributes, traffic counts + rent comparables | 🟢 complete | 325 passed, 1 warning |
 | 9 | Offer & LOI engine | 🟢 complete | 343 passed, 1 warning |
 | 10 | Outreach & negotiation coach | 🟢 complete | 409 passed, 1 warning |
+| 11 | Financing & qualification | 🟢 complete | 426 passed, 1 warning |
 | 14 | Listing intelligence + confidence gating | 🟢 complete | 352 passed, 1 warning |
 | 15 | Free comps engine + AVM | 🟢 complete | 371 passed, 1 warning |
 | 16 | Live-API hardening | 🟢 complete | 378 passed, 1 warning |
 | 17 | Completeness hardening | 🟢 complete | 385 passed, 1 warning |
-| **Overall** | **Phases 1–10 + 14–17 delivered** | **🟢 V2 EXECUTION LAYER IN PROGRESS — 16 tools** | **409 passed, 1 warning** |
+| **Overall** | **Phases 1–11 + 14–17 delivered** | **🟢 V2 EXECUTION LAYER IN PROGRESS — 19 tools** | **426 passed, 1 warning** |
 
 ## Log
 
@@ -182,3 +183,23 @@ Fable reviews independently after each phase before advancing.
     portal, Nevada presented Incapsula, and Florida/Georgia presented Cloudflare; those four
     remain configured, logged, graceful automation gaps rather than brittle unverified scrapers.
   - Pytest: `409 passed, 1 warning in 21.75s`
+- 2026-07-13 — Phase 11 financing and qualification complete.
+  - Status: GREEN; all 19 tools are registered, asset-specific lender types are ranked with
+    explicit ineligibility reasons, borrower cash/sponsor gates are visible and actionable,
+    and loan proceeds are constrained by the lesser of LTV and DSCR with every assumption echoed.
+  - Files changed: added financing/debt/qualification models and execution services; added a
+    centralized financing policy block for lender-type eligibility, FRED spreads, LTV ranges,
+    amortization/IO/recourse, debt scenarios, closing costs, reserves, net-worth, experience,
+    and credit gates; added shared financing guardrails, three MCP tools, server registration/
+    exports, Phase 11 math/eligibility/tool acceptance tests, and the Phase 10 deposit-price
+    parser carry-over regression. No dependency was added.
+  - Policy verification: official agency materials support the 5+ unit/stabilized screen and
+    Freddie small-balance materials publish net worth equal to the loan plus nine months of
+    principal-and-interest liquidity; 13 CFR 120.131 requires at least 51% operating-business
+    occupancy in an existing SBA-financed building. These remain labeled typical screens, not
+    commitments, and named-lender matching remains intentionally deferred.
+  - Live verification: Crexi `2247699` used live FRED DGS10 4.56% plus the typical bank spread
+    for a 7.56% modeled rate. DSCR bound proceeds at $1,349,525 against the $2,506,400 purchase,
+    with $1,156,875 acquisition equity before costs/reserves. The same passive NNN investment
+    explicitly returned SBA 504/7(a) as not eligible.
+  - Pytest: `426 passed, 1 warning in 21.79s`

@@ -14,4 +14,19 @@ def execution_guardrail(next_step: str | None = None) -> str:
     return f"{EXECUTION_DISCLAIMER} Next: {next_step.strip()}"
 
 
-__all__ = ["EXECUTION_DISCLAIMER", "execution_guardrail"]
+def financing_guardrail(next_step: str | None = None) -> str:
+    """Return the shared gate in lender-screening language."""
+    instruction = (
+        "These financing terms are estimates, not a loan commitment — confirm asset "
+        "eligibility, borrower requirements, pricing, proceeds, and reserves with a lender."
+    )
+    if next_step:
+        instruction = f"{instruction} {next_step.strip()}"
+    return execution_guardrail(instruction)
+
+
+__all__ = [
+    "EXECUTION_DISCLAIMER",
+    "execution_guardrail",
+    "financing_guardrail",
+]

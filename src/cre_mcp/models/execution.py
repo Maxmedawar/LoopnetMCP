@@ -108,13 +108,88 @@ class CounterAdvice(BaseModel):
     red_flags: list[str] = Field(default_factory=list)
 
 
+class FinancingOption(BaseModel):
+    """One lender type screened against the subject asset and business plan."""
+
+    type: str
+    fit: Literal["strong", "possible", "not_eligible"]
+    eligible: bool
+    typical_ltv_range: tuple[float, float]
+    typical_rate: float | None = None
+    rate_basis: str
+    amort_years: int
+    io_available: bool
+    recourse: str
+    eligibility_note: str
+    why_or_why_not: str
+    guardrail: str
+
+
+class BuyerProfile(BaseModel):
+    """Buyer financial capacity used for a deterministic lender-gate screen."""
+
+    net_worth: float = Field(ge=0)
+    liquid: float = Field(ge=0)
+    experience_deals: int = Field(default=0, ge=0)
+    credit_tier: str | None = None
+
+
+class QualificationGate(BaseModel):
+    """One explicit lender-screening comparison."""
+
+    name: str
+    required: str | float
+    buyer_has: str | float
+    passed: bool = Field(serialization_alias="pass")
+
+
+class QualifyResult(BaseModel):
+    """Buyer qualification screen with cash needs and remediable gaps."""
+
+    deal_ref: str
+    selected_scenario: Literal["agency", "bridge", "bank"]
+    cash_to_close: float
+    breakdown: dict[str, float] = Field(default_factory=dict)
+    gates: list[QualificationGate] = Field(default_factory=list)
+    verdict: Literal["qualifies", "needs_partner", "short_on_cash", "no"]
+    gaps: list[str] = Field(default_factory=list)
+    guidance: str
+    guardrail: str
+
+
+class DebtSizing(BaseModel):
+    """DSCR- and LTV-constrained loan proceeds for one deterministic scenario."""
+
+    deal_ref: str
+    scenario: Literal["agency", "bridge", "bank"]
+    property_value: float
+    purchase_price: float
+    noi: float | None = None
+    max_loan: float
+    proceeds: float
+    ltv_constraint: float
+    dscr_constraint: float | None = None
+    binding_constraint: Literal["ltv", "dscr"]
+    equity_required: float
+    annual_debt_service: float
+    dscr: float | None = None
+    cash_on_cash: float | None = None
+    assumptions_used: dict[str, Any] = Field(default_factory=dict)
+    guardrail: str
+
+
 __all__ = [
     "BrokerContact",
     "BusinessPrincipal",
     "ContactInfo",
     "CounterAdvice",
+    "BuyerProfile",
+    "DebtSizing",
+    "FinancingOption",
     "LoiDraft",
     "OfferRecommendation",
     "OutreachDraft",
+    "QualificationGate",
+    "QualifyResult",
     "RegisteredAgentContact",
 ]

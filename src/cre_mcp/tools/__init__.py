@@ -29,6 +29,9 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(execution_tools.find_contact)
     mcp.tool()(execution_tools.draft_outreach)
     mcp.tool()(execution_tools.handle_counter)
+    mcp.tool()(execution_tools.financing_options)
+    mcp.tool()(execution_tools.qualify_me)
+    mcp.tool()(execution_tools.size_debt)
 
 
 __all__ = ["register_all"]
