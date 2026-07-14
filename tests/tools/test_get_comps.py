@@ -98,7 +98,7 @@ async def test_get_comps_returns_error_dict_from_analysis_failure():
 
 
 @pytest.mark.asyncio
-async def test_get_comps_remains_registered_in_the_nineteen_tool_suite():
+async def test_get_comps_remains_registered_in_the_thirty_four_tool_suite():
     tools = await mcp.get_tools()
     assert "get_comps" in tools
-    assert len(tools) == 29
+    assert len(tools) == 34

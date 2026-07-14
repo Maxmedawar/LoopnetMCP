@@ -53,11 +53,19 @@ from cre_mcp.models.scoring import (
     SignalResult,
     SignalSpec,
 )
+from cre_mcp.models.structure import (
+    BootBasisResult,
+    Exchange,
+    ExchangeReplacement,
+    StructureAdvice,
+    StructureIntent,
+)
 from cre_mcp.models.underwriting import UnderwritingResult
 
 __all__ = [
     "AggregatedSearchResult",
     "Band",
+    "BootBasisResult",
     "BrokerContact",
     "BusinessPrincipal",
     "BuyerProfile",
@@ -77,6 +85,8 @@ __all__ = [
     "GeoLevel",
     "GeoRef",
     "FinancingOption",
+    "Exchange",
+    "ExchangeReplacement",
     "Listing",
     "ListingFacts",
     "ListingRef",
@@ -103,6 +113,8 @@ __all__ = [
     "SearchResult",
     "SaleComp",
     "SourceCapabilities",
+    "StructureAdvice",
+    "StructureIntent",
     "SignalResult",
     "SignalSpec",
     "UnderwritingResult",

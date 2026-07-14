@@ -101,6 +101,30 @@ class DealStore:
             );
             CREATE INDEX IF NOT EXISTS idx_seen_matches_search
                 ON seen_matches(search_id, first_seen);
+
+            CREATE TABLE IF NOT EXISTS exchanges (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                relinquished_deal_id TEXT NOT NULL,
+                relinquished_close_date TEXT NOT NULL,
+                identification_deadline TEXT NOT NULL,
+                exchange_deadline TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(relinquished_deal_id, relinquished_close_date),
+                FOREIGN KEY(relinquished_deal_id) REFERENCES deals(deal_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS exchange_replacements (
+                exchange_id INTEGER NOT NULL,
+                deal_id TEXT NOT NULL,
+                value REAL,
+                identified_at TEXT NOT NULL,
+                PRIMARY KEY(exchange_id, deal_id),
+                FOREIGN KEY(exchange_id) REFERENCES exchanges(id) ON DELETE CASCADE,
+                FOREIGN KEY(deal_id) REFERENCES deals(deal_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_exchange_replacements_exchange
+                ON exchange_replacements(exchange_id, identified_at);
             """
         )
         columns = {
@@ -657,6 +681,179 @@ class DealStore:
         except Exception as exc:
             logger.error("seen-match write failed for search %s: %s", search_id, exc)
             return 0
+
+    def _create_exchange(
+        self,
+        relinquished_deal_id: str,
+        relinquished_close_date: str,
+        identification_deadline: str,
+        exchange_deadline: str,
+    ) -> int | None:
+        now = self._now()
+        with self._connect() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM deals WHERE deal_id = ?",
+                (relinquished_deal_id,),
+            ).fetchone()
+            if exists is None:
+                return None
+            connection.execute(
+                """
+                INSERT INTO exchanges(
+                    relinquished_deal_id, relinquished_close_date,
+                    identification_deadline, exchange_deadline,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(relinquished_deal_id, relinquished_close_date)
+                DO UPDATE SET
+                    identification_deadline = excluded.identification_deadline,
+                    exchange_deadline = excluded.exchange_deadline,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    relinquished_deal_id,
+                    relinquished_close_date,
+                    identification_deadline,
+                    exchange_deadline,
+                    now,
+                    now,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT id FROM exchanges
+                WHERE relinquished_deal_id = ? AND relinquished_close_date = ?
+                """,
+                (relinquished_deal_id, relinquished_close_date),
+            ).fetchone()
+        return int(row["id"]) if row is not None else None
+
+    async def create_exchange(
+        self,
+        relinquished_deal_id: str,
+        relinquished_close_date: str,
+        identification_deadline: str,
+        exchange_deadline: str,
+    ) -> int | None:
+        """Create or retrieve one exchange for a deal/close-date pair."""
+        try:
+            return await asyncio.to_thread(
+                self._create_exchange,
+                relinquished_deal_id,
+                relinquished_close_date,
+                identification_deadline,
+                exchange_deadline,
+            )
+        except Exception as exc:
+            logger.error("exchange create failed for %s: %s", relinquished_deal_id, exc)
+            return None
+
+    def _get_exchange_record(self, exchange_id: int) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, relinquished_deal_id, relinquished_close_date,
+                       identification_deadline, exchange_deadline,
+                       created_at, updated_at
+                FROM exchanges WHERE id = ?
+                """,
+                (exchange_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            replacements = connection.execute(
+                """
+                SELECT deal_id, value, identified_at
+                FROM exchange_replacements
+                WHERE exchange_id = ?
+                ORDER BY identified_at, deal_id
+                """,
+                (exchange_id,),
+            ).fetchall()
+        return {
+            "exchange_id": int(row["id"]),
+            "relinquished_deal_id": row["relinquished_deal_id"],
+            "relinquished_close_date": row["relinquished_close_date"],
+            "identification_deadline": row["identification_deadline"],
+            "exchange_deadline": row["exchange_deadline"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "replacements": [
+                {
+                    "deal_id": item["deal_id"],
+                    "value": item["value"],
+                    "identified_at": item["identified_at"],
+                }
+                for item in replacements
+            ],
+        }
+
+    async def get_exchange_record(self, exchange_id: int) -> dict[str, Any] | None:
+        """Return an exchange and its persisted identification list."""
+        try:
+            return await asyncio.to_thread(self._get_exchange_record, exchange_id)
+        except Exception as exc:
+            logger.error("exchange read failed for %s: %s", exchange_id, exc)
+            return None
+
+    def _add_exchange_replacement(
+        self,
+        exchange_id: int,
+        deal_id: str,
+        value: float | None,
+        identified_at: str,
+    ) -> bool:
+        now = self._now()
+        with self._connect() as connection:
+            exchange_exists = connection.execute(
+                "SELECT 1 FROM exchanges WHERE id = ?",
+                (exchange_id,),
+            ).fetchone()
+            deal_exists = connection.execute(
+                "SELECT 1 FROM deals WHERE deal_id = ?",
+                (deal_id,),
+            ).fetchone()
+            if exchange_exists is None or deal_exists is None:
+                return False
+            cursor = connection.execute(
+                """
+                INSERT INTO exchange_replacements(exchange_id, deal_id, value, identified_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(exchange_id, deal_id) DO UPDATE SET
+                    value = COALESCE(excluded.value, exchange_replacements.value)
+                """,
+                (exchange_id, deal_id, value, identified_at),
+            )
+            connection.execute(
+                "UPDATE exchanges SET updated_at = ? WHERE id = ?",
+                (now, exchange_id),
+            )
+        return cursor.rowcount == 1
+
+    async def add_exchange_replacement(
+        self,
+        exchange_id: int,
+        deal_id: str,
+        value: float | None,
+        identified_at: str,
+    ) -> bool:
+        """Persist one candidate idempotently after service-level rule validation."""
+        try:
+            return await asyncio.to_thread(
+                self._add_exchange_replacement,
+                exchange_id,
+                deal_id,
+                value,
+                identified_at,
+            )
+        except Exception as exc:
+            logger.error(
+                "replacement identification write failed for exchange %s/deal %s: %s",
+                exchange_id,
+                deal_id,
+                exc,
+            )
+            return False
 
     def _list_deals(self) -> list[dict[str, Any]]:
         with self._connect() as connection:

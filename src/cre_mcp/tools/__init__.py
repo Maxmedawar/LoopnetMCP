@@ -12,6 +12,7 @@ def register_all(mcp: Any) -> None:
         market_tools,
         owner_tools,
         pipeline_tools,
+        structure_tools,
     )
 
     mcp.tool()(listing_tools.search_properties)
@@ -43,6 +44,11 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(pipeline_tools.save_search)
     mcp.tool()(pipeline_tools.list_searches)
     mcp.tool()(pipeline_tools.check_alerts)
+    mcp.tool()(structure_tools.recommend_structure)
+    mcp.tool()(structure_tools.start_exchange)
+    mcp.tool()(structure_tools.exchange_status)
+    mcp.tool()(structure_tools.identify_replacement)
+    mcp.tool()(structure_tools.calc_boot_basis)
 
 
 __all__ = ["register_all"]

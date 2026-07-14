@@ -25,8 +25,21 @@ def financing_guardrail(next_step: str | None = None) -> str:
     return execution_guardrail(instruction)
 
 
+def structure_guardrail(next_step: str | None = None) -> str:
+    """Return the hard legal/tax/securities gate for ownership decisions."""
+    instruction = (
+        "This is a deterministic educational draft/estimate, not legal, tax, securities, "
+        "or investment advice. Do not change title, touch exchange proceeds, solicit investors, "
+        "accept funds, or file a tax position until the named QI/CPA/attorney approves it."
+    )
+    if next_step:
+        instruction = f"{instruction} Next: {next_step.strip()}"
+    return instruction
+
+
 __all__ = [
     "EXECUTION_DISCLAIMER",
     "execution_guardrail",
     "financing_guardrail",
+    "structure_guardrail",
 ]

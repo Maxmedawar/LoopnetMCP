@@ -24,7 +24,8 @@ Fable reviews independently after each phase before advancing.
 | 15 | Free comps engine + AVM | 🟢 complete | 371 passed, 1 warning |
 | 16 | Live-API hardening | 🟢 complete | 378 passed, 1 warning |
 | 17 | Completeness hardening | 🟢 complete | 385 passed, 1 warning |
-| **Overall** | **Phases 1–17 delivered** | **🟢 EXECUTION / COACH LAYER COMPLETE — 29 tools** | **454 passed, 1 warning** |
+| 18 | Entity/structure engine + 1031 manager | 🟢 complete | 470 passed, 1 warning |
+| **Overall** | **Phases 1–18 delivered** | **🟢 STRUCTURE & SCALE IN PROGRESS — 34 tools** | **470 passed, 1 warning** |
 
 ## Log
 
@@ -244,3 +245,28 @@ Fable reviews independently after each phase before advancing.
     proactive scheduled or push alerts require deploying the always-on hosted service with a
     cron/scheduler; the local MCP process cannot initiate checks while it is not running.
   - Pytest: `454 passed, 1 warning in 21.51s`
+- 2026-07-13 — Phase 18 entity/structure engine and 1031 manager complete.
+  - Status: GREEN; deterministic LLC/DST/TIC/QOF screening, prominent taxpayer/title and
+    securities traps, durable exchange clocks/replacement lists, identification-rule stops,
+    boot/basis estimates, professional gates, and all 34 registered tools are verified.
+  - Files changed: added structure intent/advice, exchange/replacement, and boot/basis models;
+    added deterministic entity selection with SMLLC, DST, TIC, QOF, partnership-interest,
+    same-taxpayer-title, and SEC/Phase-19 guidance; extended the shared SQLite `DealStore` with
+    exchange and replacement-identification tables; added the 45/180-day manager, 3-property/
+    200%/95% controls, and simplified boot/carryover-basis estimator; added five MCP tools,
+    shared structure guardrails, exports/registration, and Phase 18 acceptance tests.
+  - Rule verification: IRS Form 8824 instructions and Publication 544 support the 45-day
+    identification, earlier-of-180-days-or-return-due-date receipt deadline, qualified-
+    intermediary safe harbor, 3-property/200%/95% framework, excluded partnership interests,
+    and Form 8824 reporting. Revenue Ruling 2004-86 and Revenue Procedure 2002-22 inform the
+    carefully qualified DST/TIC notes; IRS QOF guidance and SEC offering-path guidance inform
+    the Opportunity Zone and capital-raise gates. Outputs remain educational screens/estimates,
+    never legal, tax, securities, or investment advice.
+  - Live-ish verification: a persisted August 1, 2026 relinquished close returned September 15,
+    2026 and January 28, 2027 deadlines. Syndication intent triggered both the SEC/Phase-19 gate
+    and the loud `1031-INELIGIBLE` multi-member LLC/partnership-interest trap. Every exchange
+    result repeats the QI-before-closing/proceeds stop and CPA/Form-8824 gate.
+  - Deviation: none. Safety behavior: the engine deliberately rejects an over-200% fourth
+    identification instead of presuming the narrow 95% actual-receipt exception will later
+    rescue it; a QI/tax attorney must approve that exceptional path.
+  - Pytest: `470 passed, 1 warning in 21.79s`
