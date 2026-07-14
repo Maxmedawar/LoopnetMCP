@@ -26,6 +26,7 @@ def register_all(mcp: Any) -> None:
         structure_tools,
         truth_tools,
     )
+    from cre_mcp.scenarios import tools as scenario_tools
 
     mcp.tool()(listing_tools.search_properties)
     mcp.tool()(listing_tools.get_property_details)
@@ -107,6 +108,10 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(ledger_tools.counterparty_track_record)
     mcp.tool()(ledger_tools.lender_track_record)
     mcp.tool()(ledger_tools.defect_track_record)
+    mcp.tool()(scenario_tools.stress_test_deal)
+    mcp.tool()(scenario_tools.sensitivity_drivers)
+    mcp.tool()(scenario_tools.breakeven_analysis)
+    mcp.tool()(scenario_tools.model_lease_up)
 
 
 __all__ = ["register_all"]
