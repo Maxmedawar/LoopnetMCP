@@ -7,7 +7,13 @@ import pytest
 from cre_mcp.config import CreConfig
 from cre_mcp.deals.store import DealStore
 from cre_mcp.models.listings import Listing
-from cre_mcp.tools.truth_tools import ingest_document, list_deal_documents
+from cre_mcp.tools.truth_tools import (
+    build_noi_bridge,
+    deal_truth_report,
+    ingest_document,
+    list_deal_documents,
+    reconcile_deal_docs,
+)
 from cre_mcp.truth.store import TruthStore
 
 T12_CSV = (
@@ -85,6 +91,43 @@ async def test_ingest_requires_exactly_one_source(tmp_path):
         both = await ingest_document("crexi:x", path="/a", url="http://b")
     assert "exactly one" in neither["error"]
     assert "exactly one" in both["error"]
+
+
+@pytest.mark.asyncio
+async def test_full_pipeline_ingest_reconcile_report(tmp_path):
+    db = tmp_path / "cache.db"
+    truth_store = TruthStore(CreConfig(cache_db_path=db))
+    deal_store = DealStore(db)
+    deal_id = await deal_store.save_deal(_listing())
+
+    # A pro-forma OM: headline NOI 300k, but components imply 180k.
+    om = tmp_path / "om.csv"
+    om.write_text(
+        "Line Item,Amount\n"
+        "Gross Potential Rent,250000\n"
+        "Total Operating Expenses,70000\n"
+        "Pro Forma Net Operating Income,300000\n"
+    )
+    with patch("cre_mcp.tools.truth_tools.get_truth_store", return_value=truth_store), \
+         patch("cre_mcp.tools.truth_tools.get_deal_store", return_value=deal_store):
+        await ingest_document(deal_id, path=str(om), doc_kind="offering_memorandum")
+        recon = await reconcile_deal_docs(deal_id)
+        bridge = await build_noi_bridge(deal_id, price=4_000_000)
+        report = await deal_truth_report(deal_id, price=4_000_000)
+
+    assert any(r["field"] == "noi" for r in recon["resolutions"])
+    assert bridge["columns"]["verified"]["noi"] == 180000
+    assert report["report"]["verdict"] == "re_trade"
+    assert report["report"]["seller_to_verified_noi_delta"] == -120000
+
+
+@pytest.mark.asyncio
+async def test_reconcile_without_docs_is_graceful(tmp_path):
+    truth_store = TruthStore(CreConfig(cache_db_path=tmp_path / "c.db"))
+    with patch("cre_mcp.tools.truth_tools.get_truth_store", return_value=truth_store):
+        result = await reconcile_deal_docs("crexi:empty")
+    assert result["resolutions"] == []
+    assert "no ingested claims" in result["note"]
 
 
 @pytest.mark.asyncio

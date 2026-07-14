@@ -16,8 +16,10 @@ from pathlib import Path
 from cre_mcp.deals.store import get_deal_store
 from cre_mcp.truth.classify import classify
 from cre_mcp.truth.extract import extract_claims
-from cre_mcp.truth.models import DocumentRecord
+from cre_mcp.truth.models import DocumentRecord, FieldClaim
+from cre_mcp.truth.noi_bridge import build_bridge, build_report
 from cre_mcp.truth.parsers import parse_bytes, sniff_ext
+from cre_mcp.truth.reconcile import resolve
 from cre_mcp.truth.sanitize import sanitize_text
 from cre_mcp.truth.store import get_truth_store
 from datetime import UTC, datetime
@@ -211,4 +213,122 @@ async def list_deal_documents(deal_id: str) -> dict:
         return {"error": str(exc)}
 
 
-__all__ = ["ingest_document", "list_deal_documents"]
+async def _load_claims(deal_id: str) -> list[FieldClaim]:
+    rows = await get_truth_store().get_claims(deal_id)
+    claims: list[FieldClaim] = []
+    for row in rows:
+        try:
+            claims.append(FieldClaim.model_validate(row))
+        except Exception as exc:  # skip a corrupt row rather than fail the whole deal
+            logger.warning("skipping unparseable claim for %s: %s", deal_id, exc)
+    return claims
+
+
+async def _deal_price(deal_id: str) -> float | None:
+    deal = await get_deal_store().get_deal(deal_id)
+    if not deal:
+        return None
+    listing = deal.get("listing") or {}
+    price = listing.get("price_usd")
+    return float(price) if isinstance(price, (int, float)) else None
+
+
+async def reconcile_deal_docs(deal_id: str) -> dict:
+    """Resolve every ingested claim to one value by SOURCE AUTHORITY.
+
+    Ranks competing claims (executed lease > estoppel > bank > rent roll > T12 >
+    OM > listing), surfaces material disagreements as conflicts that keep BOTH
+    values for review, and flags pro-forma figures presented as in-place. It never
+    averages conflicting facts.
+
+    Args:
+        deal_id: Source-qualified deal identifier with ingested documents.
+
+    Returns:
+        The reconciliation: per-field resolved values with citations + confidence,
+        and every unresolved conflict.
+    """
+    logger.info("reconcile_deal_docs called: deal=%s", deal_id)
+    try:
+        if not deal_id or not deal_id.strip():
+            raise ValueError("deal_id is required")
+        claims = await _load_claims(deal_id.strip())
+        if not claims:
+            return {"deal_id": deal_id.strip(), "note": "no ingested claims — run ingest_document first",
+                    "resolutions": [], "conflicts": []}
+        recon = resolve(deal_id.strip(), claims)
+        return recon.model_dump(mode="json")
+    except Exception as exc:
+        logger.error("reconcile_deal_docs error: %s", exc)
+        return {"error": str(exc)}
+
+
+async def build_noi_bridge(deal_id: str, price: float | None = None) -> dict:
+    """Restate NOI three ways: seller-stated -> verified -> lender-stressed.
+
+    Every line is cited; the walk shows each dollar of movement between columns
+    (pro-forma removed, components recomputed, lender floors applied). Uses the
+    deal's asking price for implied cap rates when price is omitted.
+
+    Args:
+        deal_id: Source-qualified deal identifier with ingested documents.
+        price: Optional purchase/asking price for implied cap rates.
+
+    Returns:
+        The NOI bridge (three columns + dollar walk + unresolved conflicts).
+    """
+    logger.info("build_noi_bridge called: deal=%s", deal_id)
+    try:
+        if not deal_id or not deal_id.strip():
+            raise ValueError("deal_id is required")
+        claims = await _load_claims(deal_id.strip())
+        if not claims:
+            return {"deal_id": deal_id.strip(), "note": "no ingested claims — run ingest_document first"}
+        recon = resolve(deal_id.strip(), claims)
+        resolved_price = price if price is not None else await _deal_price(deal_id.strip())
+        bridge = build_bridge(recon, price=resolved_price)
+        return bridge.model_dump(mode="json")
+    except Exception as exc:
+        logger.error("build_noi_bridge error: %s", exc)
+        return {"error": str(exc)}
+
+
+async def deal_truth_report(deal_id: str, price: float | None = None) -> dict:
+    """Produce the fatal-flaw / missing-document verdict for a deal.
+
+    Combines reconciliation + the NOI bridge into an explicit proceed /
+    proceed_with_conditions / re_trade / kill verdict: seller-vs-verified NOI gap,
+    pro-forma-as-actual, material conflicts, and which documents are still missing.
+
+    Args:
+        deal_id: Source-qualified deal identifier with ingested documents.
+        price: Optional purchase/asking price for implied cap rates.
+
+    Returns:
+        The fatal-flaw report plus the NOI bridge it was derived from.
+    """
+    logger.info("deal_truth_report called: deal=%s", deal_id)
+    try:
+        if not deal_id or not deal_id.strip():
+            raise ValueError("deal_id is required")
+        claims = await _load_claims(deal_id.strip())
+        if not claims:
+            return {"deal_id": deal_id.strip(), "verdict": "insufficient_data",
+                    "note": "no ingested claims — run ingest_document first"}
+        recon = resolve(deal_id.strip(), claims)
+        resolved_price = price if price is not None else await _deal_price(deal_id.strip())
+        bridge = build_bridge(recon, price=resolved_price)
+        report = build_report(recon, bridge)
+        return {"report": report.model_dump(mode="json"), "noi_bridge": bridge.model_dump(mode="json")}
+    except Exception as exc:
+        logger.error("deal_truth_report error: %s", exc)
+        return {"error": str(exc)}
+
+
+__all__ = [
+    "ingest_document",
+    "list_deal_documents",
+    "reconcile_deal_docs",
+    "build_noi_bridge",
+    "deal_truth_report",
+]

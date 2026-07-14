@@ -66,6 +66,9 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(eval_tools.record_deal_outcome)
     mcp.tool()(truth_tools.ingest_document)
     mcp.tool()(truth_tools.list_deal_documents)
+    mcp.tool()(truth_tools.reconcile_deal_docs)
+    mcp.tool()(truth_tools.build_noi_bridge)
+    mcp.tool()(truth_tools.deal_truth_report)
 
 
 __all__ = ["register_all"]
