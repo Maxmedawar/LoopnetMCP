@@ -96,7 +96,7 @@ async def test_execution_tools_return_error_dicts():
 
 
 @pytest.mark.asyncio
-async def test_execution_tools_are_registered_and_tool_count_is_sixty_one():
+async def test_execution_tools_are_registered_and_tool_count_is_sixty_five():
     tools = await mcp.get_tools()
     assert {
         "recommend_offer",
@@ -112,7 +112,7 @@ async def test_execution_tools_are_registered_and_tool_count_is_sixty_one():
         "save_deal",
         "list_deals",
     } <= set(tools)
-    assert len(tools) == 61
+    assert len(tools) == 65
 
 
 @pytest.mark.asyncio

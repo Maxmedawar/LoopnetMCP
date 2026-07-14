@@ -101,7 +101,7 @@ async def test_boot_tool_and_error_paths_return_dicts(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_structure_tools_registered_and_total_is_sixty_one():
+async def test_structure_tools_registered_and_total_is_sixty_five():
     tools = await mcp.get_tools()
     assert {
         "recommend_structure",
@@ -110,4 +110,4 @@ async def test_structure_tools_registered_and_total_is_sixty_one():
         "identify_replacement",
         "calc_boot_basis",
     } <= set(tools)
-    assert len(tools) == 61
+    assert len(tools) == 65

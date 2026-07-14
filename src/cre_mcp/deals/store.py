@@ -199,6 +199,33 @@ class DealStore:
             );
             CREATE INDEX IF NOT EXISTS idx_exchange_replacements_exchange
                 ON exchange_replacements(exchange_id, identified_at);
+
+            CREATE TABLE IF NOT EXISTS ic_decisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deal_id TEXT NOT NULL,
+                system_verdict TEXT,
+                system_json TEXT,
+                expert_verdict TEXT,
+                expert_json TEXT,
+                agreed INTEGER,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(deal_id) REFERENCES deals(deal_id) ON DELETE CASCADE,
+                CHECK(agreed IS NULL OR agreed IN (0, 1))
+            );
+            CREATE INDEX IF NOT EXISTS idx_ic_decisions_deal
+                ON ic_decisions(deal_id, created_at);
+
+            CREATE TABLE IF NOT EXISTS deal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deal_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                event_json TEXT,
+                event_ts TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(deal_id) REFERENCES deals(deal_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_deal_events_deal
+                ON deal_events(deal_id, event_ts, id);
             """
         )
         columns = {
@@ -1555,6 +1582,210 @@ class DealStore:
         except Exception as exc:
             logger.error("deal store list failed: %s", exc)
             return []
+
+    # --- Shadow-IC + deal-event timeline (Phase 30 memory layer) ---
+
+    @staticmethod
+    def _verdicts_agree(system_verdict: str | None, expert_verdict: str | None) -> int | None:
+        if not system_verdict or not expert_verdict:
+            return None
+        return int(system_verdict.strip().casefold() == expert_verdict.strip().casefold())
+
+    def _record_ic_decision(
+        self,
+        deal_id: str,
+        system_verdict: str | None,
+        system: dict[str, Any] | None,
+        expert_verdict: str | None,
+        expert: dict[str, Any] | None,
+    ) -> int | None:
+        now = self._now()
+        agreed = self._verdicts_agree(system_verdict, expert_verdict)
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM deals WHERE deal_id = ?", (deal_id,)
+            ).fetchone() is None:
+                return None
+            cursor = connection.execute(
+                """
+                INSERT INTO ic_decisions(
+                    deal_id, system_verdict, system_json, expert_verdict,
+                    expert_json, agreed, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    deal_id,
+                    system_verdict,
+                    json.dumps(system or {}, separators=(",", ":"), default=str),
+                    expert_verdict,
+                    json.dumps(expert or {}, separators=(",", ":"), default=str),
+                    agreed,
+                    now,
+                ),
+            )
+        return int(cursor.lastrowid)
+
+    async def record_ic_decision(
+        self,
+        deal_id: str,
+        *,
+        system_verdict: str | None = None,
+        system: dict[str, Any] | None = None,
+        expert_verdict: str | None = None,
+        expert: dict[str, Any] | None = None,
+    ) -> int | None:
+        """Capture the system's call and (optionally) the expert's, for calibration.
+
+        The point is the SHADOW: log the system verdict before/independent of the
+        expert's, so agreement — and later, who was right once the outcome lands —
+        can be measured honestly.
+        """
+        try:
+            return await asyncio.to_thread(
+                self._record_ic_decision, deal_id, system_verdict, system, expert_verdict, expert
+            )
+        except Exception as exc:
+            logger.error("ic decision write failed for %s: %s", deal_id, exc)
+            return None
+
+    def _log_event(
+        self, deal_id: str, event_type: str, detail: dict[str, Any] | None, event_ts: str | None
+    ) -> int | None:
+        now = self._now()
+        with self._connect() as connection:
+            if connection.execute(
+                "SELECT 1 FROM deals WHERE deal_id = ?", (deal_id,)
+            ).fetchone() is None:
+                return None
+            cursor = connection.execute(
+                """
+                INSERT INTO deal_events(deal_id, event_type, event_json, event_ts, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    deal_id,
+                    event_type,
+                    json.dumps(detail or {}, separators=(",", ":"), default=str),
+                    event_ts or now,
+                    now,
+                ),
+            )
+        return int(cursor.lastrowid)
+
+    async def log_deal_event(
+        self,
+        deal_id: str,
+        event_type: str,
+        detail: dict[str, Any] | None = None,
+        event_ts: str | None = None,
+    ) -> int | None:
+        """Append one event to a deal's timeline (the deal-graph foundation)."""
+        if not event_type or not event_type.strip():
+            raise ValueError("event_type is required")
+        try:
+            return await asyncio.to_thread(
+                self._log_event, deal_id, event_type.strip(), detail, event_ts
+            )
+        except Exception as exc:
+            logger.error("deal event write failed for %s: %s", deal_id, exc)
+            return None
+
+    def _get_timeline(self, deal_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            events = connection.execute(
+                """
+                SELECT event_type, event_json, event_ts, created_at
+                FROM deal_events WHERE deal_id = ?
+                ORDER BY event_ts, id
+                """,
+                (deal_id,),
+            ).fetchall()
+            decisions = connection.execute(
+                """
+                SELECT system_verdict, system_json, expert_verdict, expert_json,
+                       agreed, created_at
+                FROM ic_decisions WHERE deal_id = ?
+                ORDER BY created_at, id
+                """,
+                (deal_id,),
+            ).fetchall()
+        return {
+            "deal_id": deal_id,
+            "events": [
+                {
+                    "event_type": row["event_type"],
+                    "detail": json.loads(str(row["event_json"] or "{}")),
+                    "event_ts": row["event_ts"],
+                    "created_at": row["created_at"],
+                }
+                for row in events
+            ],
+            "ic_decisions": [
+                {
+                    "system_verdict": row["system_verdict"],
+                    "system": json.loads(str(row["system_json"] or "{}")),
+                    "expert_verdict": row["expert_verdict"],
+                    "expert": json.loads(str(row["expert_json"] or "{}")),
+                    "agreed": None if row["agreed"] is None else bool(row["agreed"]),
+                    "created_at": row["created_at"],
+                }
+                for row in decisions
+            ],
+        }
+
+    async def get_deal_timeline(self, deal_id: str) -> dict[str, Any]:
+        """Return a deal's full event timeline plus its recorded IC decisions."""
+        try:
+            return await asyncio.to_thread(self._get_timeline, deal_id)
+        except Exception as exc:
+            logger.error("deal timeline read failed for %s: %s", deal_id, exc)
+            return {"deal_id": deal_id, "events": [], "ic_decisions": []}
+
+    def _ic_scorecard(self) -> dict[str, Any]:
+        _GO = {"proceed", "proceed_with_conditions"}
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT i.deal_id, i.system_verdict, i.expert_verdict, i.agreed,
+                       o.closed, o.went_bad
+                FROM ic_decisions i
+                LEFT JOIN outcomes o ON o.deal_id = i.deal_id
+                WHERE i.id IN (
+                    SELECT MAX(id) FROM ic_decisions GROUP BY deal_id
+                )
+                """
+            ).fetchall()
+        total = len(rows)
+        with_expert = [r for r in rows if r["agreed"] is not None]
+        agreed = sum(1 for r in with_expert if r["agreed"] == 1)
+        scored = 0
+        correct = 0
+        for r in rows:
+            if r["closed"] is None or not r["system_verdict"]:
+                continue
+            said_go = r["system_verdict"].strip().casefold() in _GO
+            good = bool(r["closed"]) and not bool(r["went_bad"])
+            scored += 1
+            correct += int(said_go == good)
+        return {
+            "total_ic_decisions": total,
+            "with_expert": len(with_expert),
+            "system_expert_agreement_rate": round(agreed / len(with_expert), 3) if with_expert else None,
+            "with_realized_outcome": scored,
+            "system_accuracy_vs_outcome": round(correct / scored, 3) if scored else None,
+            "caveat": (
+                "Shadow-IC accuracy is only meaningful with a real sample of closed "
+                "outcomes; treat small-n figures as directional, not validated."
+            ),
+        }
+
+    async def ic_scorecard(self) -> dict[str, Any]:
+        """Compare system verdicts to experts and to realized outcomes (honest, n-gated)."""
+        try:
+            return await asyncio.to_thread(self._ic_scorecard)
+        except Exception as exc:
+            logger.error("ic scorecard failed: %s", exc)
+            return {"error": str(exc)}
 
 
 def get_deal_store(config: CreConfig | None = None) -> DealStore:
