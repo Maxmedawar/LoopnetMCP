@@ -18,11 +18,12 @@ Fable reviews independently after each phase before advancing.
 | 9 | Offer & LOI engine | 🟢 complete | 343 passed, 1 warning |
 | 10 | Outreach & negotiation coach | 🟢 complete | 409 passed, 1 warning |
 | 11 | Financing & qualification | 🟢 complete | 426 passed, 1 warning |
+| 12 | Due-diligence tracker + closing coordinator | 🟢 complete | 442 passed, 1 warning |
 | 14 | Listing intelligence + confidence gating | 🟢 complete | 352 passed, 1 warning |
 | 15 | Free comps engine + AVM | 🟢 complete | 371 passed, 1 warning |
 | 16 | Live-API hardening | 🟢 complete | 378 passed, 1 warning |
 | 17 | Completeness hardening | 🟢 complete | 385 passed, 1 warning |
-| **Overall** | **Phases 1–11 + 14–17 delivered** | **🟢 V2 EXECUTION LAYER IN PROGRESS — 19 tools** | **426 passed, 1 warning** |
+| **Overall** | **Phases 1–12 + 14–17 delivered** | **🟢 V2 EXECUTION LAYER IN PROGRESS — 23 tools** | **442 passed, 1 warning** |
 
 ## Log
 
@@ -203,3 +204,22 @@ Fable reviews independently after each phase before advancing.
     with $1,156,875 acquisition equity before costs/reserves. The same passive NNN investment
     explicitly returned SBA 504/7(a) as not eligible.
   - Pytest: `426 passed, 1 warning in 21.79s`
+- 2026-07-13 — Phase 12 due-diligence tracker and closing coordinator complete.
+  - Status: GREEN; durable deal/checklist state, asset-aware diligence clocks, state-routed
+    professional closing roles, entity-before-lender sequencing, novice-readable clear/terminate
+    gates, and the repeated wire-fraud stop protocol are verified.
+  - Files changed: added the shared-database `DealStore` with isolated `deals`/`dd_items` tables,
+    WAL-safe `asyncio.to_thread` operations, stable `source:source_id` keys, status preservation,
+    and compact listing; added `DDItem`/`DDPlan` and `ClosingStep`/`ClosingPlan` models; added the
+    core, retail/NNN, and multifamily diligence templates with back-solved deadlines; added the
+    TX/AZ/CO/CA/FL/NV title-or-escrow routes, GA attorney-led and NC attorney-supervised routes,
+    and GENERAL fallback; added four MCP tools plus store/diligence/closing/tool acceptance tests.
+  - Live verification: Crexi `2247699` generated a persisted retail/NNN plan containing
+    both Phase I and tenant estoppel/SNDA, and its Texas closing runway repeated the known-number
+    wire verification protocol on the funding step. The FBI, Texas Department of Insurance,
+    California DRE, North Carolina State Bar, and State Bar of Georgia guidance informed the
+    cautious routing language; every output still requires local CRE counsel/professional review.
+  - Tool-count note: Phase 11 had 19 tools and Phase 12 specifies four new named/registered tools,
+    so preserving every approved tool produces 23. The phase document's stated total of 22 is an
+    arithmetic conflict; no existing or required tool was removed to force that count.
+  - Pytest: `442 passed, 1 warning in 21.75s`

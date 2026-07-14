@@ -1,10 +1,13 @@
-"""MCP boundaries for offers, contacts, outreach, counters, and LOI drafts."""
+"""MCP boundaries for execution coaching from offer through closing."""
 
 import logging
 from typing import Any
 
+from cre_mcp.deals.store import get_deal_store
+from cre_mcp.execution.closing import closing_plan as build_closing_plan
 from cre_mcp.execution.contacts import find_contact as assemble_contact
 from cre_mcp.execution.debt import size_debt as size_context_debt
+from cre_mcp.execution.diligence import due_diligence_plan as build_diligence_plan
 from cre_mcp.execution.financing import financing_options as screen_financing
 from cre_mcp.execution.loi import generate_loi as draft_loi
 from cre_mcp.execution.negotiate import handle_counter as coach_counter
@@ -307,13 +310,118 @@ async def size_debt(
         return {"error": str(exc)}
 
 
+async def due_diligence_plan(
+    url_or_id: str,
+    dd_days: int = 30,
+    start_date: str | None = None,
+    source: str = "loopnet",
+) -> dict:
+    """Build and persist an asset-aware diligence checklist on a contract clock.
+
+    Args:
+        url_or_id: Source listing URL or source-specific identifier.
+        dd_days: Positive number of calendar days in the diligence period.
+        start_date: Optional ISO date (YYYY-MM-DD); defaults to today.
+        source: Registered source name. Defaults to LoopNet.
+
+    Returns:
+        A persisted DDPlan with clear/terminate tests, specialists, and deadlines.
+    """
+    logger.info(
+        "due_diligence_plan called: source=%s listing=%s dd_days=%s",
+        source,
+        url_or_id,
+        dd_days,
+    )
+    try:
+        ctx = await _deal_context(url_or_id, source)
+        plan = await build_diligence_plan(
+            ctx,
+            dd_days=dd_days,
+            start_date=start_date,
+            store=get_deal_store(),
+        )
+        return plan.model_dump(mode="json")
+    except Exception as exc:
+        logger.error("due_diligence_plan error: %s", exc)
+        return {"error": str(exc)}
+
+
+async def closing_plan(
+    url_or_id: str,
+    state: str | None = None,
+    source: str = "loopnet",
+) -> dict:
+    """Build a state-routed entity-to-funding closing runway.
+
+    Args:
+        url_or_id: Source listing URL or source-specific identifier.
+        state: Optional two-letter property-state override.
+        source: Registered source name. Defaults to LoopNet.
+
+    Returns:
+        ClosingPlan with ordered professional gates and the wire-fraud protocol.
+    """
+    logger.info("closing_plan called: source=%s listing=%s state=%s", source, url_or_id, state)
+    try:
+        ctx = await _deal_context(url_or_id, source)
+        return build_closing_plan(ctx, state=state).model_dump(mode="json")
+    except Exception as exc:
+        logger.error("closing_plan error: %s", exc)
+        return {"error": str(exc)}
+
+
+async def save_deal(
+    url_or_id: str,
+    source: str = "loopnet",
+) -> dict:
+    """Save or refresh a source listing in the persistent deal workspace.
+
+    Args:
+        url_or_id: Source listing URL or source-specific identifier.
+        source: Registered source name. Defaults to LoopNet.
+
+    Returns:
+        The stable source-qualified deal_id, or an error dictionary.
+    """
+    logger.info("save_deal called: source=%s listing=%s", source, url_or_id)
+    try:
+        ctx = await _deal_context(url_or_id, source)
+        deal_id = await get_deal_store().save_deal(ctx.listing)
+        if deal_id is None:
+            raise RuntimeError("deal could not be persisted; check the SQLite path and logs")
+        return {"deal_id": deal_id}
+    except Exception as exc:
+        logger.error("save_deal error: %s", exc)
+        return {"error": str(exc)}
+
+
+async def list_deals() -> dict:
+    """List compact summaries from the persistent deal workspace.
+
+    Returns:
+        A consistent object containing deals and count, or an error dictionary.
+    """
+    logger.info("list_deals called")
+    try:
+        deals = await get_deal_store().list_deals()
+        return {"deals": deals, "count": len(deals)}
+    except Exception as exc:
+        logger.error("list_deals error: %s", exc)
+        return {"error": str(exc)}
+
+
 __all__ = [
+    "closing_plan",
     "draft_outreach",
+    "due_diligence_plan",
     "find_contact",
     "financing_options",
     "generate_loi",
     "handle_counter",
+    "list_deals",
     "qualify_me",
     "recommend_offer",
+    "save_deal",
     "size_debt",
 ]

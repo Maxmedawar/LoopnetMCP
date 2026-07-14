@@ -1,5 +1,6 @@
-"""Execution-layer offer, contact, outreach, and negotiation models."""
+"""Execution-layer coaching, diligence, and closing models."""
 
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -178,12 +179,72 @@ class DebtSizing(BaseModel):
     guardrail: str
 
 
+DDStatus = Literal["not_started", "in_progress", "blocked", "complete", "waived"]
+
+
+class DDItem(BaseModel):
+    """One trackable diligence gate with a novice-readable clear/terminate test."""
+
+    key: str
+    label: str
+    why: str
+    what_clears_it: str
+    what_should_make_you_terminate: str
+    who_to_hire: str
+    due_offset_days: int = Field(ge=0)
+    deadline: date
+    status: DDStatus = "not_started"
+
+
+class DDPlan(BaseModel):
+    """Asset-aware diligence checklist anchored to a contractual clock."""
+
+    deal_id: str
+    deal_ref: str
+    asset_class: str
+    dd_days: int = Field(gt=0)
+    start_date: date
+    expiration_date: date
+    countdown_summary: str
+    items: list[DDItem] = Field(default_factory=list)
+    persistence_status: Literal["saved", "unavailable"] = "saved"
+    guardrail: str
+
+
+class ClosingStep(BaseModel):
+    """One ordered closing action and its professional/condition gate."""
+
+    order: int = Field(gt=0)
+    title: str
+    detail: str
+    who: str
+    gate: str
+
+
+class ClosingPlan(BaseModel):
+    """State-routed closing runway with a prominent anti-wire-fraud protocol."""
+
+    deal_ref: str
+    state: str
+    closing_mode: str
+    state_note: str
+    steps: list[ClosingStep] = Field(default_factory=list)
+    wire_fraud_warning: str
+    red_flags: list[str] = Field(default_factory=list)
+    guardrail: str
+
+
 __all__ = [
     "BrokerContact",
     "BusinessPrincipal",
     "ContactInfo",
     "CounterAdvice",
+    "ClosingPlan",
+    "ClosingStep",
     "BuyerProfile",
+    "DDItem",
+    "DDPlan",
+    "DDStatus",
     "DebtSizing",
     "FinancingOption",
     "LoiDraft",

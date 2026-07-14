@@ -7,12 +7,16 @@ import pytest
 from cre_mcp.server import mcp
 from cre_mcp.tools.execution_tools import (
     draft_outreach,
+    closing_plan,
+    due_diligence_plan,
     find_contact,
     financing_options,
     generate_loi,
     handle_counter,
+    list_deals,
     qualify_me,
     recommend_offer,
+    save_deal,
     size_debt,
 )
 from tests.scoring.builders import deal_context, market_pack
@@ -86,10 +90,13 @@ async def test_execution_tools_return_error_dicts():
         assert await financing_options("bad") == {"error": "unknown source"}
         assert await qualify_me("bad", 1, 1) == {"error": "unknown source"}
         assert await size_debt("bad") == {"error": "unknown source"}
+        assert await due_diligence_plan("bad") == {"error": "unknown source"}
+        assert await closing_plan("bad") == {"error": "unknown source"}
+        assert await save_deal("bad") == {"error": "unknown source"}
 
 
 @pytest.mark.asyncio
-async def test_execution_tools_are_registered_and_tool_count_is_nineteen():
+async def test_execution_tools_are_registered_and_tool_count_is_twenty_three():
     tools = await mcp.get_tools()
     assert {
         "recommend_offer",
@@ -100,8 +107,12 @@ async def test_execution_tools_are_registered_and_tool_count_is_nineteen():
         "financing_options",
         "qualify_me",
         "size_debt",
+        "due_diligence_plan",
+        "closing_plan",
+        "save_deal",
+        "list_deals",
     } <= set(tools)
-    assert len(tools) == 19
+    assert len(tools) == 23
 
 
 @pytest.mark.asyncio

@@ -32,6 +32,10 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(execution_tools.financing_options)
     mcp.tool()(execution_tools.qualify_me)
     mcp.tool()(execution_tools.size_debt)
+    mcp.tool()(execution_tools.due_diligence_plan)
+    mcp.tool()(execution_tools.closing_plan)
+    mcp.tool()(execution_tools.save_deal)
+    mcp.tool()(execution_tools.list_deals)
 
 
 __all__ = ["register_all"]
