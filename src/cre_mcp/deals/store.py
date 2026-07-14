@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -101,6 +102,38 @@ class DealStore:
             );
             CREATE INDEX IF NOT EXISTS idx_seen_matches_search
                 ON seen_matches(search_id, first_seen);
+
+            CREATE TABLE IF NOT EXISTS investors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                accredited INTEGER,
+                accreditation_verified INTEGER NOT NULL DEFAULT 0,
+                relationship TEXT NOT NULL,
+                contact_json TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK(accredited IS NULL OR accredited IN (0, 1)),
+                CHECK(accreditation_verified IN (0, 1)),
+                CHECK(relationship IN ('preexisting', 'new'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_investors_name
+                ON investors(name, created_at);
+
+            CREATE TABLE IF NOT EXISTS commitments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deal_id TEXT NOT NULL,
+                investor_id INTEGER NOT NULL,
+                amount REAL NOT NULL CHECK(amount > 0),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(deal_id, investor_id),
+                FOREIGN KEY(deal_id) REFERENCES deals(deal_id) ON DELETE CASCADE,
+                FOREIGN KEY(investor_id) REFERENCES investors(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_commitments_deal
+                ON commitments(deal_id, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_commitments_investor
+                ON commitments(investor_id, updated_at);
 
             CREATE TABLE IF NOT EXISTS exchanges (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -681,6 +714,249 @@ class DealStore:
         except Exception as exc:
             logger.error("seen-match write failed for search %s: %s", search_id, exc)
             return 0
+
+    @staticmethod
+    def _validate_investor(
+        name: str,
+        accredited: bool | None,
+        accreditation_verified: bool,
+        relationship: str,
+    ) -> tuple[str, str]:
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValueError("investor name cannot be blank")
+        normalized_relationship = relationship.strip().casefold()
+        if normalized_relationship not in {"preexisting", "new"}:
+            raise ValueError("relationship must be preexisting or new")
+        if accreditation_verified and accredited is not True:
+            raise ValueError(
+                "accreditation_verified requires accredited=True; verification cannot "
+                "establish an unknown or non-accredited status"
+            )
+        return normalized_name, normalized_relationship
+
+    def _add_investor(
+        self,
+        name: str,
+        accredited: bool | None,
+        accreditation_verified: bool,
+        relationship: str,
+        contact: dict[str, Any] | str | None,
+    ) -> int:
+        now = self._now()
+        contact_json = (
+            json.dumps(contact, separators=(",", ":"), default=str)
+            if contact is not None
+            else None
+        )
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO investors(
+                    name, accredited, accreditation_verified, relationship,
+                    contact_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    name,
+                    None if accredited is None else int(accredited),
+                    int(accreditation_verified),
+                    relationship,
+                    contact_json,
+                    now,
+                    now,
+                ),
+            )
+        return int(cursor.lastrowid)
+
+    async def add_investor(
+        self,
+        name: str,
+        accredited: bool | None = None,
+        accreditation_verified: bool = False,
+        relationship: str = "new",
+        contact: dict[str, Any] | str | None = None,
+    ) -> int | None:
+        """Persist a prospective investor and return its numeric identifier."""
+        normalized_name, normalized_relationship = self._validate_investor(
+            name,
+            accredited,
+            accreditation_verified,
+            relationship,
+        )
+        try:
+            return await asyncio.to_thread(
+                self._add_investor,
+                normalized_name,
+                accredited,
+                accreditation_verified,
+                normalized_relationship,
+                contact,
+            )
+        except Exception as exc:
+            logger.error("investor create failed for %s: %s", normalized_name, exc)
+            return None
+
+    @staticmethod
+    def _decode_contact(value: Any) -> dict[str, Any] | str | None:
+        if value is None:
+            return None
+        try:
+            decoded = json.loads(str(value))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return str(value)
+        return decoded if isinstance(decoded, (dict, str)) else str(decoded)
+
+    @classmethod
+    def _decode_investor(
+        cls,
+        row: sqlite3.Row,
+        commitments: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "investor_id": int(row["id"]),
+            "name": row["name"],
+            "accredited": (
+                None if row["accredited"] is None else bool(row["accredited"])
+            ),
+            "accreditation_verified": bool(row["accreditation_verified"]),
+            "relationship": row["relationship"],
+            "contact": cls._decode_contact(row["contact_json"]),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "commitments": commitments,
+            "total_commitments": sum(float(item["amount"]) for item in commitments),
+        }
+
+    def _list_investors(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            investors = connection.execute(
+                """
+                SELECT id, name, accredited, accreditation_verified, relationship,
+                       contact_json, created_at, updated_at
+                FROM investors ORDER BY created_at, id
+                """
+            ).fetchall()
+            commitment_rows = connection.execute(
+                """
+                SELECT id, deal_id, investor_id, amount, created_at, updated_at
+                FROM commitments ORDER BY created_at, id
+                """
+            ).fetchall()
+        by_investor: dict[int, list[dict[str, Any]]] = {}
+        for row in commitment_rows:
+            by_investor.setdefault(int(row["investor_id"]), []).append(
+                {
+                    "commitment_id": int(row["id"]),
+                    "deal_id": row["deal_id"],
+                    "investor_id": int(row["investor_id"]),
+                    "amount": float(row["amount"]),
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                }
+            )
+        return [
+            self._decode_investor(row, by_investor.get(int(row["id"]), []))
+            for row in investors
+        ]
+
+    async def list_investors(self) -> list[dict[str, Any]]:
+        """Return persisted investors and their non-binding commitments."""
+        try:
+            return await asyncio.to_thread(self._list_investors)
+        except Exception as exc:
+            logger.error("investor list failed: %s", exc)
+            return []
+
+    async def get_investor(self, investor_id: int) -> dict[str, Any] | None:
+        """Return one investor record, including commitments."""
+        return next(
+            (
+                investor
+                for investor in await self.list_investors()
+                if investor["investor_id"] == investor_id
+            ),
+            None,
+        )
+
+    def _record_commitment(
+        self,
+        deal_id: str,
+        investor_id: int,
+        amount: float,
+    ) -> int | None:
+        now = self._now()
+        with self._connect() as connection:
+            deal_exists = connection.execute(
+                "SELECT 1 FROM deals WHERE deal_id = ?",
+                (deal_id,),
+            ).fetchone()
+            investor_exists = connection.execute(
+                "SELECT 1 FROM investors WHERE id = ?",
+                (investor_id,),
+            ).fetchone()
+            if deal_exists is None or investor_exists is None:
+                return None
+            connection.execute(
+                """
+                INSERT INTO commitments(
+                    deal_id, investor_id, amount, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(deal_id, investor_id) DO UPDATE SET
+                    amount = excluded.amount,
+                    updated_at = excluded.updated_at
+                """,
+                (deal_id, investor_id, amount, now, now),
+            )
+            row = connection.execute(
+                """
+                SELECT id FROM commitments
+                WHERE deal_id = ? AND investor_id = ?
+                """,
+                (deal_id, investor_id),
+            ).fetchone()
+        return int(row["id"]) if row is not None else None
+
+    async def record_commitment(
+        self,
+        deal_id: str,
+        investor_id: int,
+        amount: float,
+    ) -> int | None:
+        """Upsert a non-binding deal/investor capital indication."""
+        try:
+            normalized_amount = float(amount)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("commitment amount must be a number greater than zero") from exc
+        if (
+            isinstance(amount, bool)
+            or not math.isfinite(normalized_amount)
+            or normalized_amount <= 0
+        ):
+            raise ValueError("commitment amount must be greater than zero")
+        try:
+            return await asyncio.to_thread(
+                self._record_commitment,
+                deal_id,
+                investor_id,
+                normalized_amount,
+            )
+        except Exception as exc:
+            logger.error(
+                "commitment write failed for deal %s/investor %s: %s",
+                deal_id,
+                investor_id,
+                exc,
+            )
+            return None
+
+    async def get_commitment(self, commitment_id: int) -> dict[str, Any] | None:
+        """Return one persisted non-binding commitment."""
+        for investor in await self.list_investors():
+            for commitment in investor["commitments"]:
+                if commitment["commitment_id"] == commitment_id:
+                    return commitment
+        return None
 
     def _create_exchange(
         self,

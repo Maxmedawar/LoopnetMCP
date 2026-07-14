@@ -37,7 +37,29 @@ def structure_guardrail(next_step: str | None = None) -> str:
     return instruction
 
 
+CAPITAL_HARD_GATE = (
+    "HARD GATE — A securities attorney must review the structure and documents and sign "
+    "off BEFORE you solicit or accept any investor money. State blue-sky notice filings "
+    "and Form D are required."
+)
+
+
+def capital_guardrail(next_step: str | None = None) -> str:
+    """Return the non-negotiable securities-attorney and anti-fraud gate."""
+    instruction = (
+        f"{CAPITAL_HARD_GATE} This is a deterministic educational draft/check/scenario, "
+        "not legal, securities, tax, or investment advice and not approval of an exemption "
+        "or offering. Never describe modeled or target returns as promised, guaranteed, "
+        "risk-free, or assured; verify every material fact and disclose risks and conflicts."
+    )
+    if next_step:
+        instruction = f"{instruction} Next: {next_step.strip()}"
+    return instruction
+
+
 __all__ = [
+    "CAPITAL_HARD_GATE",
+    "capital_guardrail",
     "EXECUTION_DISCLAIMER",
     "execution_guardrail",
     "financing_guardrail",

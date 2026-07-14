@@ -1,6 +1,15 @@
 """Pydantic data models for commercial real estate data."""
 
 from cre_mcp.models.attributes import DealAttributes
+from cre_mcp.models.capital import (
+    CapitalDraft,
+    CommitmentRecord,
+    ComplianceCheck,
+    InvestorRecord,
+    InvestorRelationship,
+    WaterfallResult,
+    WaterfallYear,
+)
 from cre_mcp.models.comps import SaleComp, ValueEstimate
 from cre_mcp.models.deals import Deal, DealContext
 from cre_mcp.models.enrichment import ListingFacts, OwnerRecord, ParcelRecord
@@ -69,6 +78,9 @@ __all__ = [
     "BrokerContact",
     "BusinessPrincipal",
     "BuyerProfile",
+    "CapitalDraft",
+    "CommitmentRecord",
+    "ComplianceCheck",
     "ContactInfo",
     "CounterAdvice",
     "ClosingPlan",
@@ -92,6 +104,8 @@ __all__ = [
     "ListingRef",
     "ListingType",
     "LoiDraft",
+    "InvestorRecord",
+    "InvestorRelationship",
     "MarketOverview",
     "MarketPack",
     "MetricSeries",
@@ -119,4 +133,6 @@ __all__ = [
     "SignalSpec",
     "UnderwritingResult",
     "ValueEstimate",
+    "WaterfallResult",
+    "WaterfallYear",
 ]

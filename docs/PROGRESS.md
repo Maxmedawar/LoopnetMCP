@@ -25,7 +25,8 @@ Fable reviews independently after each phase before advancing.
 | 16 | Live-API hardening | 🟢 complete | 378 passed, 1 warning |
 | 17 | Completeness hardening | 🟢 complete | 385 passed, 1 warning |
 | 18 | Entity/structure engine + 1031 manager | 🟢 complete | 470 passed, 1 warning |
-| **Overall** | **Phases 1–18 delivered** | **🟢 STRUCTURE & SCALE IN PROGRESS — 34 tools** | **470 passed, 1 warning** |
+| 19 | Capital-raise suite + SEC guardrails | 🟢 complete | 491 passed, 1 warning |
+| **Overall** | **Phases 1–19 delivered** | **🟢 STRUCTURE & SCALE IN PROGRESS — 41 tools** | **491 passed, 1 warning** |
 
 ## Log
 
@@ -270,3 +271,30 @@ Fable reviews independently after each phase before advancing.
     identification instead of presuming the narrow 95% actual-receipt exception will later
     rescue it; a QI/tax attorney must approve that exceptional path.
   - Pytest: `470 passed, 1 warning in 21.79s`
+- 2026-07-13 — Phase 19 capital-raise suite and SEC guardrails complete.
+  - Status: GREEN; durable investor/commitment CRM, preliminary 506(b)/(c) action blockers,
+    transparent LP/GP waterfall scenarios, attorney-ready PPM/subscription/Form D skeletons,
+    anti-fraud refusals, mandatory counsel gates, and all 41 registered tools are verified.
+  - Files changed: added capital CRM/compliance/waterfall/document models; extended the shared
+    SQLite `DealStore` with investor and idempotent deal-commitment tables; added the common
+    securities hard gate and recursive promised/guaranteed/risk-free claim refusal; added Reg D
+    action checks, preferred return/return-of-capital/catch-up/promote/tiered-split modeling,
+    DRAFT PPM/subscription/Form D generators, seven MCP tools, exports/registration, and Phase 19
+    store/service/tool acceptance tests. No dependency was added.
+  - Rule verification: current SEC small-business guidance confirms that 506(b) prohibits general
+    solicitation and permits no more than 35 sophisticated non-accredited purchasers with enhanced
+    disclosures; 506(c) permits broad solicitation only when every purchaser is accredited and
+    the issuer takes reasonable verification steps. Both paths require Form D within 15 days after
+    first sale, may require state notice filings/fees, remain subject to anti-fraud rules, and need
+    bad-actor review. The engine treats a 506(b) checked box as no substitute for the issuer's
+    reasonable-belief facts, while correctly not imposing the distinct 506(c) verification test.
+  - Live-ish verification: `check_solicitation("506b", "advertise_publicly")` and a 506(c)
+    accredited-but-unverified acceptance both returned `allowed=false`. Real Crexi deal `2247699`
+    produced a five-year explicit-input scenario with 10.292502% LP IRR, 1.518519x LP equity
+    multiple, and $121,717.49 modeled GP promote; output labeled every return as a scenario,
+    echoed assumptions/debt provenance, and repeated the securities-attorney hard gate.
+  - Anti-fraud verification: `guaranteed_return` and risk-free/promised-performance inputs are
+    refused before modeling or drafting. PPM/Form D outputs are stamped `DRAFT — ATTORNEY REVIEW
+    REQUIRED`, never accept funds or establish an exemption, and require securities counsel before
+    solicitation or money plus Form D/state blue-sky work. Deviation: none.
+  - Pytest: `491 passed, 1 warning in 22.12s`
