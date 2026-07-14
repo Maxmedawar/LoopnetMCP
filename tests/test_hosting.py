@@ -94,6 +94,7 @@ def test_browser_path_and_proxy_feed_nodriver_launch_options():
 
     options = fetcher._launch_options()
     assert options["headless"] is True
+    assert options["sandbox"] is False  # required for launchd/service startup
     assert options["browser_executable_path"] == "/usr/bin/chromium"
     # Sandbox-disabling flags must be present so Chromium starts as a service,
     # and the proxy arg is appended after them.

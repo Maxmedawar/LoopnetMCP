@@ -66,6 +66,11 @@ class BrowserFetcher:
         """Build nodriver launch options without exposing configured secrets."""
         options: dict[str, Any] = {
             "headless": self._config.browser_headless,
+            # nodriver's own sandbox flag — this is what actually adds --no-sandbox
+            # and lets Chromium start under a service/launchd (root-like) context.
+            # The classic "Failed to connect to browser ... running as root" crash
+            # is nodriver refusing to start with the sandbox enabled.
+            "sandbox": False,
         }
         if self._config.browser_path is not None:
             options["browser_executable_path"] = str(self._config.browser_path)
