@@ -45,6 +45,22 @@ class LoopnetClient(FetchClient):
             return url
         return super()._cache_key(policy, method, url, body)
 
+    async def _fetch_with_browser(self, *args, **kwargs) -> str:
+        """Use the LoopNet-hardened fetcher and discard blocked sessions."""
+        from cre_mcp.scraper.browser import BrowserFetchError, BrowserFetcher
+
+        if self._browser_fetcher is None:
+            self._browser_fetcher = BrowserFetcher(self._config)
+        try:
+            return await super()._fetch_with_browser(*args, **kwargs)
+        except BrowserFetchError as exc:
+            await self._browser_fetcher.close()
+            self._browser_fetcher = None
+            message = str(exc)
+            if not message.startswith("loopnet_blocked:"):
+                message = f"loopnet_blocked: {message}"
+            raise FetchBlockedError(message) from exc
+
 
 _singleton: LoopnetClient | None = None
 

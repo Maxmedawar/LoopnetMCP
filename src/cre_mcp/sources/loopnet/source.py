@@ -7,7 +7,7 @@ from cre_mcp.http.errors import (
     FetchClientError,
     FetchRateLimitError,
 )
-from cre_mcp.http.fetch import FetchClient, get_fetch_client
+from cre_mcp.http.fetch import FetchClient
 from cre_mcp.models import (
     Listing,
     ListingRef,
@@ -15,6 +15,7 @@ from cre_mcp.models import (
     PropertySummary,
     SourceCapabilities,
 )
+from cre_mcp.scraper.client import get_client
 from cre_mcp.sources.base import ListingSource, SearchQuery, SourceError
 from cre_mcp.sources.loopnet.parsers import (
     parse_cap_rate,
@@ -197,7 +198,7 @@ class LoopnetSource(ListingSource):
 
     @property
     def client(self) -> FetchClient:
-        return self._client or get_fetch_client()
+        return self._client or get_client()
 
     async def search(self, query: SearchQuery) -> list[Listing]:
         property_type = (
