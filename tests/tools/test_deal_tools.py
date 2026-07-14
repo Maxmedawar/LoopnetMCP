@@ -120,6 +120,10 @@ async def test_analyze_deal_deep_fetches_underwrites_and_scores():
     assert result["scores"][0]["strategy"] == "nnn_retail"
     assert result["scores"][0]["explanation"]
     assert result["scores"][0]["gated"] is False
+    assert result["scores"][0]["calibrated"] is False
+    assert "UNCALIBRATED" in result["scores"][0]["calibration_disclaimer"]
+    assert result["score_calibrated"] is False
+    assert "UNCALIBRATED" in result["score_calibration_disclaimer"]
     assert result["best_strategy"] == "nnn_retail"
     assert result["facts"]["strategy_hint"] == "location_retail"
     assert result["value_provenance"] == {

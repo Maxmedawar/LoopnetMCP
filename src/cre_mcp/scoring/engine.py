@@ -3,6 +3,7 @@
 import logging
 from dataclasses import dataclass
 
+from cre_mcp.eval.status import UNCALIBRATED_DISCLAIMER, is_score_calibrated
 from cre_mcp.market.intel import market_score as calculate_market_score
 from cre_mcp.models.deals import DealContext
 from cre_mcp.models.scoring import (
@@ -181,8 +182,14 @@ def _grade(value: float) -> str:
     return T.FAIL_GRADE
 
 
+def _calibration_disclosure() -> tuple[bool, str | None]:
+    calibrated = is_score_calibrated()
+    return calibrated, None if calibrated else UNCALIBRATED_DISCLAIMER
+
+
 def score(ctx: DealContext, rubric: Rubric) -> DealScore:
     """Score one context with disqualifier short-circuit and partial-weight math."""
+    calibrated, calibration_disclaimer = _calibration_disclosure()
     hits = _disqualifier_hits(ctx, rubric)
     if hits:
         result = RubricResult(
@@ -210,6 +217,8 @@ def score(ctx: DealContext, rubric: Rubric) -> DealScore:
             market_score=None,
             explanation=explanation,
             gated=False,
+            calibrated=calibrated,
+            calibration_disclaimer=calibration_disclaimer,
         )
 
     strategy_eval = _evaluate_signals(ctx, rubric)
@@ -273,6 +282,8 @@ def score(ctx: DealContext, rubric: Rubric) -> DealScore:
         market_score=market_value,
         explanation=explanation,
         gated=gated,
+        calibrated=calibrated,
+        calibration_disclaimer=calibration_disclaimer,
     )
 
 

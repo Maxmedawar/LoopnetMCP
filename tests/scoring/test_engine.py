@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from cre_mcp.models import Band, DisqualifierSpec, Rubric, SignalSpec
+from cre_mcp.eval.status import UNCALIBRATED_DISCLAIMER, set_score_calibrated
 from cre_mcp.scoring.engine import score
 from cre_mcp.scoring.rubrics import thresholds as T
 from cre_mcp.scoring.signals import SIGNAL_EXTRACTORS
@@ -43,6 +44,27 @@ def test_band_edges_start_the_higher_band_at_equality():
     result = score(ctx, _rubric(_signal("lease_years_remaining")))
     assert result.rubric_result.signal_results[0].normalized == 0.6
     assert result.rubric_result.raw_score == 60.0
+
+
+def test_score_discloses_uncalibrated_status_by_default_and_drops_after_backtest():
+    set_score_calibrated(False)
+    try:
+        uncalibrated = score(
+            deal_context(raw={"lease_years_remaining": 12}),
+            _rubric(_signal("lease_years_remaining")),
+        )
+        assert uncalibrated.calibrated is False
+        assert uncalibrated.calibration_disclaimer == UNCALIBRATED_DISCLAIMER
+
+        set_score_calibrated(True)
+        calibrated = score(
+            deal_context(raw={"lease_years_remaining": 12}),
+            _rubric(_signal("lease_years_remaining")),
+        )
+        assert calibrated.calibrated is True
+        assert calibrated.calibration_disclaimer is None
+    finally:
+        set_score_calibrated(False)
 
 
 def test_mixed_strict_and_inclusive_supply_band_edges():

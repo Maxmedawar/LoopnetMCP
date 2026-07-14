@@ -13,6 +13,7 @@ from cre_mcp.models.capital import (
 from cre_mcp.models.comps import SaleComp, ValueEstimate
 from cre_mcp.models.deals import Deal, DealContext
 from cre_mcp.models.enrichment import ListingFacts, OwnerRecord, ParcelRecord
+from cre_mcp.models.evaluation import CalibrationReport, GradeCalibration
 from cre_mcp.models.execution import (
     BrokerContact,
     BusinessPrincipal,
@@ -87,6 +88,7 @@ __all__ = [
     "BusinessPrincipal",
     "BuyerProfile",
     "CapitalDraft",
+    "CalibrationReport",
     "CommitmentRecord",
     "ComplianceCheck",
     "ContactInfo",
@@ -105,6 +107,7 @@ __all__ = [
     "DisqualifierSpec",
     "GeoLevel",
     "GeoRef",
+    "GradeCalibration",
     "FinancingOption",
     "Exchange",
     "ExchangeReplacement",

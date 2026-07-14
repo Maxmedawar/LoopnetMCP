@@ -4,6 +4,7 @@ import logging
 import re
 from typing import Any
 
+from cre_mcp.eval.status import UNCALIBRATED_DISCLAIMER, is_score_calibrated
 from cre_mcp.comps.avm import estimate_value
 from cre_mcp.comps.records import sale_comps
 from cre_mcp.enrichment.attributes import (
@@ -461,6 +462,19 @@ def _best_score(deal: Deal) -> float:
     return deal.scores[0].score if deal.scores else 0.0
 
 
+def _score_calibration_metadata(scores: list[DealScore] | None = None) -> dict[str, Any]:
+    if scores:
+        calibrated = scores[0].calibrated
+        disclaimer = scores[0].calibration_disclaimer
+    else:
+        calibrated = is_score_calibrated()
+        disclaimer = None if calibrated else UNCALIBRATED_DISCLAIMER
+    return {
+        "score_calibrated": calibrated,
+        "score_calibration_disclaimer": disclaimer,
+    }
+
+
 async def analyze_deal(
     url_or_id: str,
     source: str = "loopnet",
@@ -509,6 +523,7 @@ async def analyze_deal(
             value_estimate=value_estimate,
         )
         payload = deal.model_dump(mode="json")
+        payload.update(_score_calibration_metadata(deal.scores))
         payload["value_provenance"] = {
             "method": value_estimate.method,
             "confidence": value_estimate.confidence,
@@ -648,6 +663,7 @@ async def find_deals(
             "errors": errors,
             "per_source_counts": aggregated.per_source_counts,
             "deduped": aggregated.deduped,
+            **_score_calibration_metadata(selected[0].scores if selected else None),
         }
     except Exception as exc:
         logger.error("find_deals error: %s", exc)
@@ -747,6 +763,7 @@ async def find_distressed(
             "errors": errors,
             "per_source_counts": aggregated.per_source_counts,
             "deduped": aggregated.deduped,
+            **_score_calibration_metadata(selected[0].scores if selected else None),
         }
     except Exception as exc:
         logger.error("find_distressed error: %s", exc)

@@ -2,6 +2,11 @@
 
 from pydantic import BaseModel, Field
 
+UNCALIBRATED_DISCLAIMER = (
+    "Confidence is UNCALIBRATED — this score is a screening signal, not a validated "
+    "probability of success. It has not yet been backtested against realized outcomes."
+)
+
 
 class Band(BaseModel):
     up_to: float | None
@@ -60,3 +65,5 @@ class DealScore(BaseModel):
     market_score: float | None = None
     explanation: str
     gated: bool = False
+    calibrated: bool = False
+    calibration_disclaimer: str | None = UNCALIBRATED_DISCLAIMER

@@ -8,6 +8,7 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.tools import (
         capital_tools,
         deal_tools,
+        eval_tools,
         execution_tools,
         listing_tools,
         market_tools,
@@ -60,6 +61,8 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(capital_tools.draft_form_d)
     mcp.tool()(ops_tools.after_tax_returns)
     mcp.tool()(ops_tools.operating_playbook)
+    mcp.tool()(eval_tools.backtest_score)
+    mcp.tool()(eval_tools.record_deal_outcome)
 
 
 __all__ = ["register_all"]

@@ -28,7 +28,8 @@ Fable reviews independently after each phase before advancing.
 | 19 | Capital-raise suite + SEC guardrails | 🟢 complete | 491 passed, 1 warning |
 | 20 | After-tax returns + operating playbook | 🟢 complete | 506 passed, 1 warning |
 | 21 | Correctness hardening | 🟢 complete | 519 passed, 1 warning |
-| **Overall** | **Full roadmap delivered: Execution + Trust + Structure/Scale** | **🟢 FULL ROADMAP COMPLETE + HARDENED — 43 tools** | **519 passed, 1 warning** |
+| 22 | Score backtest / calibration harness | 🟢 complete | 530 passed, 1 warning |
+| **Overall** | **Full roadmap delivered: Execution + Trust + Structure/Scale** | **🟢 FULL ROADMAP COMPLETE + CALIBRATION-READY — 45 tools** | **530 passed, 1 warning** |
 
 ## Log
 
@@ -360,3 +361,40 @@ Fable reviews independently after each phase before advancing.
     solicitation. Every result remains a preliminary action gate, never an exemption opinion.
   - Deviation: none. No dependencies or tools were added.
   - Pytest: `519 passed, 1 warning in 21.75s`
+- 2026-07-14 — Phase 22 score backtest and calibration harness complete.
+  - Status: GREEN; all 45 tools are registered, realized outcomes can accumulate durably, score
+    ordering/calibration can be measured from user outcomes or a supplied CSV, and every score is
+    explicitly `UNCALIBRATED` by default instead of implying a validated success probability.
+  - Files changed: extended `DealStore` with a foreign-keyed `outcomes` table and async
+    `record_outcome`/`get_outcomes` methods; each outcome freezes the deal's predicted score,
+    grade, and strategy while storing close status, actual price, optional hold/IRR/equity-
+    multiple, went-bad label, notes, and timestamps. Added typed calibration report/grade-band
+    models, process-safe calibration disclosure status, stdlib CSV ingestion, grade calibration
+    curves, grade hit rates, Brier loss, tie-aware Spearman rank discrimination, and 95% Wilson
+    good-rate intervals. Added `record_deal_outcome` and `backtest_score` tools plus persistence,
+    math, random/non-monotonic, tool-boundary, registration, and score-disclosure tests.
+  - Calibration gate: `calibrated=true` requires at least 100 labeled outcomes, at least three
+    populated score/grade buckets, monotonically improving realized good rates, Spearman
+    discrimination of at least 0.10, and at least a 10-point good-rate spread. These additional
+    discrimination/separation checks deliberately prevent a flat random curve from passing merely
+    because equal rates are technically non-decreasing. Brier loss treats score/100 as a candidate
+    probability only for diagnosis and says plainly that the score is not yet a validated
+    probability. Realized-good labels may be supplied directly or derived from realized IRR using
+    an explicit 8% threshold; unlabeled/invalid rows are excluded and counted.
+  - Disclosure behavior: `DealScore`, `analyze_deal`, `find_deals`, and distressed deal output now
+    expose `calibrated`/`score_calibrated` flags and the constant line `Confidence is UNCALIBRATED
+    — this score is a screening signal, not a validated probability of success. It has not yet
+    been backtested against realized outcomes.` A passing `backtest_score` removes the disclaimer
+    for subsequent scores in the running server. A restart conservatively restores it until the
+    backtest is rerun, preventing stale calibration from silently suppressing the warning.
+  - Verification: a 150-row synthetic set produced A/B/C realized hit rates of 90%/70%/30%,
+    Spearman discrimination `0.508304`, Brier loss `0.201667`, a monotonic curve, and
+    `calibrated=true`; a large non-monotonic random-like set remained uncalibrated. Real Crexi deal
+    `2247699` returned `calibrated=false` with the exact disclaimer in both its DealScore and
+    analysis-level metadata. No synthetic outcome was written to the user's real DealStore.
+  - Honest path forward: a licensed historical CRE-outcomes dataset or a sufficiently large,
+    representative set of the user's own closed-deal outcomes is still required to validate and
+    keep monitoring the score. Passing the mechanical gate does not establish causation,
+    transportability to other strategies/markets, or immunity from drift.
+  - Deviation: none. No dependency was added.
+  - Pytest: `530 passed, 1 warning in 22.47s`

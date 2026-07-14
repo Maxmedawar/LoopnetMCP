@@ -73,6 +73,30 @@ class DealStore:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_deals_source_id
                 ON deals(source, source_id);
 
+            CREATE TABLE IF NOT EXISTS outcomes (
+                deal_id TEXT PRIMARY KEY,
+                closed INTEGER NOT NULL,
+                purchase_price REAL,
+                realized_hold_years REAL,
+                realized_irr REAL,
+                realized_equity_multiple REAL,
+                went_bad INTEGER,
+                notes TEXT,
+                predicted_score REAL,
+                predicted_grade TEXT,
+                predicted_strategy TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(deal_id) REFERENCES deals(deal_id) ON DELETE CASCADE,
+                CHECK(closed IN (0, 1)),
+                CHECK(went_bad IS NULL OR went_bad IN (0, 1)),
+                CHECK(purchase_price IS NULL OR purchase_price > 0),
+                CHECK(realized_hold_years IS NULL OR realized_hold_years > 0),
+                CHECK(realized_equity_multiple IS NULL OR realized_equity_multiple >= 0)
+            );
+            CREATE INDEX IF NOT EXISTS idx_outcomes_updated
+                ON outcomes(updated_at, deal_id);
+
             CREATE TABLE IF NOT EXISTS dd_items (
                 deal_id TEXT NOT NULL,
                 item_key TEXT NOT NULL,
@@ -319,6 +343,179 @@ class DealStore:
         except Exception as exc:
             logger.error("deal store read failed for %s: %s", deal_id, exc)
             return None
+
+    @staticmethod
+    def _outcome_number(
+        value: Any,
+        label: str,
+        *,
+        minimum: float | None = None,
+        strictly_positive: bool = False,
+    ) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            raise ValueError(f"{label} must be numeric")
+        try:
+            number = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{label} must be numeric") from exc
+        if not math.isfinite(number):
+            raise ValueError(f"{label} must be finite")
+        if strictly_positive and number <= 0:
+            raise ValueError(f"{label} must be greater than zero")
+        if minimum is not None and number < minimum:
+            raise ValueError(f"{label} must be at least {minimum:g}")
+        return number
+
+    @classmethod
+    def _validate_outcome(cls, values: dict[str, Any]) -> dict[str, Any]:
+        closed = values.get("closed")
+        if not isinstance(closed, bool):
+            raise ValueError("closed must be true or false")
+        went_bad = values.get("went_bad")
+        if went_bad is not None and not isinstance(went_bad, bool):
+            raise ValueError("went_bad must be true, false, or omitted")
+        purchase_price = cls._outcome_number(
+            values.get("purchase_price"),
+            "purchase_price",
+            strictly_positive=values.get("purchase_price") is not None,
+        )
+        if closed and purchase_price is None:
+            raise ValueError("purchase_price is required when closed=true")
+        notes = values.get("notes")
+        return {
+            "closed": closed,
+            "purchase_price": purchase_price,
+            "realized_hold_years": cls._outcome_number(
+                values.get("realized_hold_years"),
+                "realized_hold_years",
+                strictly_positive=values.get("realized_hold_years") is not None,
+            ),
+            "realized_irr": cls._outcome_number(
+                values.get("realized_irr"),
+                "realized_irr",
+            ),
+            "realized_equity_multiple": cls._outcome_number(
+                values.get("realized_equity_multiple"),
+                "realized_equity_multiple",
+                minimum=0,
+            ),
+            "went_bad": went_bad,
+            "notes": str(notes).strip() if notes is not None else None,
+        }
+
+    def _record_outcome(self, deal_id: str, values: dict[str, Any]) -> bool:
+        now = self._now()
+        with self._connect() as connection:
+            deal = connection.execute(
+                "SELECT score, grade, strategy FROM deals WHERE deal_id = ?",
+                (deal_id,),
+            ).fetchone()
+            if deal is None:
+                return False
+            connection.execute(
+                """
+                INSERT INTO outcomes(
+                    deal_id, closed, purchase_price, realized_hold_years,
+                    realized_irr, realized_equity_multiple, went_bad, notes,
+                    predicted_score, predicted_grade, predicted_strategy,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(deal_id) DO UPDATE SET
+                    closed = excluded.closed,
+                    purchase_price = excluded.purchase_price,
+                    realized_hold_years = excluded.realized_hold_years,
+                    realized_irr = excluded.realized_irr,
+                    realized_equity_multiple = excluded.realized_equity_multiple,
+                    went_bad = excluded.went_bad,
+                    notes = excluded.notes,
+                    predicted_score = COALESCE(outcomes.predicted_score, excluded.predicted_score),
+                    predicted_grade = COALESCE(outcomes.predicted_grade, excluded.predicted_grade),
+                    predicted_strategy = COALESCE(outcomes.predicted_strategy, excluded.predicted_strategy),
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    deal_id,
+                    int(values["closed"]),
+                    values["purchase_price"],
+                    values["realized_hold_years"],
+                    values["realized_irr"],
+                    values["realized_equity_multiple"],
+                    int(values["went_bad"]) if values["went_bad"] is not None else None,
+                    values["notes"],
+                    deal["score"],
+                    deal["grade"],
+                    deal["strategy"],
+                    now,
+                    now,
+                ),
+            )
+        return True
+
+    async def record_outcome(self, deal_id: str, outcome: dict[str, Any]) -> bool:
+        """Upsert one realized outcome while freezing its original score snapshot."""
+        normalized_id = deal_id.strip()
+        if not normalized_id:
+            raise ValueError("deal_id cannot be blank")
+        values = self._validate_outcome(dict(outcome))
+        try:
+            return await asyncio.to_thread(
+                self._record_outcome,
+                normalized_id,
+                values,
+            )
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.error("outcome persistence failed for %s: %s", normalized_id, exc)
+            return False
+
+    def _get_outcomes(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    o.deal_id, d.source, d.source_id,
+                    o.closed, o.purchase_price, o.realized_hold_years,
+                    o.realized_irr, o.realized_equity_multiple, o.went_bad,
+                    o.notes, o.predicted_score, o.predicted_grade,
+                    o.predicted_strategy, o.created_at, o.updated_at
+                FROM outcomes o
+                JOIN deals d ON d.deal_id = o.deal_id
+                ORDER BY o.updated_at DESC, o.deal_id
+                """
+            ).fetchall()
+        return [
+            {
+                "deal_id": row["deal_id"],
+                "source": row["source"],
+                "source_id": row["source_id"],
+                "closed": bool(row["closed"]),
+                "purchase_price": row["purchase_price"],
+                "realized_hold_years": row["realized_hold_years"],
+                "realized_irr": row["realized_irr"],
+                "realized_equity_multiple": row["realized_equity_multiple"],
+                "went_bad": (
+                    bool(row["went_bad"]) if row["went_bad"] is not None else None
+                ),
+                "notes": row["notes"],
+                "predicted_score": row["predicted_score"],
+                "predicted_grade": row["predicted_grade"],
+                "predicted_strategy": row["predicted_strategy"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
+
+    async def get_outcomes(self) -> list[dict[str, Any]]:
+        """Return all frozen score/outcome pairs for calibration."""
+        try:
+            return await asyncio.to_thread(self._get_outcomes)
+        except Exception as exc:
+            logger.error("outcome read failed: %s", exc)
+            return []
 
     def _save_dd_items(self, deal_id: str, items: Iterable[DDItem]) -> bool:
         now = self._now()
