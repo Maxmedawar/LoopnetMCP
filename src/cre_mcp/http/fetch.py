@@ -105,6 +105,8 @@ class FetchClient:
                 kwargs["impersonate"] = policy.impersonate
             if policy.default_headers:
                 kwargs["headers"] = policy.default_headers
+            if policy.use_proxy and self._config.proxy_url is not None:
+                kwargs["proxy"] = self._config.proxy_url.get_secret_value()
             self._clients[policy.host] = self._session_class()(**kwargs)
         client = self._clients[policy.host]
         if policy.host == "www.loopnet.com":

@@ -1,0 +1,11 @@
+# Replace both placeholders after `cloudflared tunnel create medawar-cre`.
+tunnel: <TUNNEL_UUID>
+credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  # `cre-mcp` is the container name on the shared Docker network. If cloudflared
+  # runs on the host instead, use http://localhost:8000 and publish the app only
+  # on 127.0.0.1:8000.
+  - hostname: mcp.example.com
+    service: http://cre-mcp:8000
+  - service: http_status:404

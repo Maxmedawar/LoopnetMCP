@@ -30,7 +30,8 @@ Fable reviews independently after each phase before advancing.
 | 21 | Correctness hardening | 🟢 complete | 519 passed, 1 warning |
 | 22 | Score backtest / calibration harness | 🟢 complete | 530 passed, 1 warning |
 | 23 | Comps depth: opt-in paid providers + free counties | 🟢 complete | 543 passed, 1 warning |
-| **Overall** | **Full roadmap delivered: Execution + Trust + Structure/Scale** | **🟢 FULL ROADMAP COMPLETE + CALIBRATION-READY — 45 tools** | **543 passed, 1 warning** |
+| 24 | Hosting artifacts: Dockerized HTTP MCP + Cloudflare | 🟢 complete | 552 passed, 1 warning |
+| **Overall** | **Full roadmap + correctness/comps/hosting punch list delivered** | **🟢 PUNCH LIST COMPLETE — FEATURE-COMPLETE + DEPLOYABLE — 45 tools** | **552 passed, 1 warning** |
 
 ## Log
 
@@ -427,3 +428,37 @@ Fable reviews independently after each phase before advancing.
   - Deviation: none. Candidate counties without a reliable free closed-sale layer remain honest
     gaps. No dependency or tool was added.
   - Pytest: `543 passed, 1 warning in 22.07s`
+- 2026-07-14 — Phase 24 hosting artifacts complete; build punch list complete.
+  - Status: GREEN; all 45 tools remain registered. The engine is feature-complete and now ships
+    an opt-in remote hosting path while preserving the original stdio contract as the default.
+  - Transport: added `CRE_TRANSPORT`, `CRE_HTTP_HOST`, and `CRE_HTTP_PORT` configuration plus a
+    `--http` CLI override. No flag and no HTTP environment opt-in still call FastMCP with exactly
+    `transport="stdio"`; HTTP mode binds the configured host/port and exposes Streamable HTTP at
+    `/mcp`. `create_http_app()` constructs the ASGI application without binding for deployment
+    integration and verification.
+  - Browser/proxy hosting seam: added optional `CRE_BROWSER_PATH` and `CRE_PROXY_URL` settings.
+    The installed Chromium path feeds the existing nodriver browser fallback. The proxy remains
+    off by default and is scoped only to the LoopNet, Crexi, and Auction.com scraper policies;
+    government, county, and market-data traffic remains direct. Proxy credentials are held as a
+    secret and are not logged or placed in the image.
+  - Artifacts: added a Python 3.11 slim `Dockerfile` with system Chromium/headless libraries, a
+    non-root runtime user, persistent-cache location, HTTP defaults, exposed port 8000, and the
+    module HTTP command; added `.dockerignore` coverage for `.env`, virtualenvs, caches, and local
+    databases. Added `deploy/cloudflared-config.example.yml` with container ingress and the
+    required 404 catch-all. Added `deploy/DEPLOY.md` covering image build/run, server-only env
+    secrets, durable SQLite volume, tunnel/DNS, Cloudflare Access/Managed OAuth or service-token
+    protection, Claude Code registration/login, operational checks, optional pay-per-GB
+    residential proxy, and usage-based Cloudflare Containers as a pure-CF alternative.
+  - Verification: `cre_mcp.server` imports cleanly; its HTTP entrypoint constructs a
+    `StarletteWithLifespan` at `/mcp`; focused tests prove environment and CLI HTTP selection
+    without binding, configured host/port dispatch, unchanged stdio dispatch, scraper-only proxy
+    use, Chromium launch configuration, and hosting artifact/security invariants. Per the phase,
+    no Docker build or external Cloudflare deployment was required or performed in-lab.
+  - Genuine remaining Max steps: provision the Docker host or Cloudflare Container; create the
+    Cloudflare tunnel, hostname, credentials, server-side secrets, and Access policy; optionally
+    configure paid API keys and a cost-capped residential proxy; complete the Cloudflare Access
+    login from Claude on the MacBook; obtain securities-attorney review before any real capital
+    raise; and keep collecting representative realized outcomes because scores remain
+    `UNCALIBRATED` until the calibration gate passes.
+  - Deviation: none. No Python dependency or MCP tool was added; stdio remains the default.
+  - Pytest: `552 passed, 1 warning in 21.90s`

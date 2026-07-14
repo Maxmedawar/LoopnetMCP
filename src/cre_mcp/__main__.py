@@ -1,5 +1,7 @@
 """Allow running with: python -m cre_mcp"""
 
-from cre_mcp.server import mcp
+from cre_mcp.server import main
 
-mcp.run(transport="stdio")
+
+if __name__ == "__main__":
+    main()

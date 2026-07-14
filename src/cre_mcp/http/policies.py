@@ -25,6 +25,7 @@ class FetchPolicy:
     cache_ttl_seconds: int = 300
     detail_cache_ttl_seconds: int | None = None
     persist: bool = False
+    use_proxy: bool = False
 
 
 def build_loopnet_policy(config: CreConfig | None = None) -> FetchPolicy:
@@ -38,6 +39,7 @@ def build_loopnet_policy(config: CreConfig | None = None) -> FetchPolicy:
         warmup_url=config.base_url,
         challenge_detector=is_challenge_page,
         browser_fallback=config.browser_enabled,
+        use_proxy=True,
         cache_namespace="loopnet",
         cache_ttl_seconds=config.cache_ttl_seconds,
     )
@@ -54,6 +56,7 @@ def build_crexi_policy(config: CreConfig | None = None) -> FetchPolicy:
         warmup_url="https://www.crexi.com/",
         challenge_detector=is_cloudflare_challenge,
         browser_fallback=config.browser_enabled,
+        use_proxy=True,
         default_headers={
             "Origin": "https://www.crexi.com",
             "Referer": "https://www.crexi.com/",
@@ -84,6 +87,7 @@ def build_auctioncom_policies(
         "cache_ttl_seconds": 30 * 60,
         "detail_cache_ttl_seconds": 6 * 60 * 60,
         "persist": True,
+        "use_proxy": True,
     }
     return {
         host: FetchPolicy(host=host, **common)

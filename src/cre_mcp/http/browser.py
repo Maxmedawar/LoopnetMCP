@@ -62,6 +62,19 @@ class BrowserFetcher:
         self._browser = None
         self._lock = asyncio.Lock()
 
+    def _launch_options(self) -> dict[str, Any]:
+        """Build nodriver launch options without exposing configured secrets."""
+        options: dict[str, Any] = {
+            "headless": self._config.browser_headless,
+        }
+        if self._config.browser_path is not None:
+            options["browser_executable_path"] = str(self._config.browser_path)
+        if self._config.proxy_url is not None:
+            options["browser_args"] = [
+                "--proxy-server=" + self._config.proxy_url.get_secret_value()
+            ]
+        return options
+
     async def _ensure_browser(self):
         """Launch the nodriver browser if not already running."""
         if self._browser is not None:
@@ -78,9 +91,7 @@ class BrowserFetcher:
                     "nodriver is not installed. Run: pip install nodriver"
                 ) from exc
 
-            self._browser = await nodriver.start(
-                headless=self._config.browser_headless,
-            )
+            self._browser = await nodriver.start(**self._launch_options())
 
     async def fetch(self, url: str) -> str:
         """Fetch a URL using the browser, waiting for the challenge to resolve."""

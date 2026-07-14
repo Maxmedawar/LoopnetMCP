@@ -1,10 +1,14 @@
 """CRE deal-intelligence MCP server."""
 
+import argparse
 import logging
 import sys
+from collections.abc import Sequence
+from typing import Literal
 
 from fastmcp import FastMCP
 
+from cre_mcp.config import CreConfig
 from cre_mcp.tools import register_all
 from cre_mcp.tools.deal_tools import analyze_deal, find_deals, find_distressed
 from cre_mcp.tools.execution_tools import (
@@ -62,13 +66,60 @@ mcp = FastMCP(
 register_all(mcp)
 
 
-if __name__ == "__main__":
+def resolve_transport(
+    config: CreConfig | None = None,
+    *,
+    force_http: bool = False,
+) -> Literal["stdio", "http"]:
+    """Resolve the runtime transport without starting or binding the server."""
+    if force_http:
+        return "http"
+    return (config or CreConfig()).transport
+
+
+def create_http_app(path: str = "/mcp"):
+    """Construct the opt-in Streamable HTTP ASGI application without binding."""
+    return mcp.http_app(path=path, transport="http")
+
+
+def run_server(
+    config: CreConfig | None = None,
+    *,
+    force_http: bool = False,
+) -> None:
+    """Run stdio by default or the configured opt-in Streamable HTTP server."""
+    config = config or CreConfig()
+    transport = resolve_transport(config, force_http=force_http)
+    if transport == "http":
+        mcp.run(
+            transport="http",
+            host=config.http_host,
+            port=config.http_port,
+        )
+        return
     mcp.run(transport="stdio")
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    """CLI entrypoint; ``--http`` overrides the environment transport."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help="run the Streamable HTTP transport instead of the stdio default",
+    )
+    args = parser.parse_args(argv)
+    run_server(force_http=args.http)
+
+
+if __name__ == "__main__":
+    main()
 
 
 __all__ = [
     "analyze_deal",
     "compare_markets",
+    "create_http_app",
     "find_deals",
     "find_contact",
     "financing_options",
@@ -81,10 +132,13 @@ __all__ = [
     "draft_outreach",
     "handle_counter",
     "market_intel",
+    "main",
     "mcp",
     "owner_lookup",
     "qualify_me",
     "recommend_offer",
+    "resolve_transport",
+    "run_server",
     "search_properties",
     "size_debt",
 ]

@@ -1,6 +1,7 @@
 """Configuration for the CRE deal-intelligence MCP server."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,6 +20,20 @@ class SourceToggle(BaseModel):
 
 
 class CreConfig(BaseSettings):
+    transport: Literal["stdio", "http"] = Field(
+        default="stdio",
+        validation_alias=_env_aliases("transport"),
+    )
+    http_host: str = Field(
+        default="0.0.0.0",
+        validation_alias=_env_aliases("http_host"),
+    )
+    http_port: int = Field(
+        default=8000,
+        ge=1,
+        le=65535,
+        validation_alias=_env_aliases("http_port"),
+    )
     request_delay_seconds: float = Field(
         default=3.0,
         validation_alias=_env_aliases("request_delay_seconds"),
@@ -66,6 +81,14 @@ class CreConfig(BaseSettings):
     browser_headless: bool = Field(
         default=True,
         validation_alias=_env_aliases("browser_headless"),
+    )
+    browser_path: Path | None = Field(
+        default=None,
+        validation_alias=_env_aliases("browser_path"),
+    )
+    proxy_url: SecretStr | None = Field(
+        default=None,
+        validation_alias=_env_aliases("proxy_url"),
     )
     sources: dict[str, SourceToggle] = Field(
         default_factory=lambda: {
