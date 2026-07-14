@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -64,6 +65,7 @@ def _action_data(action: str | Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("action cannot be blank")
     normalized = label.casefold().replace("-", "_").replace(" ", "_")
     text = " ".join([normalized, *(str(value).casefold() for value in data.values())])
+    action_tokens = set(filter(None, re.split(r"[^a-z0-9]+", normalized)))
     public = _optional_bool(data.get("general_solicitation"))
     if public is None:
         public = _optional_bool(data.get("public"))
@@ -71,7 +73,26 @@ def _action_data(action: str | Mapping[str, Any]) -> dict[str, Any]:
         public = any(term in text for term in PUBLIC_ACTION_TERMS)
     accepting = _optional_bool(data.get("accepting_money"))
     if accepting is None:
-        accepting = any(term in text for term in PURCHASER_ACTION_TERMS)
+        accepting = any(term in text for term in PURCHASER_ACTION_TERMS) or (
+            bool(
+                action_tokens.intersection(
+                    {"accept", "accepting", "close", "closing", "sell", "selling"}
+                )
+            )
+            and bool(
+                action_tokens.intersection(
+                    {
+                        "investor",
+                        "purchaser",
+                        "subscription",
+                        "money",
+                        "funds",
+                        "security",
+                        "sale",
+                    }
+                )
+            )
+        )
 
     accredited = _optional_bool(data.get("accredited"))
     if accredited is None and "non_accredited" in text:
@@ -79,7 +100,16 @@ def _action_data(action: str | Mapping[str, Any]) -> dict[str, Any]:
     elif accredited is None and "accredited" in text:
         accredited = True
     verified = _optional_bool(data.get("accreditation_verified"))
-    if verified is None and "unverified" in text:
+    unverified_markers = (
+        "unverified",
+        "not_verified",
+        "without_verification",
+        "pending_verification",
+        "verification_pending",
+        "self_certified",
+        "self_certification",
+    )
+    if verified is None and any(marker in text for marker in unverified_markers):
         verified = False
     elif verified is None and "verified" in text:
         verified = True

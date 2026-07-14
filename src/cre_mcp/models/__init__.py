@@ -53,6 +53,12 @@ from cre_mcp.models.market import (
     RentComparable,
     RentComps,
 )
+from cre_mcp.models.ops import (
+    OperatingItem,
+    OperatingPlaybook,
+    OpsCategory,
+    OpsStatus,
+)
 from cre_mcp.models.scoring import (
     Band,
     DealScore,
@@ -69,10 +75,12 @@ from cre_mcp.models.structure import (
     StructureAdvice,
     StructureIntent,
 )
+from cre_mcp.models.tax import AfterTaxResult, DepreciationYear
 from cre_mcp.models.underwriting import UnderwritingResult
 
 __all__ = [
     "AggregatedSearchResult",
+    "AfterTaxResult",
     "Band",
     "BootBasisResult",
     "BrokerContact",
@@ -89,6 +97,7 @@ __all__ = [
     "DDPlan",
     "DDStatus",
     "DebtSizing",
+    "DepreciationYear",
     "Deal",
     "DealAttributes",
     "DealContext",
@@ -112,6 +121,10 @@ __all__ = [
     "MetricValue",
     "OwnerRecord",
     "OfferRecommendation",
+    "OperatingItem",
+    "OperatingPlaybook",
+    "OpsCategory",
+    "OpsStatus",
     "OutreachDraft",
     "ParcelRecord",
     "PropertyDetail",

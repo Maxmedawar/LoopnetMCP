@@ -88,6 +88,23 @@ def test_506c_allows_publicity_but_blocks_unverified_or_non_accredited_sales():
     assert "only to accredited investors" in non_accredited.why
 
 
+@pytest.mark.parametrize(
+    "action",
+    [
+        "accept an unverified accredited investor",
+        "accept_unverified_accredited_investor",
+        "accept self-certified accredited investor",
+        "close subscription for accredited investor pending verification",
+    ],
+)
+def test_506c_natural_language_unverified_acceptance_is_always_blocked(action):
+    result = check_solicitation("506c", action)
+
+    assert result.allowed is False
+    assert "not been verified" in result.why
+    assert "self-certification alone" in result.why
+
+
 def test_bad_mode_and_unknown_purchaser_are_blocked():
     with pytest.raises(ValueError, match="506b or 506c"):
         check_solicitation("reg-a", "advertise")

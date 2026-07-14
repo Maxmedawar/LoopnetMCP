@@ -30,6 +30,7 @@ PIPELINE_STAGES = (
     "passed",
 )
 PIPELINE_STAGE_SET = frozenset(PIPELINE_STAGES)
+OPS_STATUSES = frozenset({"not_started", "in_progress", "complete", "waived"})
 
 
 class DealStore:
@@ -84,6 +85,22 @@ class DealStore:
             );
             CREATE INDEX IF NOT EXISTS idx_dd_items_deadline
                 ON dd_items(deal_id, deadline);
+
+            CREATE TABLE IF NOT EXISTS ops_events (
+                deal_id TEXT NOT NULL,
+                event_key TEXT NOT NULL,
+                event_json TEXT NOT NULL,
+                category TEXT NOT NULL,
+                event_date TEXT,
+                status TEXT NOT NULL DEFAULT 'not_started',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(deal_id, event_key),
+                FOREIGN KEY(deal_id) REFERENCES deals(deal_id) ON DELETE CASCADE,
+                CHECK(category IN ('month_one', 'recurring', 'lease', 'nudge')),
+                CHECK(status IN ('not_started', 'in_progress', 'complete', 'waived'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_ops_events_date
+                ON ops_events(deal_id, event_date, category);
 
             CREATE TABLE IF NOT EXISTS saved_searches (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -379,6 +396,166 @@ class DealStore:
         except Exception as exc:
             logger.error("diligence read failed for %s: %s", deal_id, exc)
             return []
+
+    def _save_ops_events(
+        self,
+        deal_id: str,
+        events: list[dict[str, Any]],
+    ) -> bool:
+        now = self._now()
+        with self._connect() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM deals WHERE deal_id = ?",
+                (deal_id,),
+            ).fetchone()
+            if exists is None:
+                return False
+            active_keys: list[str] = []
+            for event in events:
+                key = str(event.get("key") or "").strip()
+                category = str(event.get("category") or "").strip()
+                if not key:
+                    raise ValueError("operating event key cannot be blank")
+                if category not in {"month_one", "recurring", "lease", "nudge"}:
+                    raise ValueError(f"invalid operating event category: {category}")
+                previous = connection.execute(
+                    "SELECT status FROM ops_events WHERE deal_id = ? AND event_key = ?",
+                    (deal_id, key),
+                ).fetchone()
+                status = (
+                    str(previous["status"])
+                    if previous is not None
+                    else str(event.get("status") or "not_started")
+                )
+                if status not in {"not_started", "in_progress", "complete", "waived"}:
+                    raise ValueError(f"invalid operating event status: {status}")
+                payload = {**event, "status": status}
+                event_date = payload.get("event_date")
+                if event_date is not None:
+                    event_date = str(event_date)
+                connection.execute(
+                    """
+                    INSERT INTO ops_events(
+                        deal_id, event_key, event_json, category,
+                        event_date, status, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(deal_id, event_key) DO UPDATE SET
+                        event_json = excluded.event_json,
+                        category = excluded.category,
+                        event_date = excluded.event_date,
+                        status = excluded.status,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        deal_id,
+                        key,
+                        json.dumps(payload, separators=(",", ":"), default=str),
+                        category,
+                        event_date,
+                        status,
+                        now,
+                    ),
+                )
+                active_keys.append(key)
+            if active_keys:
+                placeholders = ",".join("?" for _ in active_keys)
+                connection.execute(
+                    f"DELETE FROM ops_events WHERE deal_id = ? AND event_key NOT IN ({placeholders})",
+                    (deal_id, *active_keys),
+                )
+            else:
+                connection.execute("DELETE FROM ops_events WHERE deal_id = ?", (deal_id,))
+        return True
+
+    async def save_ops_events(
+        self,
+        deal_id: str,
+        events: Iterable[dict[str, Any]],
+    ) -> bool:
+        """Persist a generated operating calendar while retaining task statuses."""
+        materialized = [dict(event) for event in events]
+        try:
+            return await asyncio.to_thread(
+                self._save_ops_events,
+                deal_id,
+                materialized,
+            )
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.error("operating-calendar persistence failed for %s: %s", deal_id, exc)
+            return False
+
+    def _get_ops_events(self, deal_id: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT event_json, status, event_date
+                FROM ops_events
+                WHERE deal_id = ?
+                ORDER BY CASE WHEN event_date IS NULL THEN 1 ELSE 0 END,
+                         event_date, category, event_key
+                """,
+                (deal_id,),
+            ).fetchall()
+        events: list[dict[str, Any]] = []
+        for row in rows:
+            payload = json.loads(str(row["event_json"]))
+            payload["status"] = row["status"]
+            payload["event_date"] = row["event_date"]
+            events.append(payload)
+        return events
+
+    async def get_ops_events(self, deal_id: str) -> list[dict[str, Any]]:
+        """Return persisted operating reminders in chronological order."""
+        try:
+            return await asyncio.to_thread(self._get_ops_events, deal_id)
+        except Exception as exc:
+            logger.error("operating-calendar read failed for %s: %s", deal_id, exc)
+            return []
+
+    def _set_ops_event_status(self, deal_id: str, key: str, status: str) -> bool:
+        if status not in OPS_STATUSES:
+            raise ValueError(
+                f"status must be one of {', '.join(sorted(OPS_STATUSES))}"
+            )
+        now = self._now()
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT event_json FROM ops_events
+                WHERE deal_id = ? AND event_key = ?
+                """,
+                (deal_id, key),
+            ).fetchone()
+            if row is None:
+                return False
+            payload = json.loads(str(row["event_json"]))
+            payload["status"] = status
+            connection.execute(
+                """
+                UPDATE ops_events
+                SET status = ?, event_json = ?, updated_at = ?
+                WHERE deal_id = ? AND event_key = ?
+                """,
+                (
+                    status,
+                    json.dumps(payload, separators=(",", ":"), default=str),
+                    now,
+                    deal_id,
+                    key,
+                ),
+            )
+        return True
+
+    async def set_ops_event_status(self, deal_id: str, key: str, status: str) -> bool:
+        """Update one persisted operating reminder's status."""
+        return await asyncio.to_thread(
+            self._set_ops_event_status,
+            deal_id,
+            key,
+            status,
+        )
 
     def _set_dd_item_status(self, deal_id: str, key: str, status: str) -> bool:
         if status not in DD_STATUSES:

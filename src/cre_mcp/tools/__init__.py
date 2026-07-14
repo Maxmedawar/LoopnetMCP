@@ -11,6 +11,7 @@ def register_all(mcp: Any) -> None:
         execution_tools,
         listing_tools,
         market_tools,
+        ops_tools,
         owner_tools,
         pipeline_tools,
         structure_tools,
@@ -57,6 +58,8 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(capital_tools.model_waterfall)
     mcp.tool()(capital_tools.draft_ppm)
     mcp.tool()(capital_tools.draft_form_d)
+    mcp.tool()(ops_tools.after_tax_returns)
+    mcp.tool()(ops_tools.operating_playbook)
 
 
 __all__ = ["register_all"]

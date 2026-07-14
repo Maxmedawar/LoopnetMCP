@@ -26,7 +26,8 @@ Fable reviews independently after each phase before advancing.
 | 17 | Completeness hardening | 🟢 complete | 385 passed, 1 warning |
 | 18 | Entity/structure engine + 1031 manager | 🟢 complete | 470 passed, 1 warning |
 | 19 | Capital-raise suite + SEC guardrails | 🟢 complete | 491 passed, 1 warning |
-| **Overall** | **Phases 1–19 delivered** | **🟢 STRUCTURE & SCALE IN PROGRESS — 41 tools** | **491 passed, 1 warning** |
+| 20 | After-tax returns + operating playbook | 🟢 complete | 506 passed, 1 warning |
+| **Overall** | **Full roadmap delivered: Execution + Trust + Structure/Scale** | **🟢 FULL ROADMAP COMPLETE — 43 tools** | **506 passed, 1 warning** |
 
 ## Log
 
@@ -298,3 +299,35 @@ Fable reviews independently after each phase before advancing.
     REQUIRED`, never accept funds or establish an exemption, and require securities counsel before
     solicitation or money plus Form D/state blue-sky work. Deviation: none.
   - Pytest: `491 passed, 1 warning in 22.12s`
+- 2026-07-13 — Phase 20 after-tax returns and operating playbook complete; full roadmap complete.
+  - Status: GREEN; the Execution/Coach, Trust, and Structure/Scale layers are all delivered.
+    All 43 tools are registered, and the engine now carries a deal from sourcing and evidence-
+    gated scoring through execution, structure/capital, after-tax modeling, and operations.
+  - Files changed: added transparent `AfterTaxResult`/depreciation models and deterministic
+    residential/commercial improvement-basis schedules; added optional simplified 5/7/15-year
+    cost-seg/bonus scenarios, annual tax shields, debt-aware pre-/after-tax cash flows, 25%
+    unrecaptured-§1250 treatment, capital-gain decomposition, IRR/equity multiples, assumptions,
+    and the mandatory CPA/cost-seg-study gate. Added asset-aware `OperatingPlaybook` models and
+    month-one, recurring, lease-critical, refi/1031/next-deal calendars; extended `DealStore`
+    with durable reminders and retained statuses; added and registered `after_tax_returns` and
+    `operating_playbook`; added Phase 20 math, persistence, boundary, and registration tests.
+  - Required Phase 19 fix: normalized natural-language purchaser actions so 506(c) now blocks
+    accepting an unverified, pending-verification, or merely self-certified accredited investor.
+    The verified-accreditation rule and securities-attorney gate remain mandatory.
+  - Rule verification: current IRS guidance supports excluding land, 27.5-year residential and
+    39-year nonresidential recovery periods, and a maximum 25% rate for unrecaptured §1250 gain.
+    Bonus eligibility, placed-in-service timing, MACRS conventions, passive-loss use, basis,
+    §1245/§1250 treatment, and state/NIIT effects remain explicitly outside the estimate and must
+    be confirmed by a CPA; cost segregation requires a qualified study.
+  - Live verification: real priced Crexi deal `2247699` modeled a $2,506,400 purchase at 7.037273%
+    pre-tax IRR versus 5.477289% after-tax IRR and exposed the 25% §1250 rate plus CPA gate. Its
+    persisted operating playbook returned five month-one actions, the loud post-sale property-tax
+    `REASSESSMENT` warning, five recurring controls, six lease critical dates, and three nudges.
+  - Honest remaining future work: nationwide closed-sale comparable coverage requires a paid
+    source; Medawar Deal Score/value outputs still need outcome-based backtesting; reliable
+    production operation against Cloudflare/anti-bot listing sources requires hosted browser/
+    proxy infrastructure and monitoring. Unpriced deals remain intentionally unavailable to the
+    after-tax model until a purchase-price assumption is supplied.
+  - Deviation: none. The model adds a conservative, explicit §1245 recapture line for accelerated
+    cost-seg components rather than incorrectly treating every accelerated dollar as §1250 gain.
+  - Pytest: `506 passed, 1 warning in 21.91s`
