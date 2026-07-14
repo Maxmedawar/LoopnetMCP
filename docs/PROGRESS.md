@@ -19,11 +19,12 @@ Fable reviews independently after each phase before advancing.
 | 10 | Outreach & negotiation coach | 🟢 complete | 409 passed, 1 warning |
 | 11 | Financing & qualification | 🟢 complete | 426 passed, 1 warning |
 | 12 | Due-diligence tracker + closing coordinator | 🟢 complete | 442 passed, 1 warning |
+| 13 | Pipeline / CRM + saved-search alerts | 🟢 complete | 454 passed, 1 warning |
 | 14 | Listing intelligence + confidence gating | 🟢 complete | 352 passed, 1 warning |
 | 15 | Free comps engine + AVM | 🟢 complete | 371 passed, 1 warning |
 | 16 | Live-API hardening | 🟢 complete | 378 passed, 1 warning |
 | 17 | Completeness hardening | 🟢 complete | 385 passed, 1 warning |
-| **Overall** | **Phases 1–12 + 14–17 delivered** | **🟢 V2 EXECUTION LAYER IN PROGRESS — 23 tools** | **442 passed, 1 warning** |
+| **Overall** | **Phases 1–17 delivered** | **🟢 EXECUTION / COACH LAYER COMPLETE — 29 tools** | **454 passed, 1 warning** |
 
 ## Log
 
@@ -223,3 +224,23 @@ Fable reviews independently after each phase before advancing.
     so preserving every approved tool produces 23. The phase document's stated total of 22 is an
     arithmetic conflict; no existing or required tool was removed to force that count.
   - Pytest: `442 passed, 1 warning in 21.75s`
+- 2026-07-13 — Phase 13 pipeline/CRM and saved-search alerts complete; Execution layer complete.
+  - Status: GREEN; durable pipeline stages/notes/score snapshots, source-qualified dedupe,
+    migration-safe Phase 12 database upgrades, persisted buy-boxes, per-search seen-match memory,
+    and new-only on-demand alert checks are verified. The full offer → LOI → outreach/negotiation
+    → financing → diligence → closing → pipeline/alerts Execution/Coach layer is now complete.
+  - Files changed: extended `DealStore` with all nine pipeline stages, timestamped note history,
+    score/grade/strategy snapshots, stage filtering, `saved_searches`/`seen_matches`, idempotent
+    seen recording, and legacy-schema migration; added six pipeline/alert MCP tools with grouped
+    pipeline output, buy-box validation, score-floor enforcement, per-search fault isolation, and
+    explicit pull-only disclosure; added pipeline migration/dedupe/persistence, saved-search
+    replay, error isolation, tool-boundary, and registration acceptance tests.
+  - Live verification: real Crexi deal `2247699` persisted with its score, moved from `analyzing`
+    to `contacted`, and retained its latest note. A temporary Austin retail/Crexi saved search
+    returned 50 scored new matches on its first pull and zero on the immediate replay, proving
+    `seen_matches` suppression. Phase 13 adds six named tools to the prior 23, yielding 29; the
+    phase document's `~28` target is approximate and no required/existing tool was removed.
+  - Hosting boundary: `check_alerts` is deliberately on-demand and runs only when called. True
+    proactive scheduled or push alerts require deploying the always-on hosted service with a
+    cron/scheduler; the local MCP process cannot initiate checks while it is not running.
+  - Pytest: `454 passed, 1 warning in 21.51s`

@@ -65,4 +65,4 @@ async def test_owner_lookup_returns_error_dict_for_missing_record():
 async def test_owner_lookup_is_registered_with_the_nineteen_tool_suite():
     tools = await mcp.get_tools()
     assert "owner_lookup" in tools
-    assert len(tools) == 23
+    assert len(tools) == 29

@@ -17,6 +17,18 @@ from cre_mcp.models.listings import Listing
 logger = logging.getLogger(__name__)
 
 DD_STATUSES = frozenset({"not_started", "in_progress", "blocked", "complete", "waived"})
+PIPELINE_STAGES = (
+    "lead",
+    "analyzing",
+    "contacted",
+    "loi",
+    "under_contract",
+    "diligence",
+    "closing",
+    "owned",
+    "passed",
+)
+PIPELINE_STAGE_SET = frozenset(PIPELINE_STAGES)
 
 
 class DealStore:
@@ -48,6 +60,11 @@ class DealStore:
                 source TEXT NOT NULL,
                 source_id TEXT NOT NULL,
                 listing_json TEXT NOT NULL,
+                stage TEXT NOT NULL DEFAULT 'lead',
+                notes TEXT NOT NULL DEFAULT '[]',
+                score REAL,
+                grade TEXT,
+                strategy TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -66,7 +83,42 @@ class DealStore:
             );
             CREATE INDEX IF NOT EXISTS idx_dd_items_deadline
                 ON dd_items(deal_id, deadline);
+
+            CREATE TABLE IF NOT EXISTS saved_searches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                query_json TEXT NOT NULL,
+                min_score REAL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS seen_matches (
+                search_id INTEGER NOT NULL,
+                dedupe_key TEXT NOT NULL,
+                first_seen TEXT NOT NULL,
+                PRIMARY KEY(search_id, dedupe_key),
+                FOREIGN KEY(search_id) REFERENCES saved_searches(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_seen_matches_search
+                ON seen_matches(search_id, first_seen);
             """
+        )
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(deals)").fetchall()
+        }
+        migrations = {
+            "stage": "stage TEXT NOT NULL DEFAULT 'lead'",
+            "notes": "notes TEXT NOT NULL DEFAULT '[]'",
+            "score": "score REAL",
+            "grade": "grade TEXT",
+            "strategy": "strategy TEXT",
+        }
+        for name, definition in migrations.items():
+            if name not in columns:
+                connection.execute(f"ALTER TABLE deals ADD COLUMN {definition}")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_deals_stage_updated ON deals(stage, updated_at)"
         )
         return connection
 
@@ -83,7 +135,13 @@ class DealStore:
     def _now() -> str:
         return datetime.now(UTC).isoformat()
 
-    def _save_deal(self, listing: Listing) -> str:
+    def _save_deal(
+        self,
+        listing: Listing,
+        score: float | None,
+        grade: str | None,
+        strategy: str | None,
+    ) -> str:
         deal_id = self.deal_id_for(listing)
         now = self._now()
         payload = listing.model_dump_json()
@@ -91,20 +149,47 @@ class DealStore:
             connection.execute(
                 """
                 INSERT INTO deals(
-                    deal_id, source, source_id, listing_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    deal_id, source, source_id, listing_json,
+                    score, grade, strategy, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(deal_id) DO UPDATE SET
                     listing_json = excluded.listing_json,
+                    score = COALESCE(excluded.score, deals.score),
+                    grade = COALESCE(excluded.grade, deals.grade),
+                    strategy = COALESCE(excluded.strategy, deals.strategy),
                     updated_at = excluded.updated_at
                 """,
-                (deal_id, listing.source, listing.source_id, payload, now, now),
+                (
+                    deal_id,
+                    listing.source,
+                    listing.source_id,
+                    payload,
+                    score,
+                    grade,
+                    strategy,
+                    now,
+                    now,
+                ),
             )
         return deal_id
 
-    async def save_deal(self, listing: Listing) -> str | None:
+    async def save_deal(
+        self,
+        listing: Listing,
+        *,
+        score: float | None = None,
+        grade: str | None = None,
+        strategy: str | None = None,
+    ) -> str | None:
         """Save or refresh a listing; persistence failure is logged, not raised."""
         try:
-            return await asyncio.to_thread(self._save_deal, listing)
+            return await asyncio.to_thread(
+                self._save_deal,
+                listing,
+                score,
+                grade,
+                strategy,
+            )
         except Exception as exc:
             logger.error("deal store save failed for %s:%s: %s", listing.source, listing.source_id, exc)
             return None
@@ -120,7 +205,8 @@ class DealStore:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT deal_id, source, source_id, listing_json, created_at, updated_at
+                SELECT deal_id, source, source_id, listing_json,
+                       stage, notes, score, grade, strategy, created_at, updated_at
                 FROM deals WHERE deal_id = ?
                 """,
                 (deal_id,),
@@ -135,11 +221,18 @@ class DealStore:
                 """,
                 (deal_id,),
             ).fetchall()
+        notes = self._decode_notes(row["notes"])
         return {
             "deal_id": row["deal_id"],
             "source": row["source"],
             "source_id": row["source_id"],
             "listing": json.loads(str(row["listing_json"])),
+            "stage": row["stage"],
+            "notes": notes,
+            "last_note": notes[-1] if notes else None,
+            "score": row["score"],
+            "grade": row["grade"],
+            "strategy": row["strategy"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "dd_items": [self._decode_item(item) for item in items],
@@ -278,12 +371,300 @@ class DealStore:
             logger.error("diligence status update failed for %s/%s: %s", deal_id, key, exc)
             return False
 
+    @staticmethod
+    def _validate_stage(stage: str) -> str:
+        normalized = stage.strip().casefold()
+        if normalized not in PIPELINE_STAGE_SET:
+            raise ValueError(
+                f"stage must be one of {', '.join(PIPELINE_STAGES)}"
+            )
+        return normalized
+
+    @staticmethod
+    def _decode_notes(value: Any) -> list[dict[str, str]]:
+        try:
+            decoded = json.loads(str(value or "[]"))
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(decoded, list):
+            return []
+        return [item for item in decoded if isinstance(item, dict)]
+
+    def _update_stage(
+        self,
+        deal_id: str,
+        stage: str,
+        note: str | None,
+    ) -> bool:
+        normalized = self._validate_stage(stage)
+        now = self._now()
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT notes FROM deals WHERE deal_id = ?",
+                (deal_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            notes = self._decode_notes(row["notes"])
+            if note is not None and note.strip():
+                notes.append(
+                    {
+                        "text": note.strip(),
+                        "stage": normalized,
+                        "created_at": now,
+                    }
+                )
+            cursor = connection.execute(
+                """
+                UPDATE deals
+                SET stage = ?, notes = ?, updated_at = ?
+                WHERE deal_id = ?
+                """,
+                (
+                    normalized,
+                    json.dumps(notes, separators=(",", ":")),
+                    now,
+                    deal_id,
+                ),
+            )
+        return cursor.rowcount == 1
+
+    async def update_stage(
+        self,
+        deal_id: str,
+        stage: str,
+        note: str | None = None,
+    ) -> bool:
+        """Move a known deal and optionally append a timestamped note."""
+        self._validate_stage(stage)
+        try:
+            return await asyncio.to_thread(self._update_stage, deal_id, stage, note)
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.error("pipeline update failed for %s: %s", deal_id, exc)
+            return False
+
+    def _list_pipeline(self, stage: str | None) -> list[dict[str, Any]]:
+        parameters: tuple[Any, ...] = ()
+        where = ""
+        if stage is not None:
+            where = "WHERE d.stage = ?"
+            parameters = (stage,)
+        stage_order = " ".join(
+            f"WHEN '{value}' THEN {index}"
+            for index, value in enumerate(PIPELINE_STAGES)
+        )
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    d.deal_id, d.source, d.source_id, d.listing_json,
+                    d.stage, d.notes, d.score, d.grade, d.strategy,
+                    d.created_at, d.updated_at,
+                    COUNT(i.item_key) AS dd_total,
+                    SUM(CASE WHEN i.status = 'complete' THEN 1 ELSE 0 END) AS dd_complete
+                FROM deals d
+                LEFT JOIN dd_items i ON i.deal_id = d.deal_id
+                {where}
+                GROUP BY d.deal_id
+                ORDER BY CASE d.stage {stage_order} ELSE 999 END,
+                         d.updated_at DESC, d.deal_id
+                """,
+                parameters,
+            ).fetchall()
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            listing = json.loads(str(row["listing_json"]))
+            notes = self._decode_notes(row["notes"])
+            results.append(
+                {
+                    "deal_id": row["deal_id"],
+                    "source": row["source"],
+                    "source_id": row["source_id"],
+                    "name": listing.get("name"),
+                    "address": listing.get("address"),
+                    "city": listing.get("city"),
+                    "state": listing.get("state"),
+                    "price_usd": listing.get("price_usd"),
+                    "url": listing.get("url"),
+                    "stage": row["stage"],
+                    "score": row["score"],
+                    "grade": row["grade"],
+                    "strategy": row["strategy"],
+                    "notes": notes,
+                    "last_note": notes[-1] if notes else None,
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "dd_total": int(row["dd_total"] or 0),
+                    "dd_complete": int(row["dd_complete"] or 0),
+                }
+            )
+        return results
+
+    async def list_pipeline(
+        self,
+        stage: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return pipeline rows, optionally filtered to one validated stage."""
+        normalized = self._validate_stage(stage) if stage is not None else None
+        try:
+            return await asyncio.to_thread(self._list_pipeline, normalized)
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.error("pipeline list failed: %s", exc)
+            return []
+
+    def _save_search(
+        self,
+        name: str,
+        query: dict[str, Any],
+        min_score: float | None,
+    ) -> int:
+        now = self._now()
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO saved_searches(name, query_json, min_score, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    name.strip(),
+                    json.dumps(query, separators=(",", ":"), default=str),
+                    min_score,
+                    now,
+                ),
+            )
+        return int(cursor.lastrowid)
+
+    async def save_search(
+        self,
+        name: str,
+        query: dict[str, Any],
+        min_score: float | None = None,
+    ) -> int | None:
+        """Persist a named buy-box and return its numeric identifier."""
+        if not name.strip():
+            raise ValueError("search name cannot be blank")
+        if not isinstance(query, dict):
+            raise ValueError("search query must be a dictionary")
+        try:
+            return await asyncio.to_thread(self._save_search, name, query, min_score)
+        except Exception as exc:
+            logger.error("saved search create failed for %s: %s", name, exc)
+            return None
+
+    @staticmethod
+    def _decode_search(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": int(row["id"]),
+            "name": row["name"],
+            "query": json.loads(str(row["query_json"])),
+            "min_score": row["min_score"],
+            "created_at": row["created_at"],
+            "seen_count": int(row["seen_count"] or 0) if "seen_count" in row.keys() else 0,
+        }
+
+    def _get_search(self, search_id: int) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT s.id, s.name, s.query_json, s.min_score, s.created_at,
+                       COUNT(m.dedupe_key) AS seen_count
+                FROM saved_searches s
+                LEFT JOIN seen_matches m ON m.search_id = s.id
+                WHERE s.id = ?
+                GROUP BY s.id
+                """,
+                (search_id,),
+            ).fetchone()
+        return self._decode_search(row) if row is not None else None
+
+    async def get_search(self, search_id: int) -> dict[str, Any] | None:
+        """Return one saved-search record by identifier."""
+        try:
+            return await asyncio.to_thread(self._get_search, search_id)
+        except Exception as exc:
+            logger.error("saved search read failed for %s: %s", search_id, exc)
+            return None
+
+    def _list_searches(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT s.id, s.name, s.query_json, s.min_score, s.created_at,
+                       COUNT(m.dedupe_key) AS seen_count
+                FROM saved_searches s
+                LEFT JOIN seen_matches m ON m.search_id = s.id
+                GROUP BY s.id
+                ORDER BY s.created_at, s.id
+                """
+            ).fetchall()
+        return [self._decode_search(row) for row in rows]
+
+    async def list_searches(self) -> list[dict[str, Any]]:
+        """List saved buy-boxes with their seen-match counts."""
+        try:
+            return await asyncio.to_thread(self._list_searches)
+        except Exception as exc:
+            logger.error("saved search list failed: %s", exc)
+            return []
+
+    def _seen_keys(self, search_id: int) -> set[str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT dedupe_key FROM seen_matches WHERE search_id = ?",
+                (search_id,),
+            ).fetchall()
+        return {str(row["dedupe_key"]) for row in rows}
+
+    async def seen_keys(self, search_id: int) -> set[str]:
+        """Return the source-qualified matches already emitted for a search."""
+        try:
+            return await asyncio.to_thread(self._seen_keys, search_id)
+        except Exception as exc:
+            logger.error("seen-match read failed for search %s: %s", search_id, exc)
+            return set()
+
+    def _record_seen(self, search_id: int, keys: Iterable[str]) -> int:
+        now = self._now()
+        unique = sorted({key.strip() for key in keys if key and key.strip()})
+        inserted = 0
+        with self._connect() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM saved_searches WHERE id = ?",
+                (search_id,),
+            ).fetchone()
+            if exists is None:
+                return 0
+            for key in unique:
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO seen_matches(search_id, dedupe_key, first_seen)
+                    VALUES (?, ?, ?)
+                    """,
+                    (search_id, key, now),
+                )
+                inserted += max(cursor.rowcount, 0)
+        return inserted
+
+    async def record_seen(self, search_id: int, keys: Iterable[str]) -> int:
+        """Record matches idempotently and return how many keys were newly inserted."""
+        materialized = list(keys)
+        try:
+            return await asyncio.to_thread(self._record_seen, search_id, materialized)
+        except Exception as exc:
+            logger.error("seen-match write failed for search %s: %s", search_id, exc)
+            return 0
+
     def _list_deals(self) -> list[dict[str, Any]]:
         with self._connect() as connection:
             rows = connection.execute(
                 """
                 SELECT
                     d.deal_id, d.source, d.source_id, d.listing_json,
+                    d.stage, d.notes, d.score, d.grade, d.strategy,
                     d.created_at, d.updated_at,
                     COUNT(i.item_key) AS dd_total,
                     SUM(CASE WHEN i.status = 'complete' THEN 1 ELSE 0 END) AS dd_complete
@@ -296,6 +677,7 @@ class DealStore:
         results: list[dict[str, Any]] = []
         for row in rows:
             listing = json.loads(str(row["listing_json"]))
+            notes = self._decode_notes(row["notes"])
             results.append(
                 {
                     "deal_id": row["deal_id"],
@@ -306,6 +688,11 @@ class DealStore:
                     "city": listing.get("city"),
                     "state": listing.get("state"),
                     "price_usd": listing.get("price_usd"),
+                    "stage": row["stage"],
+                    "score": row["score"],
+                    "grade": row["grade"],
+                    "strategy": row["strategy"],
+                    "last_note": notes[-1] if notes else None,
                     "created_at": row["created_at"],
                     "updated_at": row["updated_at"],
                     "dd_total": int(row["dd_total"] or 0),
@@ -328,4 +715,10 @@ def get_deal_store(config: CreConfig | None = None) -> DealStore:
     return DealStore(config=config or CreConfig())
 
 
-__all__ = ["DD_STATUSES", "DealStore", "get_deal_store"]
+__all__ = [
+    "DD_STATUSES",
+    "PIPELINE_STAGES",
+    "PIPELINE_STAGE_SET",
+    "DealStore",
+    "get_deal_store",
+]
