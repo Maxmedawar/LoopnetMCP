@@ -20,6 +20,7 @@ from cre_mcp.tools.execution_tools import (
     size_debt,
 )
 from tests.scoring.builders import deal_context, market_pack
+from tests.expected import EXPECTED_TOOL_COUNT
 
 
 def _context():
@@ -96,7 +97,7 @@ async def test_execution_tools_return_error_dicts():
 
 
 @pytest.mark.asyncio
-async def test_execution_tools_are_registered_and_tool_count_is_seventy_four():
+async def test_execution_tools_are_registered_and_tool_count_matches_expected():
     tools = await mcp.get_tools()
     assert {
         "recommend_offer",
@@ -112,7 +113,7 @@ async def test_execution_tools_are_registered_and_tool_count_is_seventy_four():
         "save_deal",
         "list_deals",
     } <= set(tools)
-    assert len(tools) == 74
+    assert len(tools) == EXPECTED_TOOL_COUNT
 
 
 @pytest.mark.asyncio

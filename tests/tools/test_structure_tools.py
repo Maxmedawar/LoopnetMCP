@@ -15,6 +15,7 @@ from cre_mcp.tools.structure_tools import (
     start_exchange,
 )
 from tests.scoring.builders import deal_context
+from tests.expected import EXPECTED_TOOL_COUNT
 
 
 async def _save(store: DealStore, source_id: str, price: float):
@@ -110,4 +111,4 @@ async def test_structure_tools_registered_and_total_is_seventy_four():
         "identify_replacement",
         "calc_boot_basis",
     } <= set(tools)
-    assert len(tools) == 74
+    assert len(tools) == EXPECTED_TOOL_COUNT

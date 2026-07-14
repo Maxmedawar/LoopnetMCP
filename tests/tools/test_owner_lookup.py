@@ -7,6 +7,7 @@ import pytest
 from cre_mcp.models import OwnerRecord, ParcelRecord
 from cre_mcp.server import mcp
 from cre_mcp.tools.owner_tools import owner_lookup
+from tests.expected import EXPECTED_TOOL_COUNT
 
 
 def _owner() -> OwnerRecord:
@@ -65,4 +66,4 @@ async def test_owner_lookup_returns_error_dict_for_missing_record():
 async def test_owner_lookup_is_registered_with_the_seventy_four_tool_suite():
     tools = await mcp.get_tools()
     assert "owner_lookup" in tools
-    assert len(tools) == 74
+    assert len(tools) == EXPECTED_TOOL_COUNT

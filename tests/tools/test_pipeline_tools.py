@@ -15,6 +15,7 @@ from cre_mcp.tools.pipeline_tools import (
     update_deal_stage,
 )
 from tests.scoring.builders import deal_context
+from tests.expected import EXPECTED_TOOL_COUNT
 
 
 def _analyzed() -> dict:
@@ -104,7 +105,7 @@ async def test_pipeline_tool_errors_are_dicts(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_phase13_tools_are_registered_and_total_is_seventy_four():
+async def test_phase13_tools_are_registered_and_total_matches_expected():
     tools = await mcp.get_tools()
     assert {
         "add_to_pipeline",
@@ -114,4 +115,4 @@ async def test_phase13_tools_are_registered_and_total_is_seventy_four():
         "list_searches",
         "check_alerts",
     } <= set(tools)
-    assert len(tools) == 74
+    assert len(tools) == EXPECTED_TOOL_COUNT

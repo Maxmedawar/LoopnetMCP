@@ -14,6 +14,7 @@ def register_all(mcp: Any) -> None:
         decision_tools,
         eval_tools,
         execution_tools,
+        ledger_tools,
         listing_tools,
         market_tools,
         memory_tools,
@@ -100,6 +101,12 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(arbitrage_tools.draft_master_lease_proposal)
     mcp.tool()(arbitrage_tools.draft_subtenant_outreach)
     mcp.tool()(arbitrage_tools.master_lease_playbook)
+    mcp.tool()(ledger_tools.record_lender_quote)
+    mcp.tool()(ledger_tools.resolve_lender_quote)
+    mcp.tool()(ledger_tools.record_defect_outcome)
+    mcp.tool()(ledger_tools.counterparty_track_record)
+    mcp.tool()(ledger_tools.lender_track_record)
+    mcp.tool()(ledger_tools.defect_track_record)
 
 
 __all__ = ["register_all"]

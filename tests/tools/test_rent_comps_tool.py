@@ -7,6 +7,7 @@ import pytest
 from cre_mcp.models import GeoLevel, GeoRef, MetricValue, RentComps
 from cre_mcp.server import mcp
 from cre_mcp.tools.market_tools import get_rent_comparables
+from tests.expected import EXPECTED_TOOL_COUNT
 
 
 def _geo() -> GeoRef:
@@ -61,4 +62,4 @@ async def test_rent_comps_tool_validation_and_error_dict():
 async def test_get_rent_comparables_is_registered_with_execution_tools():
     tools = await mcp.get_tools()
     assert "get_rent_comparables" in tools
-    assert len(tools) == 74
+    assert len(tools) == EXPECTED_TOOL_COUNT

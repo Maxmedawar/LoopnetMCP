@@ -16,6 +16,7 @@ from cre_mcp.tools.capital_tools import (
     record_commitment,
 )
 from tests.scoring.builders import deal_context
+from tests.expected import EXPECTED_TOOL_COUNT
 
 
 def _analysis_payload():
@@ -145,4 +146,4 @@ async def test_capital_tools_registered_and_total_is_seventy_four():
         "draft_ppm",
         "draft_form_d",
     } <= set(tools)
-    assert len(tools) == 74
+    assert len(tools) == EXPECTED_TOOL_COUNT

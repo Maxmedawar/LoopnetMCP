@@ -16,6 +16,7 @@ from cre_mcp.models import (
 )
 from cre_mcp.server import mcp
 from cre_mcp.tools.market_tools import get_comps
+from tests.expected import EXPECTED_TOOL_COUNT
 
 
 def _listing() -> Listing:
@@ -172,4 +173,4 @@ def test_no_paid_keys_builds_no_provider_and_preserves_free_only_behavior():
 async def test_get_comps_remains_registered_in_the_seventy_four_tool_suite():
     tools = await mcp.get_tools()
     assert "get_comps" in tools
-    assert len(tools) == 74
+    assert len(tools) == EXPECTED_TOOL_COUNT

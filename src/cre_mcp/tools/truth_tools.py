@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 
 from cre_mcp.deals.store import get_deal_store
+from cre_mcp.ledger.capture import capture_reconciliation
 from cre_mcp.truth.classify import classify
 from cre_mcp.truth.extract import extract_claims
 from cre_mcp.truth.models import DocumentRecord, FieldClaim
@@ -233,7 +234,7 @@ async def _deal_price(deal_id: str) -> float | None:
     return float(price) if isinstance(price, (int, float)) else None
 
 
-async def reconcile_deal_docs(deal_id: str) -> dict:
+async def reconcile_deal_docs(deal_id: str, counterparty: str | None = None) -> dict:
     """Resolve every ingested claim to one value by SOURCE AUTHORITY.
 
     Ranks competing claims (executed lease > estoppel > bank > rent roll > T12 >
@@ -241,12 +242,18 @@ async def reconcile_deal_docs(deal_id: str) -> dict:
     values for review, and flags pro-forma figures presented as in-place. It never
     averages conflicting facts.
 
+    Every run also grades the counterparty-authored claims (listing/OM/seller rep)
+    against the documents that outranked them and appends the results to the
+    permanent claim ledger — hits and misses both. That evidence cannot be
+    backfilled later; see counterparty_track_record to read it.
+
     Args:
         deal_id: Source-qualified deal identifier with ingested documents.
+        counterparty: Optional broker/seller name to attribute graded claims to.
 
     Returns:
         The reconciliation: per-field resolved values with citations + confidence,
-        and every unresolved conflict.
+        every unresolved conflict, and how many claims were ledgered.
     """
     logger.info("reconcile_deal_docs called: deal=%s", deal_id)
     try:
@@ -257,7 +264,14 @@ async def reconcile_deal_docs(deal_id: str) -> dict:
             return {"deal_id": deal_id.strip(), "note": "no ingested claims — run ingest_document first",
                     "resolutions": [], "conflicts": []}
         recon = resolve(deal_id.strip(), claims)
-        return recon.model_dump(mode="json")
+        ledgered = await capture_reconciliation(
+            recon,
+            counterparty=(counterparty.strip() if counterparty else None),
+            counterparty_role="broker" if counterparty else "unknown",
+        )
+        result = recon.model_dump(mode="json")
+        result["claims_ledgered"] = ledgered
+        return result
     except Exception as exc:
         logger.error("reconcile_deal_docs error: %s", exc)
         return {"error": str(exc)}
