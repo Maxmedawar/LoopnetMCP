@@ -18,6 +18,13 @@ dev = [
     "pytest>=8.0,<9",
     "pytest-asyncio>=0.24,<1",
 ]
+# Document Truth Engine parsers. Optional so the core scraper stays lean; the
+# truth/ parsers import these lazily and fall back to a stdlib path when absent.
+truth = [
+    "pdfplumber>=0.11,<1",
+    "openpyxl>=3.1,<4",
+    "pypdf>=6,<7",
+]
 
 [build-system]
 requires = ["setuptools>=68.0"]

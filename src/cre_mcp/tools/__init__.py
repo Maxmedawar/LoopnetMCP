@@ -16,6 +16,7 @@ def register_all(mcp: Any) -> None:
         owner_tools,
         pipeline_tools,
         structure_tools,
+        truth_tools,
     )
 
     mcp.tool()(listing_tools.search_properties)
@@ -63,6 +64,8 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(ops_tools.operating_playbook)
     mcp.tool()(eval_tools.backtest_score)
     mcp.tool()(eval_tools.record_deal_outcome)
+    mcp.tool()(truth_tools.ingest_document)
+    mcp.tool()(truth_tools.list_deal_documents)
 
 
 __all__ = ["register_all"]
