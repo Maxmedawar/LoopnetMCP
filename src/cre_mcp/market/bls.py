@@ -63,7 +63,9 @@ class BlsProvider(MarketDataProvider):
     @staticmethod
     def _years() -> tuple[str, str]:
         end = datetime.now(UTC).year
-        return str(end - 5), str(end)
+        # Include a full five-year comparison even when the current year's
+        # QCEW release has not begun yet.
+        return str(end - 7), str(end)
 
     async def laus_unemployment(self, geo: GeoRef) -> MetricSeries:
         """Return the BLS LAUS county unemployment-rate series."""
@@ -88,7 +90,9 @@ class BlsProvider(MarketDataProvider):
         payload = await self.client.post(
             "",
             {
-                "seriesid": [f"ENU{geo.county_fips}20510"],
+                # ENU + county + datatype=1 (all employees), size=0,
+                # ownership=0 (all), industry=10 (total, all industries).
+                "seriesid": [f"ENU{geo.county_fips}10010"],
                 "startyear": start,
                 "endyear": end,
             },

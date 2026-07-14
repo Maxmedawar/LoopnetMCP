@@ -50,7 +50,7 @@ async def test_address_query_maps_live_guilford_feature():
     assert parcel.last_sale_price == 2_450_000
     assert parcel.year_built == 1983
     parcel_query, sale_query = query.await_args_list
-    assert parcel_query.kwargs["where"] == "UPPER(LOCATION_ADDR)='100 A S ELM ST'"
+    assert parcel_query.kwargs["where"] == "UPPER(LOCATION_ADDR) LIKE '%100 A S ELM%'"
     assert parcel_query.kwargs["result_count"] == 1
     assert "UPPER(REID)='1'" in sale_query.kwargs["where"]
     assert sale_query.kwargs["order_by_fields"] == "PACKAGE_SALE_DATE DESC"
@@ -85,3 +85,25 @@ async def test_no_matching_feature_returns_none():
         new=AsyncMock(return_value=[]),
     ):
         assert await provider.lookup("999 Missing Road", None, _geo("08035", "08")) is None
+
+
+@pytest.mark.asyncio
+async def test_travis_address_query_matches_live_owner_fixture_with_contains_prefix():
+    samples = json.loads((FIXTURES / "metro_parcels.json").read_text())
+    provider = ArcgisParcelProvider(COUNTY_PARCEL_ENDPOINTS["48453"])
+    with patch(
+        "cre_mcp.enrichment.arcgis.arcgis_query",
+        new=AsyncMock(return_value=[samples["48453"]]),
+    ) as query:
+        parcel = await provider.lookup(
+            "9606 Old Manor Road, Austin, TX 78724",
+            None,
+            _geo("48453", "48"),
+        )
+
+    assert parcel is not None
+    assert parcel.owner_name == "AUSTIN IRON HOLDINGS LLC"
+    assert parcel.site_address == "9606 OLD MANOR RD TX 78724"
+    assert query.await_args.kwargs["where"] == (
+        "UPPER(situs_address) LIKE '%9606 OLD MANOR%'"
+    )

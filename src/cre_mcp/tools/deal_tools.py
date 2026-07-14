@@ -509,6 +509,11 @@ async def analyze_deal(
             value_estimate=value_estimate,
         )
         payload = deal.model_dump(mode="json")
+        payload["value_provenance"] = {
+            "method": value_estimate.method,
+            "confidence": value_estimate.confidence,
+            "n_comps": value_estimate.n_comps,
+        }
         warnings = {}
         if market_error:
             warnings["market"] = market_error

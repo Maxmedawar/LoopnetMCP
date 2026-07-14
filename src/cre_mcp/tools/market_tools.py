@@ -271,6 +271,11 @@ async def get_comps(
                 "asking_price": subject.price_usd,
             },
             "value_estimate": value_estimate.model_dump(mode="json"),
+            "value_provenance": {
+                "method": value_estimate.method,
+                "confidence": value_estimate.confidence,
+                "n_comps": value_estimate.n_comps,
+            },
             "comps": [comp.model_dump(mode="json") for comp in comps],
             "explanation": _comps_explanation(subject, value_estimate),
             "coverage_note": (

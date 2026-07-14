@@ -107,7 +107,9 @@ class OwnerLookup:
     ) -> str:
         address_key = normalize_address(address or "")
         apn_key = re.sub(r"\s+", "", (apn or "").upper())
-        return f"owner:v1:{county_fips}:{apn_key}:{address_key}"
+        # Bump the namespace when county coverage or mappings change so a
+        # previously cached miss cannot hide a newly wired public assessor.
+        return f"owner:v2:{county_fips}:{apn_key}:{address_key}"
 
     async def lookup(
         self,

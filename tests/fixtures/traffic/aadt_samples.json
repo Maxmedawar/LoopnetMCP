@@ -22,5 +22,11 @@
   "CA": [
     {"AHEAD_AADT": "71000", "BACK_AADT": "", "RTE": "60", "DESCRIPTION": "LOS ANGELES, BEGIN WESTBOUND LANES", "_geometry": {"x": -118.22646043, "y": 34.02889815}},
     {"AHEAD_AADT": "71000", "BACK_AADT": "", "RTE": "60", "DESCRIPTION": "LOS ANGELES, BEGIN WESTBOUND LANES", "_geometry": {"x": -118.22875356, "y": 34.02870157}}
+  ],
+  "NV": [
+    {"TRINA_Avg_AADT": 2900, "RouteNameFull": "US95N TO SR599S INT90A", "_geometry": {"paths": [[[-115.2465968, 36.24913014], [-115.24640326, 36.25212611]]]}}
+  ],
+  "GA": [
+    {"aadt": 20700, "description": "Forest Pkwy E of US-19,41/SR3, Forest Park", "lat": 33.62067, "lng": -84.36677}
   ]
 }

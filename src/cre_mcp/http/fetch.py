@@ -239,11 +239,17 @@ class FetchClient:
         body: Any = None,
         expects_json: bool = False,
         headers: Mapping[str, str] | None = None,
+        body_encoding: str = "json",
     ) -> str:
         """Run any request through the shared policy, cache, and retry path."""
         policy = self._policy_for_url(url)
         method = method.upper()
-        cache_key = self._cache_key(policy, method, url, body)
+        cache_body = (
+            body
+            if body_encoding == "json"
+            else {"body_encoding": body_encoding, "body": body}
+        )
+        cache_key = self._cache_key(policy, method, url, cache_body)
         cached = await self._cached_response(cache_key, policy, method)
         if cached is not None:
             return cached
@@ -263,6 +269,7 @@ class FetchClient:
                 body=body,
                 expects_json=expects_json,
                 headers=headers,
+                body_encoding=body_encoding,
             )
 
     async def fetch(self, url: str) -> str:
@@ -298,6 +305,24 @@ class FetchClient:
         )
         return self._decode_json(text, url)
 
+    async def post_form_json(
+        self,
+        url: str,
+        body: Mapping[str, Any],
+        *,
+        headers: Mapping[str, str] | None = None,
+    ) -> Any:
+        """POST form-encoded data and decode JSON through the policy/cache path."""
+        text = await self._request_text(
+            "POST",
+            url,
+            body=body,
+            expects_json=True,
+            headers=headers,
+            body_encoding="form",
+        )
+        return self._decode_json(text, url)
+
     @staticmethod
     def _decode_json(text: str, url: str) -> Any:
         try:
@@ -317,6 +342,7 @@ class FetchClient:
         body: Any = None,
         expects_json: bool = False,
         headers: Mapping[str, str] | None = None,
+        body_encoding: str = "json",
     ) -> str:
         policy = policy or self._policy_for_url(url)
         method = method.upper()
@@ -334,12 +360,19 @@ class FetchClient:
                     else:
                         response = await client.get(url)
                 elif method == "POST":
+                    request_body = (
+                        {"data": body}
+                        if body_encoding == "form"
+                        else {"json": body}
+                    )
                     if headers:
                         response = await client.post(
-                            url, json=body, headers=dict(headers)
+                            url,
+                            **request_body,
+                            headers=dict(headers),
                         )
                     else:
-                        response = await client.post(url, json=body)
+                        response = await client.post(url, **request_body)
                 else:
                     raise FetchClientError(f"Unsupported HTTP method: {method}")
 

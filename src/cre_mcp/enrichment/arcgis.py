@@ -59,12 +59,83 @@ def _date(value: Any) -> str | None:
             return datetime.fromtimestamp(seconds, tz=timezone.utc).date().isoformat()
         except (OSError, OverflowError, ValueError):
             return None
-    return _text(value)
+    text = _text(value)
+    if text is None:
+        return None
+    for fmt in ("%Y%m%d", "%Y%m", "%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            parsed = datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+        if fmt == "%Y%m":
+            return f"{parsed.year:04d}-{parsed.month:02d}-01"
+        return parsed.isoformat()
+    return text
 
 
 def _join_address(*parts: Any) -> str | None:
     values = [_text(part) for part in parts]
     return ", ".join(value for value in values if value) or None
+
+
+def _compose_address(
+    street: Any,
+    city: Any,
+    state: Any,
+    zip_code: Any,
+) -> str | None:
+    """Append locality pieces only when a county's combined field omits them."""
+    first = _text(street)
+    if first is None:
+        return _join_address(city, state, zip_code)
+    parts = [first]
+    existing = first.upper()
+    city_text = _text(city)
+    state_text = _text(state)
+    zip_text = _text(zip_code)
+    if city_text and city_text.upper() not in existing:
+        parts.append(city_text)
+    if state_text and not re.search(
+        rf"\b{re.escape(state_text.upper())}\b",
+        existing,
+    ):
+        parts.append(state_text)
+    if zip_text and not re.search(rf"\b{re.escape(zip_text)}\b", existing):
+        parts.append(zip_text)
+    return ", ".join(parts)
+
+
+def _join_text(*parts: Any) -> str | None:
+    values = [_text(part) for part in parts]
+    return " ".join(value for value in values if value) or None
+
+
+def _street_prefix(address: str) -> tuple[str | None, str | None]:
+    """Return house number and suffix-free street prefix for county queries."""
+    normalized = normalize_address(address.split(",", 1)[0])
+    parts = normalized.split()
+    if len(parts) < 2:
+        return None, None
+    number = parts[0]
+    street = parts[1:]
+    if street[-1] in {
+        "AVE",
+        "BLVD",
+        "CIR",
+        "CT",
+        "DR",
+        "HWY",
+        "LN",
+        "PKWY",
+        "PL",
+        "PLZ",
+        "RD",
+        "ST",
+        "TRL",
+        "WAY",
+    }:
+        street = street[:-1]
+    return number, " ".join(street) or None
 
 
 def map_parcel(
@@ -73,13 +144,21 @@ def map_parcel(
 ) -> ParcelRecord:
     """Map one county feature through its declared field schema."""
     site_state = _value(attributes, config, "site_state") or config.state
-    site_address = _join_address(
-        _value(attributes, config, "site_addr"),
+    site_street = _text(_value(attributes, config, "site_addr")) or _join_text(
+        _value(attributes, config, "site_number"),
+        _value(attributes, config, "site_pre_dir"),
+        _value(attributes, config, "site_street"),
+        _value(attributes, config, "site_suffix"),
+        _value(attributes, config, "site_post_dir"),
+        _value(attributes, config, "site_unit"),
+    )
+    site_address = _compose_address(
+        site_street,
         _value(attributes, config, "site_city"),
         site_state,
         _value(attributes, config, "site_zip"),
     )
-    owner_mailing_address = _join_address(
+    owner_mailing_address = _compose_address(
         _value(attributes, config, "owner_mailing_addr"),
         _value(attributes, config, "owner_mailing_city"),
         _value(attributes, config, "owner_mailing_state"),
@@ -88,7 +167,10 @@ def map_parcel(
     return ParcelRecord(
         apn=_text(_value(attributes, config, "apn")),
         site_address=site_address,
-        owner_name=_text(_value(attributes, config, "owner_name")),
+        owner_name=_text(_value(attributes, config, "owner_name")) or _join_text(
+            _value(attributes, config, "owner_name_1"),
+            _value(attributes, config, "owner_name_2"),
+        ),
         owner_mailing_address=owner_mailing_address,
         assessed_value=_number(_value(attributes, config, "assessed_value")),
         building_sqft=_number(_value(attributes, config, "building_sqft")),
@@ -130,7 +212,24 @@ class ArcgisParcelProvider:
             normalized = normalize_address(street)
             if not normalized:
                 return None
-            where = f"UPPER({address_field})='{_quote(normalized)}'"
+            number, street_prefix = _street_prefix(normalized)
+            query_prefix = " ".join(
+                value for value in (number, street_prefix) if value
+            )
+            where = f"UPPER({address_field}) LIKE '%{_quote(query_prefix)}%'"
+        elif (
+            address
+            and self.config.address_number_field
+            and self.config.address_street_field
+        ):
+            number, street_prefix = _street_prefix(address)
+            if not number or not street_prefix:
+                return None
+            where = (
+                f"{self.config.address_number_field}='{_quote(number)}' AND "
+                f"UPPER({self.config.address_street_field}) LIKE "
+                f"'{_quote(street_prefix)}%'"
+            )
         else:
             return None
 

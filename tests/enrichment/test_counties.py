@@ -31,22 +31,39 @@ def _geo(fips: str) -> GeoRef:
     )
 
 
-def test_all_three_verified_counties_declare_complete_mapping_contract():
-    assert set(COUNTY_PARCEL_ENDPOINTS) == {"37081", "04025", "08035"}
+def test_all_thirteen_verified_counties_declare_complete_mapping_contract():
+    assert set(COUNTY_PARCEL_ENDPOINTS) == {
+        "04013",
+        "04025",
+        "08035",
+        "12011",
+        "12086",
+        "13121",
+        "32003",
+        "37081",
+        "37119",
+        "48029",
+        "48113",
+        "48201",
+        "48453",
+    }
     for config in COUNTY_PARCEL_ENDPOINTS.values():
         assert REQUIRED_FIELDS <= config.field_map.keys()
-        assert config.arcgis_url.endswith(("FeatureServer/0", "MapServer/0"))
+        assert "/FeatureServer/" in config.arcgis_url or "/MapServer/" in config.arcgis_url
 
 
 def test_only_live_confirmed_counties_declare_sales_layers():
     assert COUNTY_PARCEL_ENDPOINTS["37081"].sales_layer.endswith("FeatureServer/0")
     assert COUNTY_PARCEL_ENDPOINTS["04025"].sales_layer.endswith("FeatureServer/5")
     assert COUNTY_PARCEL_ENDPOINTS["08035"].sales_layer is None
+    assert {
+        fips for fips, config in COUNTY_PARCEL_ENDPOINTS.items() if config.sales_layer
+    } == {"04013", "04025", "32003", "37081"}
 
 
 def test_config_selection_uses_resolved_county_fips_and_skips_unknown():
     assert config_for_geo(_geo("08035")) is COUNTY_PARCEL_ENDPOINTS["08035"]
-    assert config_for_geo(_geo("48453")) is None
+    assert config_for_geo(_geo("17031")) is None
     assert config_for_geo(None) is None
 
 
@@ -59,3 +76,23 @@ def test_douglas_live_field_map_populates_available_values_only():
     assert parcel.assessed_value == 907_962
     assert parcel.last_sale_price is None
     assert parcel.land_value is None
+
+
+def test_phase17_live_metro_fixtures_map_owner_parcel_and_available_sale_fields():
+    samples = json.loads((FIXTURES / "metro_parcels.json").read_text())
+
+    for fips, attributes in samples.items():
+        parcel = map_parcel(attributes, COUNTY_PARCEL_ENDPOINTS[fips])
+        assert parcel.apn
+        assert parcel.owner_name
+        assert parcel.site_address
+
+    assert map_parcel(samples["48453"], COUNTY_PARCEL_ENDPOINTS["48453"]).owner_name == (
+        "AUSTIN IRON HOLDINGS LLC"
+    )
+    clark = map_parcel(samples["32003"], COUNTY_PARCEL_ENDPOINTS["32003"])
+    assert clark.last_sale_price == 110_000
+    assert clark.last_sale_date == "2011-01-01"
+    mecklenburg = map_parcel(samples["37119"], COUNTY_PARCEL_ENDPOINTS["37119"])
+    assert mecklenburg.owner_name == "CLARLISSA MAE PONDS"
+    assert mecklenburg.last_sale_price == 362_000

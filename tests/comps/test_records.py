@@ -85,5 +85,18 @@ async def test_unwired_county_returns_empty_without_network():
         "cre_mcp.comps.records.arcgis_query",
         new=AsyncMock(),
     ) as query:
-        assert await sale_comps(_geo("48453"), _subject()) == []
+        assert await sale_comps(_geo("17031"), _subject()) == []
     query.assert_not_awaited()
+
+
+def test_phase17_maricopa_and_clark_sales_maps_are_live_and_date_tolerant():
+    metro = json.loads(
+        (Path(__file__).parents[1] / "fixtures" / "enrichment" / "metro_parcels.json").read_text()
+    )
+    maricopa = map_sale_comp(metro["04013"], COUNTY_PARCEL_ENDPOINTS["04013"])
+    clark = map_sale_comp(metro["32003"], COUNTY_PARCEL_ENDPOINTS["32003"])
+
+    assert maricopa is not None and maricopa.sale_price == 103_846
+    assert maricopa.sale_date == "2010-08-01"
+    assert clark is not None and clark.sale_price == 110_000
+    assert clark.sale_date == "2011-01-01"

@@ -12,12 +12,14 @@ from tests.conftest import MockResponse
 CREXI_URL = "https://api.crexi.com/assets/search"
 CREXI_DETAIL_URL = "https://api.crexi.com/assets/2622985"
 AUCTIONCOM_URL = "https://graph.auction.com/graphql"
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
 
-def _client(cache=None) -> FetchClient:
+def _client(cache=None, persistent_cache=None) -> FetchClient:
     client = FetchClient(
         config=CreConfig(request_delay_seconds=0, max_retries=1),
         cache=cache,
+        persistent_cache=persistent_cache,
     )
     client._warmed_up_hosts.add("api.crexi.com")
     return client
@@ -42,6 +44,40 @@ async def test_post_json_decodes_and_caches_by_stable_body_hash():
     assert first == cached == {"data": [{"id": 1}]}
     assert second == {"data": [{"id": 2}]}
     assert session.post.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_post_form_json_uses_form_body_headers_and_cache():
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "cre-mcp-test/1.0",
+    }
+    persistent = AsyncMock()
+    persistent.get.return_value = None
+    with patch("cre_mcp.http.fetch.AsyncSession") as session_class:
+        session = session_class.return_value
+        session.post = AsyncMock(return_value=MockResponse(200, '{"elements":[]}'))
+        session.close = AsyncMock()
+        async with _client(
+            cache=TTLCache(), persistent_cache=persistent
+        ) as client:
+            first = await client.post_form_json(
+                OVERPASS_URL,
+                {"data": "[out:json];node(1);out;"},
+                headers=headers,
+            )
+            cached = await client.post_form_json(
+                OVERPASS_URL,
+                {"data": "[out:json];node(1);out;"},
+                headers=headers,
+            )
+
+    assert first == cached == {"elements": []}
+    session.post.assert_awaited_once_with(
+        OVERPASS_URL,
+        data={"data": "[out:json];node(1);out;"},
+        headers=headers,
+    )
 
 
 @pytest.mark.asyncio

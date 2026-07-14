@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any
-from urllib.parse import urlencode
 
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.models.attributes import DealAttributes
@@ -14,6 +13,11 @@ from cre_mcp.models.listings import Listing
 logger = logging.getLogger(__name__)
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_FALLBACK_URL = "https://overpass.kumi.systems/api/interpreter"
+OVERPASS_HEADERS = {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "cre-mcp/2.0 (+https://github.com/maxmedawar/LoopnetMCP)",
+}
 _DRIVE_THRU_PATTERN = re.compile(
     r"\b(?:drive[- ]?thru|drive[- ]?through|drive[- ]?up window)\b",
     re.IGNORECASE,
@@ -100,18 +104,28 @@ class AttributeEnricher:
             f'nwr(around:100,{listing.lat},{listing.lon})["amenity"="parking"];'
             ");out center tags;"
         )
-        try:
-            payload = await self.fetch.get_json(f"{OVERPASS_URL}?{urlencode({'data': query})}")
-        except Exception as exc:
-            logger.warning(
-                "OpenStreetMap attributes unavailable for %s: %s",
-                listing.address,
-                exc,
-            )
-            return None
-        if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list):
-            return None
-        return [item for item in payload["elements"] if isinstance(item, dict)]
+        errors: list[str] = []
+        for endpoint in (OVERPASS_URL, OVERPASS_FALLBACK_URL):
+            try:
+                payload = await self.fetch.post_form_json(
+                    endpoint,
+                    {"data": query},
+                    headers=OVERPASS_HEADERS,
+                )
+            except Exception as exc:
+                errors.append(f"{endpoint}: {exc}")
+                continue
+            if isinstance(payload, dict) and isinstance(payload.get("elements"), list):
+                return [
+                    item for item in payload["elements"] if isinstance(item, dict)
+                ]
+            errors.append(f"{endpoint}: response did not contain elements")
+        logger.warning(
+            "OpenStreetMap attributes unavailable for %s: %s",
+            listing.address,
+            "; ".join(errors),
+        )
+        return None
 
     async def detect_drive_thru(self, listing: Listing) -> bool | None:
         """Detect drive-thru availability from text, then nearby OSM tags."""
@@ -172,6 +186,8 @@ async def parking(listing: Listing, parcel: Any = None) -> str | None:
 
 __all__ = [
     "AttributeEnricher",
+    "OVERPASS_FALLBACK_URL",
+    "OVERPASS_HEADERS",
     "OVERPASS_URL",
     "detect_drive_thru",
     "detect_parking",

@@ -103,10 +103,10 @@ async def test_owner_lookup_gracefully_skips_unconfigured_county(tmp_path):
         resolver=AsyncMock(
             return_value=GeoRef(
                 level=GeoLevel.COUNTY,
-                state_fips="48",
-                county_fips="48453",
-                name="Travis County, TX",
+                state_fips="17",
+                county_fips="17031",
+                name="Cook County, IL",
             )
         ),
     )
-    assert await lookup.lookup(address="100 Congress Ave, Austin, TX") is None
+    assert await lookup.lookup(address="100 State St, Chicago, IL") is None

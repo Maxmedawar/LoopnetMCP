@@ -40,6 +40,23 @@ class ErroringBls:
         return MetricSeries(points=[("2025-12", 3.4)], unit="percent", source="BLS")
 
 
+class HistoricalBls:
+    async def qcew_employment(self, geo):
+        return MetricSeries(
+            points=[
+                ("2019-01", 757_902),
+                ("2020-12", 771_513),
+                ("2024-12", 914_757),
+                ("2025-12", 939_358),
+            ],
+            unit="jobs",
+            source="BLS QCEW",
+        )
+
+    async def laus_unemployment(self, geo):
+        return MetricSeries(points=[("2025-12", 3.4)], unit="percent", source="BLS")
+
+
 class MissingProvider:
     async def series(self, series_id):
         raise RuntimeError("missing key")
@@ -117,3 +134,23 @@ async def test_no_api_keys_returns_partial_pack_without_raising(geo):
     pack = await intel.get_market_pack(geo)
     coverage_ratio = sum(pack.coverage.values()) / len(pack.coverage)
     assert 0 < coverage_ratio < 1
+
+
+@pytest.mark.asyncio
+async def test_five_year_job_growth_uses_full_qcew_history(geo):
+    missing = MissingProvider()
+    intel = MarketIntel(
+        census=FakeCensus(),
+        bls=HistoricalBls(),
+        fred=missing,
+        fhfa=missing,
+        hud=missing,
+        bea=missing,
+        irs=FakeIrs(),
+    )
+
+    pack = await intel.get_market_pack(geo)
+
+    assert pack.job_growth_5yr is not None
+    assert pack.job_growth_5yr.value == pytest.approx(4.0154, rel=1e-3)
+    assert pack.coverage["job_growth_5yr"] is True

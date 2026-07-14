@@ -29,6 +29,8 @@ class AadtConfig:
     year_field: str | None = None
     year: int | None = None
     where: str = "1=1"
+    lat_field: str | None = None
+    lon_field: str | None = None
 
 
 # Every layer below was queried successfully on 2026-07-13. The field names are
@@ -86,6 +88,27 @@ STATE_AADT_ENDPOINTS: dict[str, AadtConfig] = {
         route_field="RTE",
         year=2023,
         where="AHEAD_AADT IS NOT NULL AND AHEAD_AADT <> ''",
+    ),
+    "NV": AadtConfig(
+        arcgis_url=(
+            "https://services9.arcgis.com/eNX73FDxjlKFtCtH/arcgis/rest/services/"
+            "NDOT_FY2025_Streetlight_AADT_LOTTR/FeatureServer/1"
+        ),
+        aadt_field="TRINA_Avg_AADT",
+        route_field="RouteNameFull",
+        year=2025,
+        where="TRINA_Avg_AADT IS NOT NULL",
+    ),
+    "GA": AadtConfig(
+        arcgis_url=(
+            "https://services2.arcgis.com/IxVN2oUE9EYLSnPE/arcgis/rest/services/"
+            "GDOT_AADT/FeatureServer/1"
+        ),
+        aadt_field="aadt",
+        route_field="description",
+        where="aadt IS NOT NULL",
+        lat_field="lat",
+        lon_field="lng",
     ),
 }
 
@@ -208,19 +231,45 @@ class TrafficProvider:
         fields = [endpoint.aadt_field, endpoint.route_field]
         if endpoint.year_field:
             fields.append(endpoint.year_field)
+        if endpoint.lat_field:
+            fields.append(endpoint.lat_field)
+        if endpoint.lon_field:
+            fields.append(endpoint.lon_field)
+        where = endpoint.where
+        query_geometry: dict[str, Any] | None = geometry
+        return_geometry = True
+        if endpoint.lat_field and endpoint.lon_field:
+            where = (
+                f"({where}) AND {endpoint.lat_field} >= {geometry['ymin']} AND "
+                f"{endpoint.lat_field} <= {geometry['ymax']} AND "
+                f"{endpoint.lon_field} >= {geometry['xmin']} AND "
+                f"{endpoint.lon_field} <= {geometry['xmax']}"
+            )
+            query_geometry = None
+            return_geometry = False
         features = await arcgis_query(
             endpoint.arcgis_url,
-            where=endpoint.where,
+            where=where,
             out_fields=",".join(fields),
-            geometry=geometry,
-            return_geometry=True,
+            geometry=query_geometry,
+            return_geometry=return_geometry,
             out_sr=4326,
             result_count=500,
         )
         candidates: list[tuple[float, dict[str, Any]]] = []
         for feature in features:
             aadt = _number(feature.get(endpoint.aadt_field))
-            distance = _geometry_distance_m(lat, lon, feature.get("_geometry"))
+            feature_geometry = feature.get("_geometry")
+            if (
+                feature_geometry is None
+                and endpoint.lat_field
+                and endpoint.lon_field
+            ):
+                feature_geometry = {
+                    "x": feature.get(endpoint.lon_field),
+                    "y": feature.get(endpoint.lat_field),
+                }
+            distance = _geometry_distance_m(lat, lon, feature_geometry)
             if aadt is None or aadt < 0 or distance is None or distance > radius_m:
                 continue
             candidates.append((distance, feature))

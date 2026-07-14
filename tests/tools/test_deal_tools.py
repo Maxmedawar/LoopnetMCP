@@ -93,11 +93,17 @@ async def test_analyze_deal_deep_fetches_underwrites_and_scores():
     fake_registry.get.return_value = source
     market_engine = Mock()
     market_engine.get_market_pack = AsyncMock(return_value=_market())
+    owner_engine = Mock()
+    owner_engine.lookup = AsyncMock(return_value=None)
     url = "https://www.loopnet.com/Listing/example/31948105/"
 
     with patch("cre_mcp.tools.deal_tools.registry", fake_registry), patch(
         "cre_mcp.tools.deal_tools.resolve", new=AsyncMock(return_value=_geo())
-    ), patch("cre_mcp.tools.deal_tools._market_engine", return_value=market_engine):
+    ), patch(
+        "cre_mcp.tools.deal_tools._market_engine", return_value=market_engine
+    ), patch(
+        "cre_mcp.tools.deal_tools._owner_engine", return_value=owner_engine
+    ):
         result = await analyze_deal(
             url,
             strategy="nnn_retail",
@@ -116,6 +122,11 @@ async def test_analyze_deal_deep_fetches_underwrites_and_scores():
     assert result["scores"][0]["gated"] is False
     assert result["best_strategy"] == "nnn_retail"
     assert result["facts"]["strategy_hint"] == "location_retail"
+    assert result["value_provenance"] == {
+        "method": result["value_estimate"]["method"],
+        "confidence": result["value_estimate"]["confidence"],
+        "n_comps": result["value_estimate"]["n_comps"],
+    }
     source.get_detail.assert_awaited_once()
     assert source.get_detail.await_args.args[0].source_id == "31948105"
     market_engine.get_market_pack.assert_awaited_once()
@@ -135,10 +146,16 @@ async def test_analyze_deal_extracts_asset_id_from_crexi_url():
     fake_registry.get.return_value = source
     market_engine = Mock()
     market_engine.get_market_pack = AsyncMock(return_value=_market())
+    owner_engine = Mock()
+    owner_engine.lookup = AsyncMock(return_value=None)
 
     with patch("cre_mcp.tools.deal_tools.registry", fake_registry), patch(
         "cre_mcp.tools.deal_tools.resolve", new=AsyncMock(return_value=_geo())
-    ), patch("cre_mcp.tools.deal_tools._market_engine", return_value=market_engine):
+    ), patch(
+        "cre_mcp.tools.deal_tools._market_engine", return_value=market_engine
+    ), patch(
+        "cre_mcp.tools.deal_tools._owner_engine", return_value=owner_engine
+    ):
         result = await analyze_deal(
             "https://www.crexi.com/properties/2622985/example",
             source="crexi",

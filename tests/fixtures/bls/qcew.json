@@ -1,16 +1,16 @@
 {
   "status": "REQUEST_SUCCEEDED",
-  "responseTime": 118,
+  "responseTime": 116,
   "message": [],
   "Results": {
     "series": [
       {
-        "seriesID": "ENU4845320510",
+        "seriesID": "ENU4845310010",
         "data": [
-          {"year": "2025", "period": "Q04", "periodName": "4th Quarter", "value": "51085", "footnotes": [{"code": "P", "text": "Preliminary."}]},
-          {"year": "2025", "period": "Q03", "periodName": "3rd Quarter", "value": "51393", "footnotes": [{"code": "P", "text": "Preliminary."}]},
-          {"year": "2024", "period": "Q04", "periodName": "4th Quarter", "value": "51242", "footnotes": [{}]},
-          {"year": "2024", "period": "Q03", "periodName": "3rd Quarter", "value": "51568", "footnotes": [{}]}
+          {"year": "2025", "period": "M12", "periodName": "December", "value": "939358", "footnotes": [{"code": "P", "text": "Preliminary."}]},
+          {"year": "2024", "period": "M12", "periodName": "December", "value": "914757", "footnotes": [{}]},
+          {"year": "2020", "period": "M12", "periodName": "December", "value": "771513", "footnotes": [{}]},
+          {"year": "2019", "period": "M01", "periodName": "January", "value": "757902", "footnotes": [{}]}
         ]
       }
     ]

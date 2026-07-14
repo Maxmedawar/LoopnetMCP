@@ -56,7 +56,16 @@ async def test_nearest_aadt_second_instance_is_served_from_sqlite(tmp_path):
 @pytest.mark.asyncio
 async def test_each_shipped_state_schema_maps_and_unconfigured_state_skips(tmp_path):
     samples = json.loads((FIXTURES / "aadt_samples.json").read_text())
-    assert set(STATE_AADT_ENDPOINTS) == {"NC", "AZ", "CO", "TX", "FL", "CA"}
+    assert set(STATE_AADT_ENDPOINTS) == {
+        "NC",
+        "AZ",
+        "CO",
+        "TX",
+        "FL",
+        "CA",
+        "NV",
+        "GA",
+    }
     points = {
         "NC": (35.84697277, -78.58009081),
         "AZ": (33.4619, -112.1258),
@@ -64,6 +73,8 @@ async def test_each_shipped_state_schema_maps_and_unconfigured_state_skips(tmp_p
         "TX": (30.218131, -97.683264),
         "FL": (28.52428, -81.3186),
         "CA": (34.02889815, -118.22646043),
+        "NV": (36.24913014, -115.2465968),
+        "GA": (33.62067, -84.36677),
     }
     for state, (lat, lon) in points.items():
         with patch(
@@ -81,3 +92,21 @@ async def test_each_shipped_state_schema_maps_and_unconfigured_state_skips(tmp_p
             "WA", cache=SQLiteCache(tmp_path / "wa.db")
         ).nearest_aadt(47.6, -122.3) is None
     query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_coordinate_field_layer_builds_bounded_where_without_geometry(tmp_path):
+    samples = json.loads((FIXTURES / "aadt_samples.json").read_text())["GA"]
+    with patch(
+        "cre_mcp.enrichment.traffic.arcgis_query",
+        new=AsyncMock(return_value=samples),
+    ) as query:
+        metric = await TrafficProvider(
+            "GA", cache=SQLiteCache(tmp_path / "ga.db")
+        ).nearest_aadt(33.62067, -84.36677)
+
+    assert metric is not None and metric.value == 20_700
+    assert query.await_args.kwargs["geometry"] is None
+    assert query.await_args.kwargs["return_geometry"] is False
+    assert "lat >=" in query.await_args.kwargs["where"]
+    assert "lng <=" in query.await_args.kwargs["where"]

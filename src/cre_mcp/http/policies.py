@@ -99,11 +99,21 @@ def build_arcgis_policies(config: CreConfig | None = None) -> dict[str, FetchPol
         "services1.arcgis.com",
         "services2.arcgis.com",
         "services3.arcgis.com",
+        "services5.arcgis.com",
         "services6.arcgis.com",
+        "services7.arcgis.com",
+        "services8.arcgis.com",
+        "services9.arcgis.com",
         "gcgis.guilfordcountync.gov",
         "dtdapps.codot.gov",
         "gis.fdot.gov",
         "caltrans-gis.dot.ca.gov",
+        "taxmaps.traviscountytx.gov",
+        "gis.sara-tx.org",
+        "gismaps.fultoncountyga.gov",
+        "gis.charlottenc.gov",
+        "gis.dot.nv.gov",
+        "egisp.dot.ga.gov",
     )
     return {
         host: FetchPolicy(
@@ -202,6 +212,13 @@ def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy
         ),
         "overpass-api.de": FetchPolicy(
             host="overpass-api.de",
+            delay_seconds=1.0,
+            cache_namespace="openstreetmap-overpass",
+            cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
+        "overpass.kumi.systems": FetchPolicy(
+            host="overpass.kumi.systems",
             delay_seconds=1.0,
             cache_namespace="openstreetmap-overpass",
             cache_ttl_seconds=30 * 24 * 60 * 60,

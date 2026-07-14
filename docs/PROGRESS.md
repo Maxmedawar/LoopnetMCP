@@ -19,7 +19,8 @@ Fable reviews independently after each phase before advancing.
 | 14 | Listing intelligence + confidence gating | 🟢 complete | 352 passed, 1 warning |
 | 15 | Free comps engine + AVM | 🟢 complete | 371 passed, 1 warning |
 | 16 | Live-API hardening | 🟢 complete | 378 passed, 1 warning |
-| **Overall** | **Phases 1–9 + 14–16 delivered** | **🟢 V2 TRUST LAYER IN PROGRESS — 13 tools** | **378 passed, 1 warning** |
+| 17 | Completeness hardening | 🟢 complete | 385 passed, 1 warning |
+| **Overall** | **Phases 1–9 + 14–17 delivered** | **🟢 V2 TRUST LAYER IN PROGRESS — 13 tools** | **385 passed, 1 warning** |
 
 ## Log
 
@@ -145,3 +146,20 @@ Fable reviews independently after each phase before advancing.
     verified live. HUD initially returned 401 while the new token propagated, then returned 200
     with the corrected Austin entity `METRO12420M12420`.
   - Pytest: `378 passed, 1 warning in 22.92s`
+- 2026-07-13 — Phase 17 completeness hardening complete.
+  - Status: GREEN; all 13 configured county parcel endpoints were verified live, the Austin
+    deal now returns its real Travis County owner/parcel, Overpass form requests work against
+    the primary endpoint, and live Austin market coverage is 18/18 metrics (100%).
+  - Files changed: expanded the county parcel registry across Travis, Harris, Dallas, Bexar,
+    Maricopa, Clark, Miami-Dade, Broward, Fulton, and Mecklenburg; added verified Maricopa and
+    Clark spatial sales layers while retaining labeled fallbacks where no free sales layer was
+    found; added Nevada and Georgia AADT layers; added cached form-encoded Overpass POST support,
+    required headers, and Kumi fallback; corrected the BLS QCEW series to all-employment history;
+    surfaced compact value provenance in `analyze_deal`/`get_comps`; refreshed live fixtures and
+    added county, traffic, Overpass, QCEW-growth, and provenance tests.
+  - Honest gaps: free spatial closed-sale coverage remains available only for Guilford, Yavapai,
+    Maricopa, and Clark; other counties use explicit weaker/no-estimate AVM fallbacks. The Dallas
+    parcel layer is live but its published tax snapshot is dated 2019. Kumi was configured as a
+    non-fatal fallback but timed out in the lab; the primary Overpass endpoint returned live OSM
+    data. Score/value backtesting remains future work and was intentionally out of Phase 17 scope.
+  - Pytest: `385 passed, 1 warning in 21.62s`

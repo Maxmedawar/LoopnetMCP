@@ -64,6 +64,11 @@ async def test_get_comps_returns_estimate_comps_and_plain_english_position():
 
     assert "error" not in result
     assert result["value_estimate"]["method"] == "county_comps"
+    assert result["value_provenance"] == {
+        "method": "county_comps",
+        "confidence": 0.75,
+        "n_comps": 3,
+    }
     assert result["comps"][0]["parcel_id"] == "1"
     assert "10.0% above" in result["explanation"]
     assert "county-fragmented" in result["coverage_note"]
@@ -79,6 +84,7 @@ async def test_address_path_surfaces_labeled_weak_fallback():
 
     assert result["value_estimate"]["method"] == "fhfa_trend"
     assert result["value_estimate"]["confidence"] == 0.35
+    assert result["value_provenance"]["n_comps"] == 0
     assert "Method: fhfa_trend" in result["explanation"]
 
 

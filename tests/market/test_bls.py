@@ -41,6 +41,7 @@ async def test_qcew_series_mapping_uses_county_id():
     provider = BlsProvider(fetch=fetch)
     geo = GeoRef(level=GeoLevel.COUNTY, state_fips="48", county_fips="48453", name="Travis")
     series = await provider.qcew_employment(geo)
-    assert fetch.post_json.await_args.args[1]["seriesid"] == ["ENU4845320510"]
-    assert series.points[-1] == ("2025-Q04", 51085.0)
-
+    body = fetch.post_json.await_args.args[1]
+    assert body["seriesid"] == ["ENU4845310010"]
+    assert int(body["endyear"]) - int(body["startyear"]) >= 7
+    assert series.points[-1] == ("2025-12", 939358.0)

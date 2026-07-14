@@ -57,10 +57,17 @@ def _date(value: Any) -> str | None:
         except (OSError, OverflowError, ValueError):
             return None
     text = str(value).strip()
-    for fmt in ("%Y-%m-%d", "%Y-%m", "%m/%d/%Y", "%m/%d/%y"):
+    for fmt in (
+        "%Y-%m-%d",
+        "%Y-%m",
+        "%Y%m%d",
+        "%Y%m",
+        "%m/%d/%Y",
+        "%m/%d/%y",
+    ):
         try:
             parsed = datetime.strptime(text, fmt).date()
-            if fmt == "%Y-%m":
+            if fmt in {"%Y-%m", "%Y%m"}:
                 return f"{parsed.year:04d}-{parsed.month:02d}-01"
             return parsed.isoformat()
         except ValueError:
