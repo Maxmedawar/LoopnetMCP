@@ -74,6 +74,35 @@ def _disqualifier_hits(ctx: DealContext, rubric: Rubric) -> list[str]:
     return hits
 
 
+def _signal_reliability(ctx: DealContext, signal: SignalSpec) -> float:
+    if signal.key == "price_vs_avm":
+        if _raw_avm_present(ctx):
+            return T.AVM_RAW_SOURCE_CONFIDENCE
+        if ctx.value_estimate is not None:
+            return _clamp(ctx.value_estimate.confidence)
+    if signal.key in {"price_vs_replacement", "price_per_sf_vs_replacement"}:
+        assumptions = ctx.underwriting.assumptions_used if ctx.underwriting else {}
+        replacement = assumptions.get("replacement_cost_per_sf")
+        if (
+            isinstance(replacement, dict)
+            and replacement.get("source") == "regional_estimate"
+        ):
+            return T.REPLACEMENT_COST_ESTIMATE_CONFIDENCE
+        if not isinstance(replacement, dict):
+            return T.REPLACEMENT_COST_ESTIMATE_CONFIDENCE
+    return T.FULL_COVERAGE
+
+
+def _raw_avm_present(ctx: DealContext) -> bool:
+    value = ctx.listing.raw.get("avm")
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        return float(value) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _evaluate_signals(ctx: DealContext, rubric: Rubric) -> _Evaluation:
     total_weight = sum(signal.weight for signal in rubric.signals)
     available_weight = T.NO_COVERAGE
@@ -105,8 +134,9 @@ def _evaluate_signals(ctx: DealContext, rubric: Rubric) -> _Evaluation:
             )
             continue
         normalized = _normalize(raw_value, signal)
-        weighted = normalized * signal.weight
-        available_weight += signal.weight
+        effective_weight = signal.weight * _signal_reliability(ctx, signal)
+        weighted = normalized * effective_weight
+        available_weight += effective_weight
         earned += weighted
         if signal.required:
             required_present += 1

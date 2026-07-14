@@ -4,6 +4,8 @@ import logging
 import re
 from typing import Any
 
+from cre_mcp.comps.avm import estimate_value
+from cre_mcp.comps.records import sale_comps
 from cre_mcp.enrichment.attributes import (
     AttributeEnricher,
     drive_thru_from_text,
@@ -28,10 +30,13 @@ from cre_mcp.models import (
     OwnerRecord,
     ParcelRecord,
     RentComps,
+    SaleComp,
     UnderwritingResult,
+    ValueEstimate,
 )
 from cre_mcp.scoring.engine import score, score_all
 from cre_mcp.scoring.rubrics import RUBRIC_REGISTRY
+from cre_mcp.scoring.rubrics import thresholds as T
 from cre_mcp.sources.base import SearchQuery
 from cre_mcp.sources.loopnet.urls import extract_listing_id, resolve_property_type
 from cre_mcp.sources.registry import SourceRegistry
@@ -216,15 +221,46 @@ def _assumptions_for(
     listing: Listing,
     market: MarketPack | None,
     overrides: dict[str, Any] | None,
-) -> tuple[UnderwritingAssumptions, bool]:
+) -> tuple[UnderwritingAssumptions, bool, bool]:
     values = dict(overrides or {})
     used_market_rate = False
+    used_regional_replacement = False
     if "annual_interest_rate" not in values and market and market.mortgage_rate:
         rate = market.mortgage_rate.value
         if rate is not None:
             values["annual_interest_rate"] = rate / 100
             used_market_rate = True
-    return UnderwritingAssumptions.for_property_type(listing.property_type, values), used_market_rate
+    if (
+        "replacement_cost_per_sf" not in values
+        and listing.raw.get("replacement_cost_per_sf") is None
+    ):
+        property_type = (listing.property_type or "").casefold()
+        aliases = {
+            "multi-family": "multifamily",
+            "apartment": "multifamily",
+            "apartments": "multifamily",
+            "warehouse": "industrial",
+        }
+        property_type = aliases.get(property_type, property_type)
+        region = T.REPLACEMENT_COST_REGION_BY_STATE.get(
+            (listing.state or "").upper(),
+            "national",
+        )
+        cost = T.REPLACEMENT_COST_PER_SF_BY_REGION.get(region, {}).get(
+            property_type
+        )
+        if cost is None:
+            cost = T.REPLACEMENT_COST_PER_SF_BY_REGION["national"].get(
+                property_type
+            )
+        if cost is not None:
+            values["replacement_cost_per_sf"] = cost
+            used_regional_replacement = True
+    return (
+        UnderwritingAssumptions.for_property_type(listing.property_type, values),
+        used_market_rate,
+        used_regional_replacement,
+    )
 
 
 def _underwrite(
@@ -232,13 +268,24 @@ def _underwrite(
     market: MarketPack | None,
     overrides: dict[str, Any] | None,
 ) -> UnderwritingResult:
-    assumptions, used_market_rate = _assumptions_for(listing, market, overrides)
+    assumptions, used_market_rate, used_regional_replacement = _assumptions_for(
+        listing,
+        market,
+        overrides,
+    )
     result = underwrite_listing(listing, assumptions)
     for key in overrides or {}:
         if key in result.assumptions_used:
             result.assumptions_used[key]["source"] = "override"
     if used_market_rate:
         result.assumptions_used["annual_interest_rate"]["source"] = "market"
+    if used_regional_replacement:
+        replacement = result.assumptions_used.get("replacement_cost_per_sf")
+        if replacement:
+            replacement["source"] = "regional_estimate"
+            replacement["note"] = (
+                "Coarse free regional replacement-cost benchmark; verify locally."
+            )
     return result
 
 
@@ -252,6 +299,49 @@ def _facts_for(listing: Listing) -> ListingFacts | None:
             exc,
         )
         return None
+
+
+def _subject_for_value(
+    listing: Listing,
+    parcel: ParcelRecord | None,
+) -> Listing:
+    raw = dict(listing.raw)
+    updates: dict[str, Any] = {"raw": raw}
+    if parcel:
+        if parcel.last_sale_price is not None:
+            raw.setdefault("last_sale_price", parcel.last_sale_price)
+        if parcel.last_sale_date:
+            raw.setdefault("last_sale_date", parcel.last_sale_date)
+        if listing.lat is None and parcel.lat is not None:
+            updates["lat"] = parcel.lat
+        if listing.lon is None and parcel.lon is not None:
+            updates["lon"] = parcel.lon
+    return listing.model_copy(update=updates)
+
+
+async def _value_for(
+    listing: Listing,
+    geo: GeoRef | None,
+    market: MarketPack | None,
+    parcel: ParcelRecord | None,
+) -> tuple[list[SaleComp], ValueEstimate]:
+    subject = _subject_for_value(listing, parcel)
+    comps: list[SaleComp] = []
+    if geo is not None:
+        try:
+            comps = await sale_comps(geo, subject)
+        except Exception as exc:
+            logger.warning("County sale comps unavailable for %s: %s", listing.address, exc)
+    try:
+        return comps, estimate_value(subject, comps, market)
+    except Exception as exc:
+        logger.warning("Value estimate unavailable for %s: %s", listing.address, exc)
+        return comps, ValueEstimate(
+            value=None,
+            method="none",
+            confidence=0.0,
+            source=f"Value estimation failed non-fatally: {exc}",
+        )
 
 
 def _scores(ctx: DealContext, strategy: str | None) -> list[DealScore]:
@@ -274,12 +364,17 @@ def _deal(
     owner: OwnerRecord | None = None,
     attributes: DealAttributes | None = None,
     rent_comps: RentComps | None = None,
+    sale_comps_used: list[SaleComp] | None = None,
+    value_estimate: ValueEstimate | None = None,
 ) -> Deal:
     facts = _facts_for(listing)
+    used_comps = list(sale_comps_used or [])
+    estimate = value_estimate or estimate_value(listing, used_comps, market)
     underwriting = _underwrite(listing, market, assumptions)
     context = DealContext(
         listing=listing,
         facts=facts,
+        value_estimate=estimate,
         market=market,
         parcel=parcel,
         attributes=attributes or _base_attributes(listing),
@@ -290,6 +385,8 @@ def _deal(
     return Deal(
         listing=listing,
         facts=facts,
+        value_estimate=estimate,
+        sale_comps=used_comps,
         market_pack=market,
         parcel=parcel,
         owner=owner,
@@ -310,6 +407,33 @@ def _listing_ref(listing: Listing) -> ListingRef:
         source_id=listing.source_id,
         url=listing.url,
     )
+
+
+def _with_listing_context(listings: list[Listing]) -> list[Listing]:
+    prepared: list[Listing] = []
+    for subject in listings:
+        subject_type = (subject.property_type or "").casefold()
+        context = [
+            {
+                "price_usd": candidate.price_usd,
+                "size_sqft_num": candidate.size_sqft_num,
+                "units": candidate.units,
+            }
+            for candidate in listings
+            if candidate.source_id != subject.source_id
+            and candidate.price_usd is not None
+            and (
+                not subject_type
+                or (candidate.property_type or "").casefold() == subject_type
+            )
+        ]
+        if not context:
+            prepared.append(subject)
+            continue
+        raw = dict(subject.raw)
+        raw.setdefault("comparable_listings", context)
+        prepared.append(subject.model_copy(update={"raw": raw}))
+    return prepared
 
 
 def _input_ref(url_or_id: str, source: str) -> ListingRef:
@@ -371,6 +495,7 @@ async def analyze_deal(
         parcel = owner.parcels[0] if owner and owner.parcels else None
         attributes, attribute_warnings = await _attributes_for(listing, parcel)
         rent_comps, rent_error = await _rent_for(listing, geo, market, strategy)
+        comps, value_estimate = await _value_for(listing, geo, market, parcel)
         deal = _deal(
             listing,
             market,
@@ -380,6 +505,8 @@ async def analyze_deal(
             owner=owner,
             attributes=attributes,
             rent_comps=rent_comps,
+            sale_comps_used=comps,
+            value_estimate=value_estimate,
         )
         payload = deal.model_dump(mode="json")
         warnings = {}
@@ -458,9 +585,10 @@ async def find_deals(
         if market_error:
             errors["market"] = market_error
 
+        listings = _with_listing_context(aggregated.listings)
         deals = [
             _deal(listing, market, strategy, assumptions=None)
-            for listing in aggregated.listings
+            for listing in listings
         ]
         total_scored = len(deals)
         deals.sort(key=_best_score, reverse=True)
@@ -474,7 +602,28 @@ async def find_deals(
                 try:
                     listing_source = registry.get(listing.source)
                     detail = await listing_source.get_detail(_listing_ref(listing))
-                    deepened.append(_deal(detail, market, strategy, assumptions=None))
+                    context_rows = listing.raw.get("comparable_listings")
+                    if isinstance(context_rows, list):
+                        raw = dict(detail.raw)
+                        raw.setdefault("comparable_listings", context_rows)
+                        detail = detail.model_copy(update={"raw": raw})
+                    geo = market.geo if market else None
+                    comps, value_estimate = await _value_for(
+                        detail,
+                        geo,
+                        market,
+                        parcel=None,
+                    )
+                    deepened.append(
+                        _deal(
+                            detail,
+                            market,
+                            strategy,
+                            assumptions=None,
+                            sale_comps_used=comps,
+                            value_estimate=value_estimate,
+                        )
+                    )
                 except Exception as exc:
                     key = f"detail:{listing.source}:{listing.source_id}"
                     errors[key] = str(exc)

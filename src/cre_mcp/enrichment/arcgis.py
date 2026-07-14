@@ -1,5 +1,6 @@
 """ArcGIS-backed public assessor parcel provider."""
 
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -9,6 +10,8 @@ from cre_mcp.http.arcgis import arcgis_query
 from cre_mcp.models.enrichment import ParcelRecord
 from cre_mcp.models.geo import GeoRef
 from cre_mcp.sources.dedupe import normalize_address
+
+logger = logging.getLogger(__name__)
 
 
 def _field(config: CountyParcelConfig, key: str) -> str | None:
@@ -88,6 +91,8 @@ def map_parcel(
         owner_name=_text(_value(attributes, config, "owner_name")),
         owner_mailing_address=owner_mailing_address,
         assessed_value=_number(_value(attributes, config, "assessed_value")),
+        building_sqft=_number(_value(attributes, config, "building_sqft")),
+        units=_number(_value(attributes, config, "units")),
         land_value=_number(_value(attributes, config, "land_value")),
         last_sale_price=_number(_value(attributes, config, "last_sale_price")),
         last_sale_date=_date(_value(attributes, config, "last_sale_date")),
@@ -138,7 +143,55 @@ class ArcgisParcelProvider:
             out_fields=fields or "*",
             result_count=1,
         )
-        return map_parcel(features[0], self.config) if features else None
+        if not features:
+            return None
+        parcel = map_parcel(features[0], self.config)
+        return await self._with_latest_sale(parcel)
+
+    async def _with_latest_sale(self, parcel: ParcelRecord) -> ParcelRecord:
+        """Attach the subject's own latest verified sale when the county exposes it."""
+        parcel_field = self.config.sales_field_map.get("parcel_id")
+        price_field = self.config.sales_field_map.get("sale_price")
+        date_field = self.config.sales_field_map.get("sale_date")
+        if (
+            not self.config.sales_layer
+            or not parcel.apn
+            or not parcel_field
+            or not price_field
+        ):
+            return parcel
+        where = (
+            f"({self.config.sales_where}) AND "
+            f"UPPER({parcel_field})='{_quote(parcel.apn.upper())}'"
+        )
+        fields = ",".join(
+            field for field in (price_field, date_field) if field is not None
+        )
+        try:
+            rows = await arcgis_query(
+                self.config.sales_layer,
+                where=where,
+                out_fields=fields,
+                order_by_fields=f"{date_field} DESC" if date_field else None,
+                result_count=1,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Latest parcel sale unavailable for %s in %s: %s",
+                parcel.apn,
+                self.config.name,
+                exc,
+            )
+            return parcel
+        if not rows:
+            return parcel
+        price = _number(rows[0].get(price_field))
+        sold = _date(rows[0].get(date_field)) if date_field else None
+        if price is None:
+            return parcel
+        return parcel.model_copy(
+            update={"last_sale_price": price, "last_sale_date": sold}
+        )
 
 
 __all__ = ["ArcgisParcelProvider", "map_parcel"]

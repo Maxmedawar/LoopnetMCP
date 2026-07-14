@@ -24,6 +24,8 @@ class ParcelRecord(BaseModel):
     owner_name: str | None = None
     owner_mailing_address: str | None = None
     assessed_value: float | None = None
+    building_sqft: float | None = None
+    units: float | None = None
     land_value: float | None = None
     last_sale_price: float | None = None
     last_sale_date: str | None = None

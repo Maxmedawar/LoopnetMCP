@@ -87,6 +87,9 @@ async def test_arcgis_query_optionally_preserves_wgs84_geometry():
             },
             return_geometry=True,
             out_sr=4326,
+            distance=8_000,
+            units="esriSRUnit_Meter",
+            order_by_fields="SALE_DATE DESC",
         )
 
     assert result == [{"AADT": 42_000, "_geometry": {"x": -97.7, "y": 30.2}}]
@@ -94,3 +97,6 @@ async def test_arcgis_query_optionally_preserves_wgs84_geometry():
     assert query["returnGeometry"] == ["true"]
     assert query["inSR"] == ["4326"]
     assert query["outSR"] == ["4326"]
+    assert query["distance"] == ["8000"]
+    assert query["units"] == ["esriSRUnit_Meter"]
+    assert query["orderByFields"] == ["SALE_DATE DESC"]

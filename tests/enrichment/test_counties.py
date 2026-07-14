@@ -38,6 +38,12 @@ def test_all_three_verified_counties_declare_complete_mapping_contract():
         assert config.arcgis_url.endswith(("FeatureServer/0", "MapServer/0"))
 
 
+def test_only_live_confirmed_counties_declare_sales_layers():
+    assert COUNTY_PARCEL_ENDPOINTS["37081"].sales_layer.endswith("FeatureServer/0")
+    assert COUNTY_PARCEL_ENDPOINTS["04025"].sales_layer.endswith("FeatureServer/5")
+    assert COUNTY_PARCEL_ENDPOINTS["08035"].sales_layer is None
+
+
 def test_config_selection_uses_resolved_county_fips_and_skips_unknown():
     assert config_for_geo(_geo("08035")) is COUNTY_PARCEL_ENDPOINTS["08035"]
     assert config_for_geo(_geo("48453")) is None

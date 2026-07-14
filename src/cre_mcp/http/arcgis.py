@@ -18,6 +18,9 @@ async def arcgis_query(
     geometry: Any = None,
     return_geometry: bool = False,
     out_sr: int | None = None,
+    distance: float | None = None,
+    units: str | None = None,
+    order_by_fields: str | None = None,
     result_offset: int = 0,
     result_count: int | None = None,
 ) -> list[dict]:
@@ -58,6 +61,12 @@ async def arcgis_query(
                     params["geometryType"] = "esriGeometryPoint"
         if out_sr is not None:
             params["outSR"] = str(out_sr)
+        if distance is not None:
+            params["distance"] = str(distance)
+        if units is not None:
+            params["units"] = units
+        if order_by_fields:
+            params["orderByFields"] = order_by_fields
         payload = await get_fetch_client().get_json(
             f"{base_url}?{urlencode(params)}"
         )

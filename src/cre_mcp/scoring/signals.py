@@ -200,8 +200,30 @@ def parking_adequacy(ctx: DealContext) -> float | None:
     return None
 
 
+def _regional_replacement_cost(ctx: DealContext) -> float | None:
+    property_type = (ctx.listing.property_type or "").casefold()
+    property_type = {
+        "multi-family": "multifamily",
+        "apartment": "multifamily",
+        "apartments": "multifamily",
+        "warehouse": "industrial",
+    }.get(property_type, property_type)
+    region = T.REPLACEMENT_COST_REGION_BY_STATE.get(
+        (ctx.listing.state or "").upper(),
+        "national",
+    )
+    return T.REPLACEMENT_COST_PER_SF_BY_REGION.get(region, {}).get(
+        property_type
+    ) or T.REPLACEMENT_COST_PER_SF_BY_REGION["national"].get(property_type)
+
+
 def price_vs_replacement(ctx: DealContext) -> float | None:
-    return ctx.underwriting.price_vs_replacement if ctx.underwriting else None
+    direct = ctx.underwriting.price_vs_replacement if ctx.underwriting else None
+    if direct is not None:
+        return direct
+    actual = ctx.underwriting.price_per_sf if ctx.underwriting else None
+    replacement = _regional_replacement_cost(ctx)
+    return actual / replacement if actual is not None and replacement else None
 
 
 def residual_value_land(ctx: DealContext) -> float | None:
@@ -252,7 +274,7 @@ def price_per_unit_vs_submarket(ctx: DealContext) -> float | None:
 
 
 def price_per_sf_vs_replacement(ctx: DealContext) -> float | None:
-    return ctx.underwriting.price_vs_replacement if ctx.underwriting else None
+    return price_vs_replacement(ctx)
 
 
 def going_in_cap(ctx: DealContext) -> float | None:
@@ -403,6 +425,8 @@ def cap_rate_vs_treasury_spread(ctx: DealContext) -> float | None:
 
 def price_vs_avm(ctx: DealContext) -> float | None:
     avm = _number(ctx, "avm")
+    if avm is None and ctx.value_estimate:
+        avm = ctx.value_estimate.mid
     return ctx.listing.price_usd / avm if ctx.listing.price_usd is not None and avm else None
 
 

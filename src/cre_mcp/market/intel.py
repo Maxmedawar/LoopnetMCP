@@ -11,6 +11,7 @@ from cre_mcp.market.bea import BeaProvider
 from cre_mcp.market.bls import BlsProvider
 from cre_mcp.market.census import CensusProvider
 from cre_mcp.market.fred import FredProvider
+from cre_mcp.market.fhfa import FhfaProvider
 from cre_mcp.market.hud import HudProvider
 from cre_mcp.market.irs_soi import IrsSoiProvider
 from cre_mcp.models.geo import GeoRef
@@ -97,6 +98,7 @@ class MarketIntel:
         census: CensusProvider | None = None,
         bls: BlsProvider | None = None,
         fred: FredProvider | None = None,
+        fhfa: FhfaProvider | None = None,
         hud: HudProvider | None = None,
         bea: BeaProvider | None = None,
         irs: IrsSoiProvider | None = None,
@@ -105,6 +107,7 @@ class MarketIntel:
         self.census = census or CensusProvider(config=self.config)
         self.bls = bls or BlsProvider(config=self.config)
         self.fred = fred or FredProvider(config=self.config)
+        self.fhfa = fhfa or FhfaProvider()
         self.hud = hud or HudProvider(config=self.config)
         self.bea = bea or BeaProvider(config=self.config)
         self.irs = irs or IrsSoiProvider(config=self.config)
@@ -128,6 +131,7 @@ class MarketIntel:
             "fred_treasury",
             "fred_mortgage",
             "fred_sofr",
+            "fhfa_hpi",
             "hud_fmr",
             "bea_gdp",
             "irs_migration",
@@ -141,6 +145,7 @@ class MarketIntel:
             self.fred.series("DGS10"),
             self.fred.series("MORTGAGE30US"),
             self.fred.series("SOFR"),
+            self.fhfa.hpi_growth(geo),
             self.hud.fmr(geo, latest_year),
             self.bea.regional(geo, "CAGDP1"),
             self.irs.net_migration(geo.county_fips or ""),
@@ -192,6 +197,11 @@ class MarketIntel:
             "sofr": _series_latest(
                 data["fred_sofr"] if isinstance(data["fred_sofr"], MetricSeries) else None,
                 "FRED SOFR",
+            ),
+            "fhfa_hpi_growth_1yr": (
+                data["fhfa_hpi"]
+                if isinstance(data["fhfa_hpi"], MetricValue)
+                else None
             ),
         }
         coverage = {name: _available(values.get(name)) for name in MARKET_METRIC_FIELDS}
@@ -245,4 +255,3 @@ def market_score(pack: MarketPack) -> tuple[float, float]:
         for metric, weight, scorer in covered
     )
     return round(100 * weighted / weight_total, 2), round(confidence, 2)
-

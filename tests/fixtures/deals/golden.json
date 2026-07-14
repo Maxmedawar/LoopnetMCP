@@ -66,16 +66,16 @@
   ],
   "nnn_partial": [
     {
-      "confidence": 0.4032,
+      "confidence": 0.4234,
       "disqualified": false,
       "disqualifier_hits": [],
-      "explanation": "Not rated \u2014 insufficient data to score. Biggest missing inputs: rent_escalations, corporate_vs_franchisee, demographics_3mi. Get them by: the lease rent schedule and amendments; the signed guaranty and tenant entity documents; a geocoded three-mile demographic report. Single-Tenant NNN Retail scored 45.09/100 (NR) at 40% rubric coverage. Top strengths: tenant_credit_tier (0.75 \u2192 0.75), lease_years_remaining (10.00 \u2192 0.70), cap_rate_vs_band (0.70 \u2192 0.70). Top weaknesses: cap_rate_vs_band (0.70 \u2192 0.70), lease_years_remaining (10.00 \u2192 0.70), tenant_credit_tier (0.75 \u2192 0.75). Missing signals: rent_escalations, nnn_purity, corporate_vs_franchisee, traffic_count, demographics_3mi, visibility_corner. Market component unavailable and excluded from the blend. Core component 0.00/100. Path-of-progress permit data is unavailable. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "explanation": "Not rated \u2014 insufficient data to score. Biggest missing inputs: rent_escalations, corporate_vs_franchisee, demographics_3mi. Get them by: the lease rent schedule and amendments; the signed guaranty and tenant entity documents; a geocoded three-mile demographic report. Single-Tenant NNN Retail scored 43.24/100 (NR) at 42% rubric coverage. Top strengths: tenant_credit_tier (0.75 \u2192 0.75), lease_years_remaining (10.00 \u2192 0.70), cap_rate_vs_band (0.70 \u2192 0.70). Top weaknesses: price_vs_replacement (1.36 \u2192 0.10), cap_rate_vs_band (0.70 \u2192 0.70), lease_years_remaining (10.00 \u2192 0.70). Missing signals: rent_escalations, nnn_purity, corporate_vs_franchisee, traffic_count, demographics_3mi, visibility_corner. Market component unavailable and excluded from the blend. Core component 0.00/100. Path-of-progress permit data is unavailable. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
       "gated": true,
       "grade": "NR",
       "market_score": null,
-      "rubric_coverage": 0.4032,
-      "rubric_raw_score": 72.14,
-      "score": 45.09,
+      "rubric_coverage": 0.4234,
+      "rubric_raw_score": 69.18,
+      "score": 43.24,
       "strategy": "nnn_retail"
     }
   ],
@@ -113,16 +113,16 @@
   ],
   "vam_partial": [
     {
-      "confidence": 0.55,
+      "confidence": 0.578,
       "disqualified": false,
       "disqualifier_hits": [],
-      "explanation": "Value-Add Multifamily scored 72.68/100 (B) at 55% rubric coverage. Top strengths: going_in_cap (2.50 \u2192 1.00), rent_gap_to_market (10.00 \u2192 0.50), dscr_year1 (1.32 \u2192 0.75). Top weaknesses: rent_gap_to_market (10.00 \u2192 0.50), submarket_pop_growth_5yr (0.80 \u2192 0.70), supply_pipeline (3.00 \u2192 0.70). Missing signals: price_per_unit_vs_submarket, price_per_sf_vs_replacement, stabilized_yoc, unit_mix_bias, capex_defensibility, 1031_fit. Market component 72.88/100. Core component 74.60/100. Path-of-progress permit data is unavailable. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "explanation": "Value-Add Multifamily scored 73.38/100 (B) at 58% rubric coverage. Top strengths: going_in_cap (2.50 \u2192 1.00), rent_gap_to_market (10.00 \u2192 0.50), dscr_year1 (1.32 \u2192 0.75). Top weaknesses: rent_gap_to_market (10.00 \u2192 0.50), submarket_pop_growth_5yr (0.80 \u2192 0.70), supply_pipeline (3.00 \u2192 0.70). Missing signals: price_per_unit_vs_submarket, stabilized_yoc, unit_mix_bias, capex_defensibility, 1031_fit. Market component 72.88/100. Core component 74.60/100. Path-of-progress permit data is unavailable. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
       "gated": false,
       "grade": "B",
       "market_score": 72.88,
-      "rubric_coverage": 0.55,
-      "rubric_raw_score": 71.45,
-      "score": 72.68,
+      "rubric_coverage": 0.578,
+      "rubric_raw_score": 72.84,
+      "score": 73.38,
       "strategy": "value_add_multifamily"
     }
   ],

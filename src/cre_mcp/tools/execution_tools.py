@@ -28,6 +28,7 @@ async def _deal_context(
     return DealContext(
         listing=listing,
         facts=deal.facts,
+        value_estimate=deal.value_estimate,
         market=deal.market_pack,
         parcel=deal.parcel,
         attributes=deal.attributes,

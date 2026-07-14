@@ -1,6 +1,7 @@
 """Pydantic data models for commercial real estate data."""
 
 from cre_mcp.models.attributes import DealAttributes
+from cre_mcp.models.comps import SaleComp, ValueEstimate
 from cre_mcp.models.deals import Deal, DealContext
 from cre_mcp.models.enrichment import ListingFacts, OwnerRecord, ParcelRecord
 from cre_mcp.models.execution import LoiDraft, OfferRecommendation
@@ -65,8 +66,10 @@ __all__ = [
     "Rubric",
     "RubricResult",
     "SearchResult",
+    "SaleComp",
     "SourceCapabilities",
     "SignalResult",
     "SignalSpec",
     "UnderwritingResult",
+    "ValueEstimate",
 ]

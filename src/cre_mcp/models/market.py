@@ -68,6 +68,7 @@ class MarketPack(BaseModel):
     treasury_10yr: MetricValue | None = None
     mortgage_rate: MetricValue | None = None
     sofr: MetricValue | None = None
+    fhfa_hpi_growth_1yr: MetricValue | None = None
     coverage: dict[str, bool] = Field(default_factory=dict)
 
 

@@ -50,6 +50,9 @@ class MissingProvider:
     async def regional(self, geo, table):
         raise RuntimeError("missing key")
 
+    async def hpi_growth(self, geo):
+        raise RuntimeError("unavailable")
+
 
 class FakeIrs:
     async def net_migration(self, county_fips):
@@ -74,6 +77,7 @@ async def test_provider_failure_becomes_coverage_gap_not_exception(geo):
         census=FakeCensus(),
         bls=ErroringBls(),
         fred=missing,
+        fhfa=missing,
         hud=missing,
         bea=missing,
         irs=FakeIrs(),
@@ -105,6 +109,7 @@ async def test_no_api_keys_returns_partial_pack_without_raising(geo):
         census=FakeCensus(),
         bls=ErroringBls(),
         fred=missing,
+        fhfa=missing,
         hud=missing,
         bea=missing,
         irs=FakeIrs(),
@@ -112,4 +117,3 @@ async def test_no_api_keys_returns_partial_pack_without_raising(geo):
     pack = await intel.get_market_pack(geo)
     coverage_ratio = sum(pack.coverage.values()) / len(pack.coverage)
     assert 0 < coverage_ratio < 1
-

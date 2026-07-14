@@ -158,6 +158,13 @@ def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy
             cache_ttl_seconds=6 * 60 * 60,
             **common,
         ),
+        "www.fhfa.gov": FetchPolicy(
+            host="www.fhfa.gov",
+            delay_seconds=0.2,
+            cache_namespace="fhfa-hpi",
+            cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
         "www.huduser.gov": FetchPolicy(
             host="www.huduser.gov",
             delay_seconds=0.5,

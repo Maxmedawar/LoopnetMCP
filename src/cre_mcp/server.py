@@ -15,6 +15,7 @@ from cre_mcp.tools.listing_tools import (
 )
 from cre_mcp.tools.market_tools import (
     compare_markets,
+    get_comps,
     get_rent_comparables,
     market_intel,
 )
@@ -39,6 +40,7 @@ mcp = FastMCP(
         " and find_distressed for REO, auction, foreclosure, and tax-sale opportunities."
         " Use owner_lookup for public assessor parcel and owner enrichment."
         " Use get_rent_comparables for public ZORI, ACS, and HUD rent benchmarks."
+        " Use get_comps for county-limited sale comps and labeled value estimates."
         " Use recommend_offer for an explained negotiation range and generate_loi"
         " for a non-binding attorney-review draft."
     ),
@@ -56,6 +58,7 @@ __all__ = [
     "find_deals",
     "find_distressed",
     "get_market_overview",
+    "get_comps",
     "get_property_details",
     "get_rent_comparables",
     "generate_loi",

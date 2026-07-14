@@ -17,7 +17,8 @@ Fable reviews independently after each phase before advancing.
 | 8 | Attributes, traffic counts + rent comparables | 🟢 complete | 325 passed, 1 warning |
 | 9 | Offer & LOI engine | 🟢 complete | 343 passed, 1 warning |
 | 14 | Listing intelligence + confidence gating | 🟢 complete | 352 passed, 1 warning |
-| **Overall** | **Phases 1–9 + 14 delivered** | **🟢 V2 TRUST LAYER IN PROGRESS — 12 tools** | **352 passed, 1 warning** |
+| 15 | Free comps engine + AVM | 🟢 complete | 371 passed, 1 warning |
+| **Overall** | **Phases 1–9 + 14–15 delivered** | **🟢 V2 TRUST LAYER IN PROGRESS — 13 tools** | **371 passed, 1 warning** |
 
 ## Log
 
@@ -117,3 +118,16 @@ Fable reviews independently after each phase before advancing.
     added tunable 50% confidence/coverage gates, `DealScore.gated`, actionable explanations,
     updated scoring goldens, and Phase 14 extraction/routing/gating regression tests.
   - Pytest: `352 passed, 1 warning in 26.39s`
+- 2026-07-13 — Phase 15 free comps engine and AVM complete.
+  - Status: GREEN; 13 registered tools, county-limited public sales, honestly labeled value
+    ranges/fallbacks, confidence-discounted value signals, subject-sale anchoring, and legacy
+    contracts are verified.
+  - Files changed: added `SaleComp`/`ValueEstimate`, shared-ArcGIS county comp retrieval,
+    Guilford/Yavapai sales schemas, the county-comps/FHFA/listing-context AVM cascade, a keyless
+    persistent FHFA state-HPI provider, regional replacement-cost policy, value-aware deal and
+    execution contexts, and the registered `get_comps` tool; extended parcel enrichment with
+    fault-isolated latest-sale lookup; added live sales/FHFA fixtures and Phase 15 acceptance
+    tests, and refreshed score goldens. Guilford NC and Yavapai AZ were confirmed live; Douglas
+    CO remains deliberately unwired because no public sale-price layer was verified. No Phase 15
+    fixture is marked `# VERIFY`.
+  - Pytest: `371 passed, 1 warning in 23.09s`

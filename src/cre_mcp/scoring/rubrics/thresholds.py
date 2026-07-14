@@ -441,6 +441,97 @@ DISQUALIFIER_REASONS = {
 }
 
 
+# FREE COMPS & VALUE-ANCHOR POLICY
+SALE_COMP_MIN_COUNT = 3
+SALE_COMP_QUERY_LIMIT = 250
+SALE_COMP_RADIUS_MILES = 5.0
+SALE_COMP_RADIUS_METERS = SALE_COMP_RADIUS_MILES * 1_609.344
+SALE_COMP_MAX_AGE_YEARS = 5.0
+SALE_COMP_MIN_SIZE_RATIO = 0.50
+SALE_COMP_MAX_SIZE_RATIO = 2.00
+AVM_LOW_PERCENTILE = 0.25
+AVM_HIGH_PERCENTILE = 0.75
+AVM_MAX_HPI_ADJUSTMENT_YEARS = 10.0
+AVM_COUNTY_BASE_CONFIDENCE = 0.60
+AVM_COUNTY_CONFIDENCE_PER_EXTRA_COMP = 0.04
+AVM_COUNTY_MAX_CONFIDENCE = 0.85
+AVM_NO_HPI_CONFIDENCE_PENALTY = 0.10
+AVM_FHFA_TREND_CONFIDENCE = 0.35
+AVM_FHFA_TREND_ERROR_BAND = 0.25
+AVM_LISTING_CONTEXT_MIN_COUNT = 2
+AVM_LISTING_CONTEXT_BASE_CONFIDENCE = 0.12
+AVM_LISTING_CONTEXT_CONFIDENCE_PER_COMP = 0.02
+AVM_LISTING_CONTEXT_MAX_CONFIDENCE = 0.25
+AVM_PRICE_ROUNDING_INCREMENT = 1_000.0
+
+REPLACEMENT_COST_REGION_BY_STATE = {
+    state: region
+    for region, states in {
+        "northeast": (
+            "CT", "DE", "DC", "ME", "MD", "MA", "NH", "NJ", "NY", "PA",
+            "RI", "VT",
+        ),
+        "south": (
+            "AL", "AR", "FL", "GA", "KY", "LA", "MS", "NC", "OK", "SC",
+            "TN", "TX", "VA", "WV",
+        ),
+        "midwest": (
+            "IA", "IL", "IN", "KS", "MI", "MN", "MO", "ND", "NE", "OH",
+            "SD", "WI",
+        ),
+        "west": (
+            "AK", "AZ", "CA", "CO", "HI", "ID", "MT", "NM", "NV", "OR",
+            "UT", "WA", "WY",
+        ),
+    }.items()
+    for state in states
+}
+REPLACEMENT_COST_PER_SF_BY_REGION = {
+    "national": {
+        "retail": 240.0,
+        "multifamily": 270.0,
+        "office": 285.0,
+        "industrial": 165.0,
+        "hospitality": 300.0,
+        "special-purpose": 280.0,
+    },
+    "northeast": {
+        "retail": 285.0,
+        "multifamily": 325.0,
+        "office": 335.0,
+        "industrial": 205.0,
+        "hospitality": 350.0,
+        "special-purpose": 325.0,
+    },
+    "south": {
+        "retail": 220.0,
+        "multifamily": 245.0,
+        "office": 260.0,
+        "industrial": 150.0,
+        "hospitality": 275.0,
+        "special-purpose": 255.0,
+    },
+    "midwest": {
+        "retail": 230.0,
+        "multifamily": 255.0,
+        "office": 270.0,
+        "industrial": 155.0,
+        "hospitality": 285.0,
+        "special-purpose": 265.0,
+    },
+    "west": {
+        "retail": 270.0,
+        "multifamily": 310.0,
+        "office": 320.0,
+        "industrial": 195.0,
+        "hospitality": 335.0,
+        "special-purpose": 310.0,
+    },
+}
+REPLACEMENT_COST_ESTIMATE_CONFIDENCE = 0.35
+AVM_RAW_SOURCE_CONFIDENCE = 1.0
+
+
 # OFFER & LOI POLICY
 # These values are deliberately centralized so the execution layer remains code
 # while negotiation posture, buy-box thresholds, and default timelines remain data.
