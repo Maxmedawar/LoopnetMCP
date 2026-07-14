@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
 from cre_mcp.config import CreConfig
 from cre_mcp.http.errors import FetchClientError
@@ -42,6 +43,14 @@ def is_challenge_page(html: str) -> bool:
     return any(marker in html for marker in _CHALLENGE_MARKERS)
 
 
+def _is_access_denied(html: str) -> bool:
+    """Detect a hard Akamai/edge 'Access Denied' block (a tiny 403 page)."""
+    if len(html) > 5000:
+        return False
+    lowered = html.lower()
+    return "access denied" in lowered and "don't have permission" in lowered
+
+
 def is_cloudflare_challenge(text: str) -> bool:
     """Return whether a response is a Cloudflare 403/503 interstitial."""
     lowered = text.lower()
@@ -61,6 +70,7 @@ class BrowserFetcher:
         self._config = config or CreConfig()
         self._browser = None
         self._lock = asyncio.Lock()
+        self._warmed: set[str] = set()
 
     def _launch_options(self) -> dict[str, Any]:
         """Build nodriver launch options without exposing configured secrets."""
@@ -109,9 +119,32 @@ class BrowserFetcher:
 
             self._browser = await nodriver.start(**self._launch_options())
 
+    async def _warmup(self, url: str) -> None:
+        """Visit a host's homepage once per session to earn edge/bot cookies.
+
+        Akamai (LoopNet) hard-blocks deep pages with a 342-byte "Access Denied"
+        unless the session first establishes _abck / bm_sz cookies from the
+        homepage. We do this once per host per browser session, then reuse the
+        cookied session for every subsequent fetch.
+        """
+        host = urlparse(url).netloc
+        if not host or host in self._warmed:
+            return
+        self._warmed.add(host)
+        home = f"{urlparse(url).scheme or 'https'}://{host}/"
+        try:
+            # Navigate the main tab to the homepage and let the edge cookies
+            # settle. Do NOT close the tab — the subsequent fetch reuses this
+            # same cookied session/tab.
+            await self._browser.get(home)
+            await asyncio.sleep(self._config.browser_challenge_wait_seconds)
+        except Exception as exc:
+            logger.warning("browser warmup failed for %s: %s", host, exc)
+
     async def fetch(self, url: str) -> str:
         """Fetch a URL using the browser, waiting for the challenge to resolve."""
         await self._ensure_browser()
+        await self._warmup(url)
 
         page = await self._browser.get(url)
         try:
@@ -121,7 +154,7 @@ class BrowserFetcher:
             while asyncio.get_event_loop().time() < deadline:
                 await asyncio.sleep(1)
                 html = await page.get_content()
-                if not is_challenge_page(html) and len(html) > 1000:
+                if not is_challenge_page(html) and not _is_access_denied(html) and len(html) > 1000:
                     break
 
             if not html:
@@ -130,6 +163,10 @@ class BrowserFetcher:
             if is_challenge_page(html):
                 raise BrowserFetchError(
                     f"Challenge page persisted after browser fetch for URL: {url}"
+                )
+            if _is_access_denied(html):
+                raise BrowserFetchError(
+                    f"Edge bot-block (Access Denied) persisted for URL: {url}"
                 )
 
             return html

@@ -90,7 +90,10 @@ async def test_browser_fetcher_returns_html():
 
     result = await fetcher.fetch("https://www.loopnet.com/listing/123")
     assert result == expected_html
-    mock_browser.get.assert_called_once_with("https://www.loopnet.com/listing/123")
+    # First a homepage warmup (earn edge cookies), then the target fetch.
+    mock_browser.get.assert_any_call("https://www.loopnet.com/")
+    mock_browser.get.assert_any_call("https://www.loopnet.com/listing/123")
+    assert mock_browser.get.call_count == 2
     mock_page.close.assert_called_once()
 
 
