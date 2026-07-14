@@ -62,7 +62,7 @@ async def test_owner_lookup_returns_error_dict_for_missing_record():
 
 
 @pytest.mark.asyncio
-async def test_owner_lookup_is_registered_with_the_sixty_seven_tool_suite():
+async def test_owner_lookup_is_registered_with_the_seventy_two_tool_suite():
     tools = await mcp.get_tools()
     assert "owner_lookup" in tools
-    assert len(tools) == 67
+    assert len(tools) == 72

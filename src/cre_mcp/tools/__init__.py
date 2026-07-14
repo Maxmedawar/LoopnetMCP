@@ -6,6 +6,7 @@ from typing import Any
 def register_all(mcp: Any) -> None:
     """Register every tool module on the provided FastMCP application."""
     from cre_mcp.tools import (
+        arbitrage_tools,
         capital_tools,
         control_tools,
         deal_tools,
@@ -91,6 +92,11 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(memory_tools.ic_scorecard)
     mcp.tool()(decision_tools.set_buyer_profile)
     mcp.tool()(decision_tools.decision_frontier)
+    mcp.tool()(arbitrage_tools.analyze_master_lease)
+    mcp.tool()(arbitrage_tools.find_arbitrage_opportunities)
+    mcp.tool()(arbitrage_tools.draft_master_lease_proposal)
+    mcp.tool()(arbitrage_tools.draft_subtenant_outreach)
+    mcp.tool()(arbitrage_tools.master_lease_playbook)
 
 
 __all__ = ["register_all"]
