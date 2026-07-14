@@ -24,7 +24,8 @@ on `feature/cre-engine`.
 
 ## Already shipped (do not rebuild)
 
-**Wave 1 SHIPPED 2026-07-14** (commits 093f6f6..aebb6a7): ledger (6 tools), scenarios (4), leases (3), taxecon (3), command (5), notes (4), debt (4) — **74 → 103 tools, 733 tests.** Wave 2 in build: recoveries/option-econ, obligations/consent, dataroom/dependencies.
+**Wave 1 SHIPPED 2026-07-14** (093f6f6..aebb6a7): ledger 6 · scenarios 4 · leases 3 · taxecon 3 · command 5 · notes 4 · debt 4 — 74 → 103 tools.
+**Wave 2 SHIPPED 2026-07-14** (4c386d5..16c52e2): accountability (assign_deal/unassigned_deals) · obligations 4 (collisions, consent DEAL-KILLER screen, estoppels) · dataroom 6 (completeness index, critical path, closing runway) · recoveries + option econ 2 — **74 → 117 tools, 803 tests.** LoopNet 60s-hang fixed (0bf591d, live-proven 25 listings x2 @8.8s). Wave 3 in build: zoning, envscreen, verifyreg, books.
 
 ### The original 74
 
@@ -89,7 +90,7 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 |---|-----|-------|------|----|
 | 1 | Morning action queue ranked by $ impact, urgency, close prob | M | W3 | ✅ |
 | 2 | Overnight change brief (listings, bids, docs, signals, deadlines) | M | W3 | ✅ |
-| 3 | Flag deals with no owner, next action, or due date | M | W1→W3 | 🔨 |
+| 3 | Flag deals with no owner, next action, or due date | M | W1→W3 | ✅ |
 | 4 | Convert meeting/email/call commitments into tasks + deadlines | M | W12 | ⬜ |
 | 5 | Counterparty briefing before a call | P | W3 | 🔶 |
 | 6 | Surface unanswered messages likely to stall a deal | M | W3 | ⬜ |
@@ -189,7 +190,7 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 72 | Liens, judgments, UCC, taxes blocking closing | P | W6 | 🔶 |
 | 73 | Deed/legal-description/title/survey/parcel conflicts | M | W6 | ⬜ |
 | 74 | Easements, REAs, use restrictions affecting value | M | W6 | ⬜ |
-| 75 | Abstract CC&Rs, exclusives, prohibited uses, co-tenancy | M | W2 | 🔨 |
+| 75 | Abstract CC&Rs, exclusives, prohibited uses, co-tenancy | M | W2 | ✅ |
 | 76 | ALTA survey vs title vs site plan | M | W6 | ⬜ |
 | 77 | Encroachments, setbacks, missing access | M | W6 | ⬜ |
 | 78 | Entity good standing, authority, AML/sanctions | P | W6 | 🔶 |
@@ -259,10 +260,10 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 122 | Critical-date calendar: options, notices, expirations, steps | M | W1 | ✅ |
 | 123 | Reconcile lease vs amendments vs ledger vs rent roll | M | W2 | ⬜ |
 | 124 | Contractual rent schedules (CPI, %, caps, partial periods) | M | W1 | ✅ |
-| 125 | Abstract CAM/tax/insurance recovery language | M | W2 | 🔨 |
-| 126 | Estoppels + SNDAs: track, compare, surface exceptions | M | W2 | 🔨 |
-| 127 | Detect exclusives, radius, co-tenancy, go-dark, ROFR/ROFO | M | W2 | 🔨 |
-| 128 | Price renewal/termination/expansion options vs market | M | W2 | 🔨 |
+| 125 | Abstract CAM/tax/insurance recovery language | M | W2 | ✅ |
+| 126 | Estoppels + SNDAs: track, compare, surface exceptions | M | W2 | ✅ |
+| 127 | Detect exclusives, radius, co-tenancy, go-dark, ROFR/ROFO | M | W2 | ✅ |
+| 128 | Price renewal/termination/expansion options vs market | M | W2 | ✅ |
 | 129 | Track COIs, guaranties, security, LCs, default notices | M | W2 | ⬜ |
 | 130 | Obligation-specific notices routed to counsel | M | W2 | ⬜ |
 
@@ -340,9 +341,9 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 181 | DD + closing plans tailored to the deal | C | — | ✅ |
-| 182 | Data-room completeness index, assigned gaps | P | W3 | 🔨 |
+| 182 | Data-room completeness index, assigned gaps | P | W3 | ✅ |
 | 183 | Extract reps, covenants, CPs, post-closing obligations | M | W8 | ⬜ |
-| 184 | Track title/survey/financing/estoppel/consent deadlines | P | W3 | 🔨 |
+| 184 | Track title/survey/financing/estoppel/consent deadlines | P | W3 | ✅ |
 | 185 | Reconcile settlement-statement prorations | M | W8 | ⬜ |
 | 186 | Verify sources/uses, payoffs, wires (call-back controls) | M | W8 | ⬜ |
 | 187 | Track third-party reports, reliance, lender conditions | P | W8 | 🔶 |
@@ -384,7 +385,7 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 211 | Master-lease P&L w/ negative carry + default exposure | C | — | ✅ |
 | 212 | Owner + subtenant terms + one-call playbook | C | — | ✅ |
 | 213 | Compare ML/mgmt/option/sandwich/seller-fi/purchase | P | W11 | 🔶 |
-| 214 | Verify assignability, lender consent, due-on-sale | M | **W2** | 🔨 ← fatal-flaw gap in shipped product |
+| 214 | Verify assignability, lender consent, due-on-sale | M | **W2** | ✅ ← fatal-flaw gap in shipped product |
 | 215 | Match vacant space to subtenants + sequence outreach | C | — | ✅ |
 | 216 | Track rent owed/received, deposits, reserves | M | W11 | ⬜ |
 | 217 | Model termination, casualty, co-tenancy, owner default | M | W11 | ⬜ |
