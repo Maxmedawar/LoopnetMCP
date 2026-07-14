@@ -27,7 +27,9 @@ def register_all(mcp: Any) -> None:
         truth_tools,
     )
     from cre_mcp.command import tools as command_tools
+    from cre_mcp.debt import tools as debt_tools
     from cre_mcp.leases import tools as lease_tools
+    from cre_mcp.notes import tools as note_tools
     from cre_mcp.scenarios import tools as scenario_tools
     from cre_mcp.taxecon import tools as taxecon_tools
 
@@ -126,6 +128,14 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(command_tools.flag_unattended)
     mcp.tool()(command_tools.record_listing_snapshot)
     mcp.tool()(command_tools.stale_listing_signals)
+    mcp.tool()(note_tools.estimate_foreclosure_timeline)
+    mcp.tool()(note_tools.model_lien_waterfall)
+    mcp.tool()(note_tools.price_note)
+    mcp.tool()(note_tools.compare_note_workouts)
+    mcp.tool()(debt_tools.compare_term_sheets)
+    mcp.tool()(debt_tools.covenant_forecast)
+    mcp.tool()(debt_tools.value_assumable_debt)
+    mcp.tool()(debt_tools.compare_capital_paths)
 
 
 __all__ = ["register_all"]
