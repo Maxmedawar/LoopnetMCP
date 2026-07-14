@@ -109,31 +109,57 @@ async def search_properties(
 
 async def get_property_details(
     url_or_id: str,
+    source: str | None = None,
 ) -> dict:
-    """Get full details for a specific Loopnet commercial property listing.
+    """Get full details for a specific commercial property listing (LoopNet or Crexi).
 
     Args:
-        url_or_id: Full Loopnet URL (e.g. 'https://www.loopnet.com/Listing/...') or listing ID number.
+        url_or_id: A full listing URL (loopnet.com or crexi.com), a bare listing ID,
+            or a source-qualified reference such as 'crexi:2335936'.
+        source: Optional source name ('loopnet' or 'crexi') for a bare ID. When
+            omitted it is inferred from the URL host or a 'source:id' prefix, and
+            otherwise defaults to 'loopnet'.
 
     Returns:
         Comprehensive property information including price, size, year built, description, broker info, and images.
     """
-    logger.info("get_property_details called: %s", url_or_id)
-    url = url_or_id if url_or_id.startswith("http") else build_detail_url(url_or_id)
+    logger.info("get_property_details called: %s (source=%s)", url_or_id, source)
+    raw = url_or_id.strip()
+    resolved_source = source.lower() if source else None
+    url: str | None = None
+
+    if raw.startswith("http"):
+        host = raw.lower()
+        if resolved_source is None:
+            resolved_source = "crexi" if "crexi.com" in host else "loopnet"
+        url = raw
+        if resolved_source == "crexi":
+            source_id = raw.rstrip("/").split("?")[0].split("/")[-1]
+        else:
+            source_id = extract_listing_id(raw) or raw
+    elif ":" in raw and raw.split(":", 1)[0].lower() in {"loopnet", "crexi"}:
+        prefix, source_id = raw.split(":", 1)
+        resolved_source = prefix.lower()
+    else:
+        resolved_source = resolved_source or "loopnet"
+        source_id = raw
+
+    if resolved_source == "loopnet" and url is None:
+        url = build_detail_url(source_id)
+
     try:
-        source_id = extract_listing_id(url) or url_or_id
-        source = registry.get("loopnet")
-        listing = await source.get_detail(
-            ListingRef(source="loopnet", source_id=source_id, url=url)
+        src = registry.get(resolved_source)
+        listing = await src.get_detail(
+            ListingRef(source=resolved_source, source_id=source_id, url=url)
         )
         detail = property_detail_from_listing(listing)
         return detail.model_dump()
     except SourceError as e:
         logger.error("get_property_details client error: %s", e)
-        return {"error": str(e), "url": url}
+        return {"error": str(e), "url": url, "source": resolved_source}
     except Exception as e:
         logger.error("get_property_details parse error: %s", e)
-        return {"error": f"Failed to parse property page: {e}", "url": url}
+        return {"error": f"Failed to parse property page: {e}", "url": url, "source": resolved_source}
 
 
 async def get_market_overview(

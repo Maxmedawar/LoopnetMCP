@@ -165,9 +165,14 @@ class GeoResolver:
                 ),
             )
 
-        parts = [part.strip() for part in normalized.rsplit(",", 1)]
-        if len(parts) == 2 and parts[1].upper() in STATE_FIPS:
-            local_name, state = parts[0], parts[1].upper()
+        segments = [part.strip() for part in normalized.split(",") if part.strip()]
+        if len(segments) >= 2 and segments[-1].upper() in STATE_FIPS:
+            state = segments[-1].upper()
+            # The locality used for county/city fallback is the segment just
+            # before the state (the city). This lets a full street address like
+            # "8600 Cross Park Dr, Austin, TX" degrade to its city ("Austin")
+            # instead of failing, while "Austin, TX" still resolves as before.
+            local_name = segments[-2]
             county_name = re.sub(r"\s+county$", "", local_name, flags=re.I).casefold()
             county_fips = COUNTY_FIPS.get((county_name, state))
             if county_fips and local_name.casefold().endswith("county"):

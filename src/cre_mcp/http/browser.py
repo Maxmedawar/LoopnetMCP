@@ -69,10 +69,21 @@ class BrowserFetcher:
         }
         if self._config.browser_path is not None:
             options["browser_executable_path"] = str(self._config.browser_path)
+        # Chromium refuses to start its sandbox when the process can reach root
+        # privileges (the classic "Running as root without --no-sandbox is not
+        # supported" crash seen under launchd/containers). These flags make the
+        # headless browser start reliably as a service.
+        browser_args = [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+        ]
         if self._config.proxy_url is not None:
-            options["browser_args"] = [
+            browser_args.append(
                 "--proxy-server=" + self._config.proxy_url.get_secret_value()
-            ]
+            )
+        options["browser_args"] = browser_args
         return options
 
     async def _ensure_browser(self):

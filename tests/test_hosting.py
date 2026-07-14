@@ -92,11 +92,14 @@ def test_browser_path_and_proxy_feed_nodriver_launch_options():
         )
     )
 
-    assert fetcher._launch_options() == {
-        "headless": True,
-        "browser_executable_path": "/usr/bin/chromium",
-        "browser_args": ["--proxy-server=https://proxy.example.test:443"],
-    }
+    options = fetcher._launch_options()
+    assert options["headless"] is True
+    assert options["browser_executable_path"] == "/usr/bin/chromium"
+    # Sandbox-disabling flags must be present so Chromium starts as a service,
+    # and the proxy arg is appended after them.
+    assert "--no-sandbox" in options["browser_args"]
+    assert "--disable-dev-shm-usage" in options["browser_args"]
+    assert options["browser_args"][-1] == "--proxy-server=https://proxy.example.test:443"
 
 
 def test_hosting_artifacts_are_present_and_keep_secrets_out_of_image():

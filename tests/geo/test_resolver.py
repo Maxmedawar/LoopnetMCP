@@ -39,6 +39,22 @@ async def test_zip_state_and_county_resolution_are_keyless(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_full_street_address_degrades_to_city_when_geocoder_misses(tmp_path):
+    # A full street address that the Census geocoder can't match must fall back
+    # to its city instead of hard-failing (bug: it used the whole street string
+    # as the fallback key and raised).
+    fetch = AsyncMock()
+    fetch.get_json.return_value = {"result": {"addressMatches": []}}
+    resolver = _resolver(tmp_path, fetch)
+
+    geo = await resolver.resolve("8600 Cross Park Dr, Austin, TX")
+
+    assert geo.state_fips == "48"
+    assert geo.county_fips == "48453"  # Austin -> Travis County via city fallback
+    assert geo.level == GeoLevel.CITY
+
+
+@pytest.mark.asyncio
 async def test_census_geocoder_maps_city_county_and_tract(tmp_path):
     fetch = AsyncMock()
     fetch.get_json.return_value = json.loads(load_fixture("census/geocoder.json"))
