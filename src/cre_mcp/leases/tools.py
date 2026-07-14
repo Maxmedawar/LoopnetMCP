@@ -151,4 +151,86 @@ def calc_rent_schedule(
     }
 
 
-__all__ = ["abstract_lease_document", "lease_critical_dates", "calc_rent_schedule"]
+def analyze_lease_recoveries(
+    path: str,
+    cam: float | None = None,
+    taxes: float | None = None,
+    insurance: float | None = None,
+    tenant_sf: float | None = None,
+    total_sf: float | None = None,
+) -> dict[str, Any]:
+    """Abstract a lease's CAM/tax/insurance recovery clauses and estimate billing.
+
+    Extracts the recovery structure (method, caps, base year, admin fee,
+    gross-up, exclusions, audit rights, pro-rata share) as cited claims from
+    the lease document, then — when annual costs are supplied — estimates the
+    tenant's recoverable billing per line with every limiting clause quoted.
+    Document silence stays missing; a share is derived from tenant_sf/total_sf
+    only when the lease states no percentage, labeled as inferred.
+
+    Args:
+        path: Lease document path (.htm/.html/.txt/.pdf).
+        cam: Annual common-area maintenance cost pool, dollars.
+        taxes: Annual real-estate taxes, dollars.
+        insurance: Annual insurance premiums, dollars.
+        tenant_sf: Tenant's rentable square feet (share fallback).
+        total_sf: Property rentable square feet (share fallback denominator).
+
+    Returns:
+        Cited recovery terms, plus a billing estimate when costs were given.
+    """
+    from cre_mcp.leases.recoveries import estimate_recoverable, extract_recovery_terms
+
+    document = read_lease(path)
+    terms = extract_recovery_terms(document)
+    result: dict[str, Any] = {"source_path": str(path), "recovery_terms": asdict(terms)}
+    costs = {
+        key: value
+        for key, value in (("cam", cam), ("taxes", taxes), ("insurance", insurance))
+        if value is not None
+    }
+    if costs:
+        result["billing_estimate"] = estimate_recoverable(
+            terms, costs, tenant_sf, total_sf
+        )
+    else:
+        result["billing_estimate"] = None
+        result["note"] = "supply cam/taxes/insurance annual costs to estimate billing"
+    return result
+
+
+def price_lease_option(
+    path: str,
+    market: dict[str, Any],
+    as_of: str,
+    discount_rate: float | None = None,
+) -> dict[str, Any]:
+    """Price a lease's renewal/termination/expansion options against market.
+
+    Compares each cited option's rent basis (fixed / FMV / CPI) with supplied
+    market ranges (market_rent_psf, downtime_months, tilc_psf as {low, high})
+    and frames the exercise decision with its drivers — never a bare verdict.
+    Missing market inputs make the affected line honestly not-computable.
+
+    Args:
+        path: Lease document path (.htm/.html/.txt/.pdf).
+        market: {market_rent_psf: {low, high}, downtime_months: {...}, tilc_psf: {...}}.
+        as_of: Analysis date, ISO YYYY-MM-DD (drives notice-window status).
+        discount_rate: Optional decimal rate for PV of rent deltas.
+
+    Returns:
+        Per-option value ranges, decision framing, and notice deadlines.
+    """
+    from cre_mcp.leases.option_econ import price_option_decision
+
+    abstract = _load(path)
+    return price_option_decision(abstract, market, as_of, discount_rate=discount_rate)
+
+
+__all__ = [
+    "abstract_lease_document",
+    "analyze_lease_recoveries",
+    "calc_rent_schedule",
+    "lease_critical_dates",
+    "price_lease_option",
+]

@@ -124,6 +124,8 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(lease_tools.abstract_lease_document)
     mcp.tool()(lease_tools.lease_critical_dates)
     mcp.tool()(lease_tools.calc_rent_schedule)
+    mcp.tool()(lease_tools.analyze_lease_recoveries)
+    mcp.tool()(lease_tools.price_lease_option)
     mcp.tool()(taxecon_tools.estimate_tax_reassessment)
     mcp.tool()(taxecon_tools.audit_assessor_record)
     mcp.tool()(taxecon_tools.net_sale_proceeds)
