@@ -16,9 +16,12 @@ Where my verified grade differs from GPT's, the row is marked **Δ** and the rea
     tenant ledgers, PM system, insurance loss runs, permissioned counterparty outcome history).
     Building these now = unverifiable software. Do not build blind.
 
-**Verified tally:** 29 Covered · 46 Partial · 165 Missing.
+**Verified tally:** 30 Covered · 47 Partial · 163 Missing.
 (GPT said 30 / 42 / 168 — its grading was substantially accurate. The deltas below are the
-places where it mattered.)
+places where it mattered. CORRECTION 2026-07-14: an earlier revision of this file said
+29/46/165 and its category table did not sum to the headline; the per-row recount in
+`docs/MASTER_CHECKLIST.md` is definitive — GPT's 30 Covered all held, 2 Partials fell to
+Missing (jobs 46, 3), 7 Missings rose to Partial (34, 50, 5, 134, 29, 191, 227).)
 
 ---
 
@@ -49,30 +52,32 @@ and most of 22 (control) is therefore genuinely greenfield. GPT is right that th
 
 | Cat | Category | C | P | M | Note |
 |-----|----------|---|---|---|------|
-| 1 | Daily command center | 1 | 5 | 4 | Substrate exists (`dd_items`, `deal_events`, `ic_decisions`); no queue/brief layer. |
-| 2 | On-market sourcing | 2 | 5 | 3 | Search + score covered; **change detection** and DOM history absent. |
+| 1 | Daily command center | 1 | 4 | 5 | Substrate exists (`dd_items`, `deal_events`, `ic_decisions`); no queue/brief layer. |
+| 2 | On-market sourcing | 2 | 4 | 4 | Search + score covered; **change detection** and DOM history absent. |
 | 3 | Off-market & event sourcing | 3 | 3 | 4 | Motivation graph is a real asset. |
 | 4 | Market & site intelligence | 1 | 4 | 5 | **Micro-location (frontage/access/visibility) missing** — expert-separator #4. |
 | 5 | Core underwriting | 5 | 3 | 2 | Strongest category. But **no stress engine** (job 46). |
 | 6 | Advanced valuation & tax | 0 | 0 | 10 | Entirely absent. Tax reassessment (51) is the cheapest, highest-frequency win. |
-| 7 | Document truth & accounting | 3 | 3 | 4 | Financial truth strong; **ledger/GL truth impossible today (BLOCKED)**. |
+| 7 | Document truth & accounting | 2 | 3 | 5 | Financial truth strong (61, 69); **ledger/GL truth needs the internal backend (W4)**. |
 | 8 | Title, legal & survey | 0 | 3 | 7 | **Obligation collisions** — expert-separator #5. Greenfield. |
 | 9 | Zoning & entitlements | 0 | 0 | 10 | No zoning module exists. Free municipal data → LIVE-provable. |
-| 10 | Development & construction | 0 | 0 | 10 | Entirely absent. Different product; defer. |
-| 11 | Physical & environmental | 0 | 1 | 9 | `due_diligence_plan` is the only touchpoint. |
+| 10 | Development & construction | 0 | 0 | 10 | Entirely absent. Last wave. |
+| 11 | Physical & environmental | 0 | 0 | 10 | `due_diligence_plan` schedules these; nothing performs them. |
 | 12 | Tax, insurance, utilities, compliance | 0 | 0 | 10 | Compliance calendar (120) pairs with the obligation graph. |
 | 13 | **Lease abstraction & administration** | 0 | 1 | 9 | **The wedge.** Only parsers + lineage exist. |
-| 14 | Leasing, tenant rep & retail | 3 | 3 | 4 | Control engine already strong here. |
-| 15 | Property management | 0 | 0 | 10 | **All BLOCKED** — needs GL, bank, tenant ledgers, a PM system, real tenants. |
+| 14 | Leasing, tenant rep & retail | 3 | 2 | 5 | Control engine already strong here. |
+| 15 | Property management | 0 | 0 | 10 | Was BLOCKED; now W4 — **MedawarCRE becomes the system of record.** |
 | 16 | Debt & lender execution | 1 | 1 | 8 | Screening covered; **matching + execution scoring** are the moat, and need outcome history. |
-| 17 | Capital formation & IR | 2 | 3 | 5 | Securities gates + waterfall covered. |
-| 18 | Negotiation, LOI & structure | 4 | 3 | 3 | Strong. Term-drift detection (176) is a cheap, high-value add. |
-| 19 | Due diligence & closing | 3 | 4 | 3 | `dd_items` deadlines already persist — dependency tracker is close. |
-| 20 | Asset management & repositioning | 1 | 2 | 7 | Mostly BLOCKED (needs operating actuals). |
+| 17 | Capital formation & IR | 2 | 2 | 6 | Securities gates + waterfall covered. |
+| 18 | Negotiation, LOI & structure | 3 | 2 | 5 | Strong. Term-drift detection (176) is a cheap, high-value add. |
+| 19 | Due diligence & closing | 2 | 4 | 4 | `dd_items` deadlines already persist — dependency tracker is close. |
+| 20 | Asset management & repositioning | 1 | 2 | 7 | Needs W4 operating actuals; ships in W9. |
 | 21 | Distressed, notes & wholesale | 0 | 2 | 8 | Sourcing covered; note pricing/legal timelines absent. |
-| 22 | Master lease & control | 4 | 1 | 5 | Economics + outreach covered; **consent/assignability (214) is a fatal-flaw gap.** |
+| 22 | Master lease & control | 3 | 1 | 6 | Economics + outreach covered; **consent/assignability (214) is a fatal-flaw gap.** |
 | 23 | Disposition & 1031 | 1 | 4 | 5 | 1031 clock covered; sell-side process absent. |
 | 24 | LP, appraisal & relationship | 0 | 2 | 8 | **Relationship moat — requires the recording layer first.** |
+
+(Columns sum to 30 C / 47 P / 163 M — matches the per-row count in MASTER_CHECKLIST.md.)
 
 ---
 
