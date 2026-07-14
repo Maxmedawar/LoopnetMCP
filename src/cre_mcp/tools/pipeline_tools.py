@@ -174,6 +174,72 @@ async def update_deal_stage(
         return {"error": str(exc)}
 
 
+async def assign_deal(
+    deal_id: str,
+    owner: str | None = None,
+    next_action: str | None = None,
+    next_action_due: str | None = None,
+) -> dict:
+    """Assign accountability on a pipeline deal: owner, next action, due date.
+
+    A deal with no owner, no next action, or no due date is a deal quietly
+    dying — unassigned_deals and the morning queue surface exactly those. Pass
+    only the fields you are setting; omitted fields are left unchanged.
+
+    Args:
+        deal_id: Source-qualified deal identifier (e.g. "crexi:2335936").
+        owner: Who is responsible for moving this deal.
+        next_action: The concrete next step (e.g. "send LOI", "order Phase I").
+        next_action_due: Due date for the next action, ISO format YYYY-MM-DD.
+
+    Returns:
+        The updated accountability view of the deal.
+    """
+    logger.info("assign_deal: %s owner=%s", deal_id, owner)
+    try:
+        if not deal_id or not deal_id.strip():
+            raise ValueError("deal_id is required")
+        if owner is None and next_action is None and next_action_due is None:
+            raise ValueError(
+                "pass at least one of owner / next_action / next_action_due"
+            )
+        updated = await get_deal_store().assign_deal(
+            deal_id.strip(),
+            owner=owner,
+            next_action=next_action,
+            next_action_due=next_action_due,
+        )
+        if updated is None:
+            return {"error": f"no pipeline deal with deal_id {deal_id!r} — save it first"}
+        return {"assigned": updated}
+    except Exception as exc:
+        logger.error("assign_deal error: %s", exc)
+        return {"error": str(exc)}
+
+
+async def unassigned_deals() -> dict:
+    """List active deals with no owner, next action, or due date (the job-3 flag).
+
+    These are the deals most likely to die quietly: nobody owns them, nothing
+    is scheduled next, or no deadline exists. Fix each one with assign_deal.
+
+    Returns:
+        Active (non-owned, non-passed) deals with their missing fields named.
+    """
+    logger.info("unassigned_deals called")
+    try:
+        rows = await get_deal_store().unaccounted_deals()
+        return {
+            "count": len(rows),
+            "deals": rows,
+            "note": "fix each with assign_deal(deal_id, owner=..., next_action=..., "
+            "next_action_due=...)",
+        }
+    except Exception as exc:
+        logger.error("unassigned_deals error: %s", exc)
+        return {"error": str(exc)}
+
+
 async def list_pipeline(stage: str | None = None) -> dict:
     """List all pipeline deals or filter them to one stage.
 

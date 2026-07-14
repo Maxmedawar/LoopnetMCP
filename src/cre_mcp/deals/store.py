@@ -238,6 +238,11 @@ class DealStore:
             "score": "score REAL",
             "grade": "grade TEXT",
             "strategy": "strategy TEXT",
+            # Accountability columns (job 3): a deal with no owner, next action,
+            # or due date is a deal quietly dying — the command center flags them.
+            "owner": "owner TEXT",
+            "next_action": "next_action TEXT",
+            "next_action_due": "next_action_due TEXT",
         }
         for name, definition in migrations.items():
             if name not in columns:
@@ -886,6 +891,74 @@ class DealStore:
                 ),
             )
         return cursor.rowcount == 1
+
+    async def assign_deal(
+        self,
+        deal_id: str,
+        *,
+        owner: str | None = None,
+        next_action: str | None = None,
+        next_action_due: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Set accountability fields on a deal; None leaves a field unchanged.
+
+        Returns the updated accountability view, or None for an unknown deal.
+        """
+
+        def _write() -> dict[str, Any] | None:
+            sets, params = ["updated_at = ?"], [datetime.now(UTC).isoformat()]
+            for column, value in (
+                ("owner", owner),
+                ("next_action", next_action),
+                ("next_action_due", next_action_due),
+            ):
+                if value is not None:
+                    sets.append(f"{column} = ?")
+                    params.append(value.strip() or None)
+            with self._connect() as connection:
+                cursor = connection.execute(
+                    f"UPDATE deals SET {', '.join(sets)} WHERE deal_id = ?",
+                    (*params, deal_id),
+                )
+                if cursor.rowcount == 0:
+                    return None
+                row = connection.execute(
+                    "SELECT deal_id, stage, owner, next_action, next_action_due, "
+                    "updated_at FROM deals WHERE deal_id = ?",
+                    (deal_id,),
+                ).fetchone()
+            return dict(row) if row is not None else None
+
+        return await asyncio.to_thread(_write)
+
+    async def unaccounted_deals(self) -> list[dict[str, Any]]:
+        """Active deals missing an owner, a next action, or a due date (job 3)."""
+
+        def _read() -> list[dict[str, Any]]:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT deal_id, stage, owner, next_action, next_action_due,
+                           updated_at
+                    FROM deals
+                    WHERE stage NOT IN ('owned', 'passed')
+                      AND (owner IS NULL OR next_action IS NULL
+                           OR next_action_due IS NULL)
+                    ORDER BY updated_at DESC
+                    """
+                ).fetchall()
+            results = []
+            for row in rows:
+                record = dict(row)
+                record["missing"] = [
+                    field
+                    for field in ("owner", "next_action", "next_action_due")
+                    if record.get(field) is None
+                ]
+                results.append(record)
+            return results
+
+        return await asyncio.to_thread(_read)
 
     async def update_stage(
         self,

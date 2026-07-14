@@ -58,6 +58,8 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(execution_tools.list_deals)
     mcp.tool()(pipeline_tools.add_to_pipeline)
     mcp.tool()(pipeline_tools.update_deal_stage)
+    mcp.tool()(pipeline_tools.assign_deal)
+    mcp.tool()(pipeline_tools.unassigned_deals)
     mcp.tool()(pipeline_tools.list_pipeline)
     mcp.tool()(pipeline_tools.save_search)
     mcp.tool()(pipeline_tools.list_searches)
