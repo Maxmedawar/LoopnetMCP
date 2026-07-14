@@ -88,7 +88,7 @@ async def test_ops_tool_errors_are_error_dicts():
 
 
 @pytest.mark.asyncio
-async def test_phase20_tools_are_registered_and_total_is_seventy_two():
+async def test_phase20_tools_are_registered_and_total_is_seventy_four():
     tools = await mcp.get_tools()
     assert {"after_tax_returns", "operating_playbook"} <= set(tools)
-    assert len(tools) == 72
+    assert len(tools) == 74

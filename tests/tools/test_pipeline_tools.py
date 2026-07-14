@@ -104,7 +104,7 @@ async def test_pipeline_tool_errors_are_dicts(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_phase13_tools_are_registered_and_total_is_seventy_two():
+async def test_phase13_tools_are_registered_and_total_is_seventy_four():
     tools = await mcp.get_tools()
     assert {
         "add_to_pipeline",
@@ -114,4 +114,4 @@ async def test_phase13_tools_are_registered_and_total_is_seventy_two():
         "list_searches",
         "check_alerts",
     } <= set(tools)
-    assert len(tools) == 72
+    assert len(tools) == 74

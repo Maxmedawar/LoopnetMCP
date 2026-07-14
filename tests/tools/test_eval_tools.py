@@ -95,7 +95,7 @@ async def test_eval_tool_errors_are_error_dicts(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_phase22_tools_are_registered_and_total_is_seventy_two():
+async def test_phase22_tools_are_registered_and_total_is_seventy_four():
     tools = await mcp.get_tools()
     assert {"backtest_score", "record_deal_outcome"} <= set(tools)
-    assert len(tools) == 72
+    assert len(tools) == 74
