@@ -27,7 +27,9 @@ def register_all(mcp: Any) -> None:
         truth_tools,
     )
     from cre_mcp.command import tools as command_tools
+    from cre_mcp.dataroom import tools as dataroom_tools
     from cre_mcp.debt import tools as debt_tools
+    from cre_mcp.obligations import tools as obligation_tools
     from cre_mcp.leases import tools as lease_tools
     from cre_mcp.notes import tools as note_tools
     from cre_mcp.scenarios import tools as scenario_tools
@@ -138,6 +140,16 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(debt_tools.covenant_forecast)
     mcp.tool()(debt_tools.value_assumable_debt)
     mcp.tool()(debt_tools.compare_capital_paths)
+    mcp.tool()(obligation_tools.extract_lease_restrictions)
+    mcp.tool()(obligation_tools.detect_obligation_collisions)
+    mcp.tool()(obligation_tools.screen_transfer_consents)
+    mcp.tool()(obligation_tools.compare_estoppel_to_lease)
+    mcp.tool()(dataroom_tools.init_data_room)
+    mcp.tool()(dataroom_tools.data_room_index)
+    mcp.tool()(dataroom_tools.update_data_room_item)
+    mcp.tool()(dataroom_tools.init_transaction_plan)
+    mcp.tool()(dataroom_tools.transaction_critical_path)
+    mcp.tool()(dataroom_tools.closing_runway)
 
 
 __all__ = ["register_all"]
