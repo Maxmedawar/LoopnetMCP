@@ -7,11 +7,14 @@ def register_all(mcp: Any) -> None:
     """Register every tool module on the provided FastMCP application."""
     from cre_mcp.tools import (
         capital_tools,
+        control_tools,
         deal_tools,
         eval_tools,
         execution_tools,
         listing_tools,
         market_tools,
+        motivation_tools,
+        nearby_tools,
         ops_tools,
         owner_tools,
         pipeline_tools,
@@ -69,6 +72,17 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(truth_tools.reconcile_deal_docs)
     mcp.tool()(truth_tools.build_noi_bridge)
     mcp.tool()(truth_tools.deal_truth_report)
+    mcp.tool()(nearby_tools.nearby_brands)
+    mcp.tool()(nearby_tools.trade_area_anchors)
+    mcp.tool()(control_tools.find_control_opportunities)
+    mcp.tool()(control_tools.match_tenants_to_site)
+    mcp.tool()(control_tools.evaluate_tenant_site_fit)
+    mcp.tool()(control_tools.model_lease_creation_spread)
+    mcp.tool()(control_tools.recommend_control_structure)
+    mcp.tool()(control_tools.build_tenant_pitch)
+    mcp.tool()(motivation_tools.owner_motivation)
+    mcp.tool()(motivation_tools.record_trigger_event)
+    mcp.tool()(motivation_tools.find_motivated_owners)
 
 
 __all__ = ["register_all"]

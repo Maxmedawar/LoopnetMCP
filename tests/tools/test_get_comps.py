@@ -169,7 +169,7 @@ def test_no_paid_keys_builds_no_provider_and_preserves_free_only_behavior():
 
 
 @pytest.mark.asyncio
-async def test_get_comps_remains_registered_in_the_fifty_tool_suite():
+async def test_get_comps_remains_registered_in_the_sixty_one_tool_suite():
     tools = await mcp.get_tools()
     assert "get_comps" in tools
-    assert len(tools) == 50
+    assert len(tools) == 61

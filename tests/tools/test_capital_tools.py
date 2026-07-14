@@ -134,7 +134,7 @@ async def test_capital_tool_errors_are_dicts(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_capital_tools_registered_and_total_is_fifty():
+async def test_capital_tools_registered_and_total_is_sixty_one():
     tools = await mcp.get_tools()
     assert {
         "add_investor",
@@ -145,4 +145,4 @@ async def test_capital_tools_registered_and_total_is_fifty():
         "draft_ppm",
         "draft_form_d",
     } <= set(tools)
-    assert len(tools) == 50
+    assert len(tools) == 61
