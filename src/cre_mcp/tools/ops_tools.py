@@ -49,7 +49,8 @@ async def after_tax_returns(
         source: Registered listing source.
 
     Returns:
-        AfterTaxResult with depreciation, shields, exit taxes, returns, assumptions, and CPA gate.
+        AfterTaxResult with canonical pre_tax_irr, after_tax_irr, depreciation_annual,
+        recapture_1250, detailed schedules/taxes, assumptions, and the CPA gate.
     """
     logger.info("after_tax_returns called: source=%s listing=%s", source, url_or_id)
     try:

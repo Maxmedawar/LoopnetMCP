@@ -83,6 +83,13 @@ def test_section_1250_recapture_is_capped_and_taxed_at_twenty_five_percent():
 def test_after_tax_irr_and_multiple_are_below_pre_tax_when_sale_has_gain():
     result = _unlevered_result()
 
+    assert result.pre_tax_irr is not None
+    assert result.after_tax_irr is not None
+    assert result.after_tax_irr < result.pre_tax_irr
+    assert result.depreciation_annual is not None
+    assert result.depreciation_annual == result.depreciation_schedule[0].total_depreciation
+    assert result.recapture_1250 is not None
+    assert result.recapture_1250 == result.unrecaptured_1250_tax
     assert result.pre_tax_irr_pct is not None
     assert result.after_tax_irr_pct is not None
     assert result.after_tax_irr_pct < result.pre_tax_irr_pct

@@ -160,7 +160,7 @@ async def check_solicitation(
             non_accredited_count where relevant.
 
     Returns:
-        ComplianceCheck that blocks clear violations but never blesses an offering.
+        Fail-closed ComplianceCheck; only explicit allowlisted actions can pass preliminary gates.
     """
     logger.info("check_solicitation called: mode=%s", mode)
     try:

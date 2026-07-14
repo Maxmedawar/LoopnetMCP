@@ -45,6 +45,16 @@ async def test_after_tax_returns_tool_uses_analyzed_deal_and_cpa_gates():
         )
 
     assert result["recovery_period_years"] == 39
+    assert all(
+        result[key] is not None
+        for key in (
+            "pre_tax_irr",
+            "after_tax_irr",
+            "depreciation_annual",
+            "recapture_1250",
+        )
+    )
+    assert result["after_tax_irr"] < result["pre_tax_irr"]
     assert result["after_tax_irr_pct"] < result["pre_tax_irr_pct"]
     assert result["unrecaptured_1250_rate"] == 0.25
     assert "CPA" in result["cpa_gate"]

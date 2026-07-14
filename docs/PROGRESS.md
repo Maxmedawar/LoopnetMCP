@@ -27,7 +27,8 @@ Fable reviews independently after each phase before advancing.
 | 18 | Entity/structure engine + 1031 manager | 🟢 complete | 470 passed, 1 warning |
 | 19 | Capital-raise suite + SEC guardrails | 🟢 complete | 491 passed, 1 warning |
 | 20 | After-tax returns + operating playbook | 🟢 complete | 506 passed, 1 warning |
-| **Overall** | **Full roadmap delivered: Execution + Trust + Structure/Scale** | **🟢 FULL ROADMAP COMPLETE — 43 tools** | **506 passed, 1 warning** |
+| 21 | Correctness hardening | 🟢 complete | 519 passed, 1 warning |
+| **Overall** | **Full roadmap delivered: Execution + Trust + Structure/Scale** | **🟢 FULL ROADMAP COMPLETE + HARDENED — 43 tools** | **519 passed, 1 warning** |
 
 ## Log
 
@@ -331,3 +332,31 @@ Fable reviews independently after each phase before advancing.
   - Deviation: none. The model adds a conservative, explicit §1245 recapture line for accelerated
     cost-seg components rather than incorrectly treating every accelerated dollar as §1250 gain.
   - Pytest: `506 passed, 1 warning in 21.91s`
+- 2026-07-14 — Phase 21 correctness hardening complete.
+  - Status: GREEN; all 43 tools remain registered, securities actions now fail closed, and the
+    documented after-tax return keys are populated on priced deals with positive NOI and a
+    modeled sale. The full roadmap remains complete with the safety/trust punch list closed.
+  - Securities fix: replaced the prior "no clear violation" fallback with an explicit normalized
+    `(mode, action)` allowlist and the default-deny reason `Not explicitly permitted — treat as
+    prohibited until a securities attorney confirms`. Rule 506(b) public solicitation remains
+    blocked; 506(b) non-accredited purchasers without a documented pre-existing substantive
+    relationship remain blocked; Rule 506(c) purchaser acceptance/onboarding now requires both
+    accredited status and reasonable verification. Unknown strings, including strings that only
+    contain an allowed keyword, remain blocked. Known attorney-draft preparation is explicitly
+    allowlisted but cannot authorize circulation, solicitation, a sale, or accepting money.
+  - Tax output fix: added canonical `pre_tax_irr`, `after_tax_irr`, `depreciation_annual`, and
+    `recapture_1250` fields to `AfterTaxResult` and the MCP dict while retaining the detailed
+    schedule, unrecaptured-§1250 gain/rate/tax fields, and backward-compatible `*_irr_pct` keys.
+    `depreciation_annual` is the first modeled year's total depreciation; `recapture_1250` is the
+    modeled federal tax on unrecaptured §1250 gain, both explicitly documented in the schema.
+  - Live verification: `check_solicitation("506c", "accept_unverified_accredited")` and an
+    unknown `launch_the_moon_campaign` action both returned `allowed=false` with the securities-
+    attorney gate; verified 506(c) advertising returned `allowed=true` without approving any
+    purchaser or sale; 506(b) general solicitation returned `allowed=false`. Real priced Crexi
+    deal `2247699` returned `pre_tax_irr=7.037273`, `after_tax_irr=5.477289`,
+    `depreciation_annual=$51,413.33`, and `recapture_1250=$64,266.67` on a $2,506,400 purchase.
+  - Rule verification: current SEC guidance confirms that Rule 506(c)'s reasonable-verification
+    requirement is independent of merely being accredited and that Rule 506(b) prohibits general
+    solicitation. Every result remains a preliminary action gate, never an exemption opinion.
+  - Deviation: none. No dependencies or tools were added.
+  - Pytest: `519 passed, 1 warning in 21.75s`

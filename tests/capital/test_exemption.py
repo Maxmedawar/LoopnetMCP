@@ -88,13 +88,36 @@ def test_506c_allows_publicity_but_blocks_unverified_or_non_accredited_sales():
     assert "only to accredited investors" in non_accredited.why
 
 
+@pytest.mark.parametrize("mode", ["506b", "506c"])
 @pytest.mark.parametrize(
     "action",
     [
+        "launch_the_moon_campaign",
+        "do_not_advertise",
+        "review_accept_verified_accredited",
+        "accept_verified_accredited_then_launch_rocket",
+    ],
+)
+def test_unrecognized_action_defaults_to_blocked_with_exact_counsel_gate(mode, action):
+    result = check_solicitation(mode, action)
+
+    assert result.allowed is False
+    assert (
+        "Not explicitly permitted — treat as prohibited until a securities attorney confirms"
+        in result.why
+    )
+    assert "securities attorney" in result.guardrail
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "accept_unverified_accredited",
         "accept an unverified accredited investor",
         "accept_unverified_accredited_investor",
         "accept self-certified accredited investor",
         "close subscription for accredited investor pending verification",
+        "onboard an accredited investor with unknown verification",
     ],
 )
 def test_506c_natural_language_unverified_acceptance_is_always_blocked(action):
@@ -103,6 +126,32 @@ def test_506c_natural_language_unverified_acceptance_is_always_blocked(action):
     assert result.allowed is False
     assert "not been verified" in result.why
     assert "self-certification alone" in result.why
+
+
+def test_506c_known_good_publicity_and_verified_purchaser_actions_are_allowlisted():
+    publicity = check_solicitation(
+        "506c",
+        {
+            "action": "advertise",
+            "all_investors_accredited": True,
+            "all_accreditation_verified": True,
+        },
+    )
+    purchaser = check_solicitation("506c", "onboard_verified_accredited_investor")
+
+    assert publicity.allowed is True
+    assert purchaser.allowed is True
+    assert "Explicitly recognized" in publicity.why
+    assert "verified" in purchaser.why
+
+
+@pytest.mark.parametrize("mode", ["506b", "506c"])
+def test_known_draft_preparation_is_explicitly_allowlisted_but_still_gated(mode):
+    result = check_solicitation(mode, "prepare_private_draft")
+
+    assert result.allowed is True
+    assert "does not authorize" in result.why
+    assert "securities attorney" in result.guardrail
 
 
 def test_bad_mode_and_unknown_purchaser_are_blocked():

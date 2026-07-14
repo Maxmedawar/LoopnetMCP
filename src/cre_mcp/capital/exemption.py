@@ -1,4 +1,4 @@
-"""Preliminary Regulation D solicitation and purchaser guardrails."""
+"""Fail-closed preliminary Regulation D action guardrails."""
 
 from __future__ import annotations
 
@@ -9,25 +9,132 @@ from typing import Any
 from cre_mcp.execution.guardrails import capital_guardrail
 from cre_mcp.models.capital import ComplianceCheck
 
-PUBLIC_ACTION_TERMS = (
-    "advertise_publicly",
-    "general_solicitation",
-    "public website",
-    "social media",
-    "mass email",
-    "newspaper",
-    "radio",
-    "television",
-    "public seminar",
-    "podcast",
+GENERAL_SOLICITATION_ACTION = "general_solicitation"
+ACCEPT_INVESTOR_ACTION = "accept_investor"
+PREPARE_DRAFT_ACTION = "prepare_draft"
+PREPARE_FORM_D_ACTION = "prepare_form_d"
+
+# An action can return allowed=True only if its normalized pair appears here and
+# then clears the fact-specific gates below. Everything else fails closed.
+PERMITTED_ACTION_PAIRS = frozenset(
+    {
+        ("506b", ACCEPT_INVESTOR_ACTION),
+        ("506b", PREPARE_DRAFT_ACTION),
+        ("506b", PREPARE_FORM_D_ACTION),
+        ("506c", GENERAL_SOLICITATION_ACTION),
+        ("506c", ACCEPT_INVESTOR_ACTION),
+        ("506c", PREPARE_DRAFT_ACTION),
+        ("506c", PREPARE_FORM_D_ACTION),
+    }
 )
-PURCHASER_ACTION_TERMS = (
-    "accept_investor",
-    "accept_money",
-    "accept_funds",
-    "first_sale",
-    "close_subscription",
-    "sell_security",
+
+GENERAL_SOLICITATION_ALIASES = frozenset(
+    {
+        "advertise",
+        "advertising",
+        "advertise_publicly",
+        "general_advertising",
+        "general_solicitation",
+        "public_advertising",
+        "public_solicitation",
+        "solicit",
+        "solicit_publicly",
+    }
+)
+ACCEPT_INVESTOR_ALIASES = frozenset(
+    {
+        "accept",
+        "accept_funds",
+        "accept_investor",
+        "accept_money",
+        "accept_nonaccredited",
+        "accept_subscription",
+        "accept_unverified_accredited",
+        "close_subscription",
+        "first_sale",
+        "onboard",
+        "onboard_investor",
+        "sell_security",
+    }
+)
+ACCEPTANCE_VERBS = frozenset(
+    {
+        "accept",
+        "accepting",
+        "close",
+        "closing",
+        "onboard",
+        "onboarding",
+        "sell",
+        "selling",
+    }
+)
+ACCEPTANCE_NOUNS = frozenset(
+    {
+        "funds",
+        "investment",
+        "investor",
+        "money",
+        "purchaser",
+        "sale",
+        "security",
+        "subscription",
+    }
+)
+ACTION_FILLER_TOKENS = frozenset({"a", "all", "an", "for", "from", "the", "to", "with"})
+INVESTOR_FACT_TOKENS = frozenset(
+    {
+        "accredited",
+        "certification",
+        "certified",
+        "investors",
+        "new",
+        "non",
+        "nonaccredited",
+        "pending",
+        "self",
+        "status",
+        "unknown",
+        "unverified",
+        "verification",
+        "verified",
+    }
+)
+PUBLIC_CHANNEL_TOKENS = frozenset(
+    {
+        "advertise",
+        "advertising",
+        "email",
+        "general",
+        "mass",
+        "media",
+        "newspaper",
+        "podcast",
+        "public",
+        "publicly",
+        "radio",
+        "seminar",
+        "social",
+        "solicit",
+        "solicitation",
+        "soliciting",
+        "television",
+        "website",
+    }
+)
+UNVERIFIED_MARKERS = (
+    "unverified",
+    "not_verified",
+    "without_verification",
+    "pending_verification",
+    "verification_pending",
+    "self_attested",
+    "self_certified",
+    "self_certification",
+)
+UNKNOWN_ACTION_REASON = (
+    "BLOCKED: Not explicitly permitted — treat as prohibited until a securities "
+    "attorney confirms."
 )
 
 
@@ -40,84 +147,136 @@ def _mode(value: str) -> str:
     return normalized
 
 
+def _slug(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value).strip().casefold()).strip("_")
+
+
 def _optional_bool(value: Any) -> bool | None:
     if value is None:
         return None
     if isinstance(value, bool):
         return value
+    if isinstance(value, (int, float)) and value in {0, 1}:
+        return bool(value)
     if isinstance(value, str):
-        normalized = value.strip().casefold()
+        normalized = _slug(value)
         if normalized in {"true", "yes", "1", "accredited", "verified"}:
             return True
-        if normalized in {"false", "no", "0", "non-accredited", "unverified"}:
-            return False
-    return bool(value)
+        if normalized in {
+            "false",
+            "no",
+            "0",
+            "nonaccredited",
+            "non_accredited",
+            "unverified",
+            "not_verified",
+            "unknown",
+        }:
+            return False if normalized != "unknown" else None
+    return None
+
+
+def _first_bool(data: Mapping[str, Any], *keys: str) -> bool | None:
+    for key in keys:
+        if key in data:
+            return _optional_bool(data.get(key))
+    return None
+
+
+def _action_kind(normalized: str, tokens: set[str]) -> str | None:
+    if normalized in {"prepare_draft", "prepare_private_draft"}:
+        return PREPARE_DRAFT_ACTION
+    if normalized in {"prepare_form_d", "prepare_form_d_data"}:
+        return PREPARE_FORM_D_ACTION
+    if normalized in ACCEPT_INVESTOR_ALIASES:
+        return ACCEPT_INVESTOR_ACTION
+    first_token = normalized.split("_", 1)[0]
+    acceptance_vocabulary = (
+        ACCEPTANCE_VERBS | ACCEPTANCE_NOUNS | ACTION_FILLER_TOKENS | INVESTOR_FACT_TOKENS
+    )
+    if (
+        first_token in ACCEPTANCE_VERBS
+        and tokens <= acceptance_vocabulary
+        and (
+            tokens.intersection(ACCEPTANCE_NOUNS)
+            or tokens.intersection({"accredited", "nonaccredited", "unverified"})
+        )
+    ):
+        return ACCEPT_INVESTOR_ACTION
+    if normalized in GENERAL_SOLICITATION_ALIASES:
+        return GENERAL_SOLICITATION_ACTION
+    solicitation_vocabulary = (
+        PUBLIC_CHANNEL_TOKENS | ACTION_FILLER_TOKENS | INVESTOR_FACT_TOKENS
+    )
+    if (
+        first_token in {"advertise", "advertising", "solicit", "soliciting"}
+        and tokens <= solicitation_vocabulary
+    ):
+        return GENERAL_SOLICITATION_ACTION
+    return None
 
 
 def _action_data(action: str | Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(action, Mapping):
         data = dict(action)
-        label = str(data.get("action") or data.get("type") or "screen_action").strip()
+        label = str(data.get("action") or data.get("type") or "").strip()
     else:
         data = {}
         label = str(action).strip()
     if not label:
         raise ValueError("action cannot be blank")
-    normalized = label.casefold().replace("-", "_").replace(" ", "_")
-    text = " ".join([normalized, *(str(value).casefold() for value in data.values())])
-    action_tokens = set(filter(None, re.split(r"[^a-z0-9]+", normalized)))
-    public = _optional_bool(data.get("general_solicitation"))
-    if public is None:
-        public = _optional_bool(data.get("public"))
-    if public is None:
-        public = any(term in text for term in PUBLIC_ACTION_TERMS)
-    accepting = _optional_bool(data.get("accepting_money"))
-    if accepting is None:
-        accepting = any(term in text for term in PURCHASER_ACTION_TERMS) or (
-            bool(
-                action_tokens.intersection(
-                    {"accept", "accepting", "close", "closing", "sell", "selling"}
-                )
-            )
-            and bool(
-                action_tokens.intersection(
-                    {
-                        "investor",
-                        "purchaser",
-                        "subscription",
-                        "money",
-                        "funds",
-                        "security",
-                        "sale",
-                    }
-                )
-            )
-        )
 
-    accredited = _optional_bool(data.get("accredited"))
-    if accredited is None and "non_accredited" in text:
+    normalized = _slug(label)
+    tokens = set(filter(None, normalized.split("_")))
+    action_kind = _action_kind(normalized, tokens)
+    data_text = "_".join(_slug(value) for value in data.values())
+    text = f"{normalized}_{data_text}"
+
+    accredited = _first_bool(
+        data,
+        "accredited",
+        "all_investors_accredited",
+        "all_purchasers_accredited",
+    )
+    if accredited is None and any(
+        marker in text
+        for marker in ("nonaccredited", "non_accredited", "not_accredited")
+    ):
         accredited = False
     elif accredited is None and "accredited" in text:
         accredited = True
-    verified = _optional_bool(data.get("accreditation_verified"))
-    unverified_markers = (
-        "unverified",
-        "not_verified",
-        "without_verification",
-        "pending_verification",
-        "verification_pending",
-        "self_certified",
-        "self_certification",
+
+    verified = _first_bool(
+        data,
+        "accreditation_verified",
+        "verified",
+        "all_accreditation_verified",
+        "all_investors_verified",
+        "all_purchasers_verified",
     )
-    if verified is None and any(marker in text for marker in unverified_markers):
+    if verified is None and any(marker in text for marker in UNVERIFIED_MARKERS):
         verified = False
     elif verified is None and "verified" in text:
         verified = True
-    relationship = str(data.get("relationship") or "").strip().casefold() or None
-    if relationship is None and "preexisting" in text:
+
+    relationship = _slug(data.get("relationship") or "") or None
+    if relationship in {
+        "existing",
+        "pre_existing",
+        "pre_existing_substantive",
+        "preexisting_substantive",
+    }:
         relationship = "preexisting"
-    elif relationship is None and "new_relationship" in text:
+    if relationship is None and any(
+        marker in text
+        for marker in ("preexisting", "pre_existing", "preexisting_substantive")
+    ):
+        relationship = "preexisting"
+    elif relationship is None and any(
+        marker in text for marker in ("new_relationship", "no_relationship")
+    ):
         relationship = "new"
+
     count_value = data.get("non_accredited_count", 0)
     try:
         non_accredited_count = int(count_value)
@@ -125,12 +284,12 @@ def _action_data(action: str | Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("non_accredited_count must be an integer") from exc
     if non_accredited_count < 0:
         raise ValueError("non_accredited_count cannot be negative")
+
     return {
         "label": label,
-        "public": bool(public),
-        "accepting": bool(accepting),
+        "action_kind": action_kind,
         "accredited": accredited,
-        "verified": bool(verified),
+        "verified": verified,
         "relationship": relationship,
         "non_accredited_count": non_accredited_count,
     }
@@ -148,9 +307,35 @@ def _result(
         why=why,
         remediation=remediation,
         guardrail=capital_guardrail(
-            "Have securities counsel document the chosen exemption, bad-actor review, "
-            "offeree/purchaser file, disclosures, Form D timing, and every state notice before action."
+            "Have a securities attorney confirm this exact action and document the chosen "
+            "exemption, bad-actor review, offeree/purchaser file, disclosures, Form D timing, "
+            "and every state notice before action."
         ),
+    )
+
+
+def _default_deny(rule: str) -> ComplianceCheck:
+    return _result(
+        False,
+        rule,
+        UNKNOWN_ACTION_REASON,
+        [
+            "Do not solicit, onboard, accept a subscription, or accept money based on this result.",
+            "Give the exact proposed communication or transaction to a securities attorney for written clearance.",
+        ],
+    )
+
+
+def _allow_draft(rule: str, action_kind: str) -> ComplianceCheck:
+    document = "Form D intake data" if action_kind == PREPARE_FORM_D_ACTION else "attorney draft"
+    return _result(
+        True,
+        rule,
+        f"Explicitly recognized preparation of {document} is permitted for counsel review; it does not authorize circulation, solicitation, a sale, or accepting money.",
+        [
+            "Keep the document stamped DRAFT and do not circulate it as offering material.",
+            "Have securities counsel review and approve every fact, omission, exemption condition, filing, and use before further action.",
+        ],
     )
 
 
@@ -158,12 +343,14 @@ def check_solicitation(
     mode: str,
     action: str | Mapping[str, Any],
 ) -> ComplianceCheck:
-    """Block clear 506(b)/(c) violations without blessing the offering."""
+    """Fail closed unless a recognized Reg D action clears every supplied-fact gate."""
     selected_mode = _mode(mode)
     screened = _action_data(action)
+    action_kind = screened["action_kind"]
+
     if selected_mode == "506b":
         rule = "Rule 506(b): no general solicitation; purchaser eligibility remains fact-specific"
-        if screened["public"]:
+        if action_kind == GENERAL_SOLICITATION_ACTION:
             return _result(
                 False,
                 rule,
@@ -174,7 +361,11 @@ def check_solicitation(
                     "Use only counsel-approved communications to a documented pre-existing substantive network.",
                 ],
             )
-        if screened["accepting"] and screened["accredited"] is False:
+        if (selected_mode, action_kind) not in PERMITTED_ACTION_PAIRS:
+            return _default_deny(rule)
+        if action_kind in {PREPARE_DRAFT_ACTION, PREPARE_FORM_D_ACTION}:
+            return _allow_draft(rule, action_kind)
+        if screened["accredited"] is False:
             if screened["relationship"] != "preexisting":
                 return _result(
                     False,
@@ -196,7 +387,7 @@ def check_solicitation(
                         "Have counsel audit the 90-day and integrated-offering purchaser count.",
                     ],
                 )
-        if screened["accepting"] and screened["accredited"] is None:
+        if screened["accredited"] is None:
             return _result(
                 False,
                 rule,
@@ -209,39 +400,53 @@ def check_solicitation(
         return _result(
             True,
             rule,
-            "No clear 506(b) violation was detected from the supplied facts; this is only a preliminary gate, not approval to offer or sell.",
+            "Explicitly recognized 506(b) purchaser action cleared the supplied preliminary facts; this is not approval to offer, sell, or accept money.",
             [
-                "Confirm there was no general solicitation and document each offeree relationship.",
+                "Confirm there was no general solicitation and document the offeree relationship.",
                 "For accredited purchasers, establish a reasonable belief from facts beyond a checked box alone.",
                 "For any non-accredited purchaser, counsel must confirm sophistication, the 35-person limit, and Rule 502(b) disclosures.",
             ],
         )
 
     rule = "Rule 506(c): general solicitation permitted; every purchaser accredited and reasonably verified"
-    if screened["accepting"] and screened["accredited"] is not True:
+    if (selected_mode, action_kind) not in PERMITTED_ACTION_PAIRS:
+        return _default_deny(rule)
+    if action_kind in {PREPARE_DRAFT_ACTION, PREPARE_FORM_D_ACTION}:
+        return _allow_draft(rule, action_kind)
+    if action_kind == ACCEPT_INVESTOR_ACTION:
+        if screened["accredited"] is not True:
+            return _result(
+                False,
+                rule,
+                "BLOCKED: Rule 506(c) permits sales only to accredited investors; this purchaser is non-accredited or unassessed.",
+                [
+                    "Do not accept the subscription or money.",
+                    "Confirm accredited status and retain counsel-approved verification evidence before a sale.",
+                ],
+            )
+        if screened["verified"] is not True:
+            return _result(
+                False,
+                rule,
+                "BLOCKED: accredited status has not been verified through reasonable steps; self-certification alone does not clear 506(c).",
+                [
+                    "Do not onboard the purchaser or accept the subscription or money.",
+                    "Use counsel-approved reasonable verification, such as qualifying records or a recent confirmation from an eligible licensed professional.",
+                ],
+            )
         return _result(
-            False,
+            True,
             rule,
-            "BLOCKED: Rule 506(c) permits sales only to accredited investors; this purchaser is non-accredited or unassessed.",
+            "Explicitly recognized 506(c) purchaser action cleared supplied accredited-and-verified facts; this is not approval to sell or accept money.",
             [
-                "Do not accept the subscription or money.",
-                "Confirm accredited status and retain counsel-approved verification evidence before a sale.",
-            ],
-        )
-    if screened["accepting"] and screened["verified"] is not True:
-        return _result(
-            False,
-            rule,
-            "BLOCKED: accredited status has not been verified through reasonable steps; self-certification alone does not clear 506(c).",
-            [
-                "Do not accept the subscription or money.",
-                "Use counsel-approved reasonable verification, such as qualifying records or a recent confirmation from an eligible licensed professional.",
+                "Retain the counsel-approved evidence supporting reasonable verification for this purchaser.",
+                "Complete bad-actor, disclosure, Form D, state notice, and subscription review before any sale.",
             ],
         )
     return _result(
         True,
         rule,
-        "No clear 506(c) violation was detected from the supplied facts; public solicitation may be possible, but no sale is approved.",
+        "Explicitly recognized Rule 506(c) general solicitation may be possible, but no purchaser or sale is approved.",
         [
             "Use only counsel-approved, balanced materials with no material omission or performance guarantee.",
             "Before every sale, document accredited status and reasonable verification for that purchaser.",
@@ -249,4 +454,4 @@ def check_solicitation(
     )
 
 
-__all__ = ["check_solicitation"]
+__all__ = ["PERMITTED_ACTION_PAIRS", "UNKNOWN_ACTION_REASON", "check_solicitation"]
