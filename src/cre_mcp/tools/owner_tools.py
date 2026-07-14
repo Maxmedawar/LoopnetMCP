@@ -20,7 +20,7 @@ async def owner_lookup(
     apn: str | None = None,
     county: str | None = None,
 ) -> dict:
-    """Look up public assessor parcel and owner data.
+    """Look up free-first parcel and owner data with opt-in paid fallback.
 
     Args:
         address: Site address. Include city/state or provide ``county`` separately.
@@ -29,6 +29,7 @@ async def owner_lookup(
 
     Returns:
         A normalized OwnerRecord with its matching parcel, or an error dictionary.
+        ATTOM/Regrid are called only when explicitly keyed and public coverage misses.
     """
     logger.info(
         "owner_lookup called: address=%s apn=%s county=%s",
@@ -39,7 +40,7 @@ async def owner_lookup(
     try:
         owner = await _engine().lookup(address=address, apn=apn, county=county)
         if owner is None:
-            return {"error": "No configured county parcel record found"}
+            return {"error": "No parcel record found in the enabled provider chain"}
         return owner.model_dump(mode="json")
     except Exception as exc:
         logger.error("owner_lookup error: %s", exc)

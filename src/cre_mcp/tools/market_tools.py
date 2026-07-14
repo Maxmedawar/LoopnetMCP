@@ -7,13 +7,18 @@ from typing import Any
 
 from cre_mcp.comps.avm import estimate_value
 from cre_mcp.comps.records import sale_comps
+from cre_mcp.config import CreConfig
+from cre_mcp.enrichment.base import CompsProvider, ProviderUnavailable
 from cre_mcp.enrichment.counties import config_for_geo
 from cre_mcp.enrichment.owner import OwnerLookup
+from cre_mcp.enrichment.providers.attom import AttomProvider
+from cre_mcp.enrichment.providers.regrid import RegridProvider
 from cre_mcp.geo.resolver import resolve
 from cre_mcp.market.intel import MarketIntel, market_score
 from cre_mcp.market.rent_comps import RentCompsService
-from cre_mcp.models import Deal, Listing, ParcelRecord, SaleComp, ValueEstimate
+from cre_mcp.models import Deal, GeoRef, Listing, ParcelRecord, SaleComp, ValueEstimate
 from cre_mcp.models.market import MarketPack
+from cre_mcp.scoring.rubrics import thresholds as T
 from cre_mcp.sources.dedupe import normalize_address
 from cre_mcp.tools.deal_tools import analyze_deal
 
@@ -42,6 +47,21 @@ def _owner_engine() -> OwnerLookup:
     if _owner_lookup is None:
         _owner_lookup = OwnerLookup()
     return _owner_lookup
+
+
+def _secret_is_set(secret: object) -> bool:
+    getter = getattr(secret, "get_secret_value", None)
+    return bool(getter and str(getter()).strip())
+
+
+def _paid_comps_providers(config: CreConfig) -> list[CompsProvider]:
+    """Build only providers that Max explicitly enabled with a paid key."""
+    providers: list[CompsProvider] = []
+    if _secret_is_set(config.attom_api_key):
+        providers.append(AttomProvider(config))
+    if _secret_is_set(config.regrid_api_key):
+        providers.append(RegridProvider(config))
+    return providers
 
 
 def _serialize(pack: MarketPack) -> dict[str, Any]:
@@ -204,7 +224,62 @@ async def _address_comps(
     except Exception as exc:
         logger.warning("County sale comps unavailable for %s: %s", address, exc)
         comps = []
-    return subject, estimate_value(subject, comps, market), comps
+    estimate = estimate_value(subject, comps, market)
+    return await _paid_fallback(subject, geo, market, estimate, comps)
+
+
+def _free_comps_are_strong(
+    estimate: ValueEstimate,
+    comps: list[SaleComp],
+) -> bool:
+    return (
+        estimate.method == "county_comps"
+        and len(comps) >= T.SALE_COMP_MIN_COUNT
+        and estimate.mid is not None
+    )
+
+
+async def _paid_fallback(
+    subject: Listing,
+    geo: GeoRef | None,
+    market: MarketPack | None,
+    estimate: ValueEstimate,
+    comps: list[SaleComp],
+    providers: list[CompsProvider] | None = None,
+) -> tuple[Listing, ValueEstimate, list[SaleComp]]:
+    """Use an explicitly enabled paid source only after weak/empty free coverage."""
+    if _free_comps_are_strong(estimate, comps):
+        return subject, estimate, comps
+    selected = providers if providers is not None else _paid_comps_providers(CreConfig())
+    for provider in selected:
+        try:
+            result = await provider.get_comps(subject, geo)
+        except ProviderUnavailable:
+            continue
+        except Exception as exc:
+            logger.warning(
+                "Opt-in paid comps provider %s failed non-fatally: %s",
+                type(provider).__name__,
+                exc,
+            )
+            continue
+        paid_estimate = result.value_estimate
+        paid_comps = result.comps
+        if paid_estimate is None and paid_comps:
+            modeled = estimate_value(subject, paid_comps, market)
+            if modeled.mid is not None:
+                paid_estimate = modeled.model_copy(
+                    update={
+                        "method": result.provider,
+                        "source": (
+                            f"{result.provider.upper()} paid closed-sale comparables "
+                            "(opt-in, pay-per-use); verify with an appraiser."
+                        ),
+                    }
+                )
+        if paid_estimate is not None and paid_estimate.mid is not None:
+            return subject, paid_estimate, paid_comps or comps
+    return subject, estimate, comps
 
 
 def _comps_explanation(
@@ -238,7 +313,7 @@ async def get_comps(
     url_or_id: str,
     source: str = "loopnet",
 ) -> dict:
-    """Return free county sale comps and an honestly labeled value estimate.
+    """Return free-first sale comps and an honestly labeled value estimate.
 
     Args:
         url_or_id: Listing URL/source ID, or a full property address.
@@ -246,6 +321,7 @@ async def get_comps(
 
     Returns:
         Value estimate, comps used, confidence/error band, and plain-English context.
+        ATTOM/Regrid are considered only when explicitly keyed and free coverage is weak.
     """
     logger.info("get_comps called: source=%s subject=%s", source, url_or_id)
     try:
@@ -263,6 +339,31 @@ async def get_comps(
                 deal.market_pack,
             )
             comps = deal.sale_comps
+            paid_providers = (
+                []
+                if _free_comps_are_strong(value_estimate, comps)
+                else _paid_comps_providers(CreConfig())
+            )
+            if paid_providers:
+                geo = None
+                try:
+                    geo = await resolve(
+                        subject.address or _location_for_subject(subject)
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Paid comps geography unavailable for %s: %s",
+                        subject.address,
+                        exc,
+                    )
+                subject, value_estimate, comps = await _paid_fallback(
+                    subject,
+                    geo,
+                    deal.market_pack,
+                    value_estimate,
+                    comps,
+                    paid_providers,
+                )
         return {
             "subject": {
                 "source": subject.source,
@@ -279,10 +380,15 @@ async def get_comps(
             "comps": [comp.model_dump(mode="json") for comp in comps],
             "explanation": _comps_explanation(subject, value_estimate),
             "coverage_note": (
-                "Free closed-sale data is county-fragmented; county_comps is the strongest "
-                "path, while fhfa_trend and listing_context are explicitly weaker fallbacks."
+                "Free closed-sale data is county-fragmented and is always tried first. "
+                "ATTOM/Regrid are opt-in pay-per-use fallbacks only when a key is set and "
+                "free coverage is weak; every selected method is labeled above."
             ),
         }
     except Exception as exc:
         logger.error("get_comps error for %s: %s", url_or_id, exc)
         return {"error": str(exc)}
+
+
+def _location_for_subject(subject: Listing) -> str:
+    return ", ".join(value for value in (subject.city, subject.state) if value)

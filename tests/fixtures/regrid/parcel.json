@@ -1,0 +1,39 @@
+{
+  "parcels": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "id": 12345,
+        "geometry": null,
+        "properties": {
+          "headline": "100 MAIN ST",
+          "path": "/us/tx/travis/austin/12345",
+          "fields": {
+            "geoid": "48453",
+            "parcelnumb": "0123456789",
+            "usedesc": "Commercial Retail",
+            "yearbuilt": 2008,
+            "numunits": 1,
+            "parval": 2450000,
+            "landval": 900000,
+            "saleprice": 2100000,
+            "saledate": "2022-05-18",
+            "owner": "MAIN STREET HOLDINGS LLC",
+            "mailadd": "PO BOX 100",
+            "mail_city": "DALLAS",
+            "mail_state2": "TX",
+            "mail_zip": "75201",
+            "address": "100 MAIN ST",
+            "scity": "AUSTIN",
+            "state2": "TX",
+            "szip": "78701",
+            "lat": 30.2672,
+            "lon": -97.7431,
+            "ll_bldg_footprint_sqft": 12500
+          }
+        }
+      }
+    ]
+  }
+}

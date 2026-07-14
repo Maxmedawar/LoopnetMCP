@@ -19,6 +19,102 @@ from cre_mcp.sources.dedupe import normalize_address
 logger = logging.getLogger(__name__)
 
 
+# Sales-only county coverage lives here so adding a public recorder layer does
+# not accidentally claim that the same endpoint can supply parcel ownership.
+COUNTY_SALES_ENDPOINTS: dict[str, CountyParcelConfig] = {
+    "53033": CountyParcelConfig(
+        fips="53033",
+        name="King County",
+        state="WA",
+        arcgis_url=(
+            "https://services.arcgis.com/Ej0PsM5Aw677QF1W/arcgis/rest/services/"
+            "PARCEL_SALES3YR_AREA_287/FeatureServer/0"
+        ),
+        field_map={},
+        sales_layer=(
+            "https://services.arcgis.com/Ej0PsM5Aw677QF1W/arcgis/rest/services/"
+            "PARCEL_SALES3YR_AREA_287/FeatureServer/0"
+        ),
+        sales_field_map={
+            "parcel_id": "PIN",
+            "address": "address",
+            "sale_price": "SalePrice",
+            "time_adjusted_price": None,
+            "sale_date": "SaleDate",
+            "sqft": None,
+            "units": None,
+            "use_code": "Principal_Use",
+            "lat": None,
+            "lon": None,
+        },
+        sales_where="SalePrice > 10000 AND SaleDate IS NOT NULL",
+    ),
+    "37183": CountyParcelConfig(
+        fips="37183",
+        name="Wake County",
+        state="NC",
+        arcgis_url=(
+            "https://maps.wakegov.com/arcgis/rest/services/Property/"
+            "Parcels/MapServer/0"
+        ),
+        field_map={},
+        sales_layer=(
+            "https://maps.wakegov.com/arcgis/rest/services/Property/"
+            "Parcels/MapServer/0"
+        ),
+        sales_field_map={
+            "parcel_id": "PIN_NUM",
+            "address": "SITE_ADDRESS",
+            "sale_price": "TOTSALPRICE",
+            "time_adjusted_price": None,
+            "sale_date": "SALE_DATE",
+            "sqft": "HEATEDAREA",
+            "units": "UNITS",
+            "use_code": "TYPE_USE_DECODE",
+            "lat": None,
+            "lon": None,
+        },
+        sales_where="TOTSALPRICE > 10000 AND SALE_DATE IS NOT NULL",
+    ),
+    "39049": CountyParcelConfig(
+        fips="39049",
+        name="Franklin County",
+        state="OH",
+        arcgis_url=(
+            "https://gis.franklincountyohio.gov/hosting/rest/services/"
+            "RealEstate/Sales_Information/FeatureServer/0"
+        ),
+        field_map={},
+        sales_layer=(
+            "https://gis.franklincountyohio.gov/hosting/rest/services/"
+            "RealEstate/Sales_Information/FeatureServer/0"
+        ),
+        sales_field_map={
+            "parcel_id": "PARCELID",
+            "address": "SITEADDRESS",
+            "sale_price": "SalePrice",
+            "time_adjusted_price": None,
+            "sale_date": "SALEDATE",
+            "sqft": "RESFLRAREA",
+            "units": None,
+            "use_code": "CLASSDSCRP",
+            "lat": None,
+            "lon": None,
+        },
+        sales_where=(
+            "SalePrice > 10000 AND SALEDATE IS NOT NULL AND ValidSale = 'Y'"
+        ),
+    ),
+}
+
+
+def sales_config_for_geo(geo: GeoRef | None) -> CountyParcelConfig | None:
+    """Select a verified sales-only layer before the parcel registry fallback."""
+    if geo is None or geo.county_fips is None:
+        return None
+    return COUNTY_SALES_ENDPOINTS.get(geo.county_fips) or config_for_geo(geo)
+
+
 def _field(config: CountyParcelConfig, key: str) -> str | None:
     return config.sales_field_map.get(key)
 
@@ -198,7 +294,7 @@ def _recent(comp: SaleComp) -> bool:
 
 async def sale_comps(geo: GeoRef, subject: Listing) -> list[SaleComp]:
     """Return nearby, recent, like-use county sales when a verified layer exists."""
-    config = config_for_geo(geo)
+    config = sales_config_for_geo(geo)
     if config is None or not config.sales_layer:
         logger.info(
             "County sale comps unavailable for county_fips=%s; no verified layer is wired",
@@ -247,4 +343,9 @@ async def sale_comps(geo: GeoRef, subject: Listing) -> list[SaleComp]:
     ]
 
 
-__all__ = ["map_sale_comp", "sale_comps"]
+__all__ = [
+    "COUNTY_SALES_ENDPOINTS",
+    "map_sale_comp",
+    "sale_comps",
+    "sales_config_for_geo",
+]

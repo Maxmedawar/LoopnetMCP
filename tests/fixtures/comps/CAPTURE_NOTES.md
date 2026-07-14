@@ -1,5 +1,9 @@
 # Phase 15 live capture notes
 
+- `phase23_sales.json` was captured live on 2026-07-14 from the public King
+  County WA, Wake County NC, and Franklin County OH spatial sales layers. Each
+  endpoint also passed an engine-level radius query through `http/arcgis.py`.
+
 - `guilford_sales.json` was captured 2026-07-13 from Guilford County's official
   `Tax/GCCadastral_FeatureToPointWGS84/FeatureServer/0` query endpoint. The live layer exposes
   package sale price/date, heated area, units, building description, revenue-stamp source, and

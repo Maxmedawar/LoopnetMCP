@@ -29,7 +29,8 @@ Fable reviews independently after each phase before advancing.
 | 20 | After-tax returns + operating playbook | 🟢 complete | 506 passed, 1 warning |
 | 21 | Correctness hardening | 🟢 complete | 519 passed, 1 warning |
 | 22 | Score backtest / calibration harness | 🟢 complete | 530 passed, 1 warning |
-| **Overall** | **Full roadmap delivered: Execution + Trust + Structure/Scale** | **🟢 FULL ROADMAP COMPLETE + CALIBRATION-READY — 45 tools** | **530 passed, 1 warning** |
+| 23 | Comps depth: opt-in paid providers + free counties | 🟢 complete | 543 passed, 1 warning |
+| **Overall** | **Full roadmap delivered: Execution + Trust + Structure/Scale** | **🟢 FULL ROADMAP COMPLETE + CALIBRATION-READY — 45 tools** | **543 passed, 1 warning** |
 
 ## Log
 
@@ -398,3 +399,31 @@ Fable reviews independently after each phase before advancing.
     transportability to other strategies/markets, or immunity from drift.
   - Deviation: none. No dependency was added.
   - Pytest: `530 passed, 1 warning in 22.47s`
+- 2026-07-14 — Phase 23 comps depth complete.
+  - Status: GREEN; all 45 tools remain registered. Nationwide ATTOM parcel/owner/comps/AVM
+    and Regrid parcel/owner adapters are available only when their optional pay-per-use keys are
+    configured. With neither key present, owner and comps behavior remains exactly free-only.
+  - Paid provider seam: added the shared `CompsProvider` protocol, ATTOM and Regrid adapters,
+    defensive mappings, persistent normalized-result caches, explicit `attom`/`regrid` method
+    labels, provider-unavailable key gates, and optional `SecretStr` settings plus opt-in signup
+    notes. `OwnerLookup` and `get_comps` always try free county data first; they consider a paid
+    call only when free coverage is absent or weak and the corresponding key is present. No paid
+    provider is instantiated without a key, so the engine cannot auto-charge. Representative
+    ATTOM/Regrid fixtures remain marked `# VERIFY` pending access to paid credentials.
+  - Free live coverage: verified and wired King County WA (`53033`) three-year parcel sales,
+    Wake County NC (`37183`) parcel sales, and Franklin County OH (`39049`) valid sales through
+    the existing shared ArcGIS path. Production mapping checks returned normalized, nearby,
+    arm's-length-filtered records for all three counties, with source, price, date, coordinates,
+    and available building facts preserved.
+  - Honest gaps: Hillsborough County FL was not wired because its county endpoint presents a TLS
+    chain rejected by the application HTTP stack and the statewide spatial fallback timed out;
+    TLS verification was not weakened. Salt Lake County UT's responsive public parcel layer does
+    not expose closed-sale price/date fields, so it remains a clearly labeled AVM fallback rather
+    than being misrepresented as a closed-sale source.
+  - Verification: no ATTOM or Regrid key was present, and the configured paid-provider count was
+    zero. Tests cover keyless `ProviderUnavailable`, free-first preference, weak/empty free
+    fallback only when a key is set, paid mapping/cache behavior, the three new live county field
+    maps, and unchanged no-key tool output.
+  - Deviation: none. Candidate counties without a reliable free closed-sale layer remain honest
+    gaps. No dependency or tool was added.
+  - Pytest: `543 passed, 1 warning in 22.07s`

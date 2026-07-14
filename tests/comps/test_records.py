@@ -6,7 +6,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from cre_mcp.comps.records import map_sale_comp, sale_comps
+from cre_mcp.comps.records import (
+    COUNTY_SALES_ENDPOINTS,
+    map_sale_comp,
+    sale_comps,
+)
 from cre_mcp.enrichment.counties import COUNTY_PARCEL_ENDPOINTS
 from cre_mcp.models import GeoLevel, GeoRef, Listing
 
@@ -100,3 +104,37 @@ def test_phase17_maricopa_and_clark_sales_maps_are_live_and_date_tolerant():
     assert maricopa.sale_date == "2010-08-01"
     assert clark is not None and clark.sale_price == 110_000
     assert clark.sale_date == "2011-01-01"
+
+
+def test_phase23_live_king_wake_and_franklin_sales_layers_map():
+    rows = json.loads((FIXTURES / "phase23_sales.json").read_text())
+
+    king = map_sale_comp(rows["53033"], COUNTY_SALES_ENDPOINTS["53033"])
+    wake = map_sale_comp(rows["37183"], COUNTY_SALES_ENDPOINTS["37183"])
+    franklin = map_sale_comp(rows["39049"], COUNTY_SALES_ENDPOINTS["39049"])
+
+    assert set(COUNTY_SALES_ENDPOINTS) == {"53033", "37183", "39049"}
+    assert king is not None and king.sale_price == 760_000
+    assert king.sale_date == "2023-08-16"
+    assert wake is not None and wake.sqft == 2_163
+    assert wake.units == 1
+    assert wake.sale_date == "2024-12-16"
+    assert franklin is not None and franklin.parcel_id == "010-283587"
+    assert franklin.sale_date == "2025-07-16"
+
+
+@pytest.mark.asyncio
+async def test_phase23_new_county_uses_its_verified_spatial_sales_layer():
+    row = json.loads((FIXTURES / "phase23_sales.json").read_text())["37183"]
+    subject = _subject().model_copy(
+        update={"lat": 35.543, "lon": -78.685, "address": "999 OTHER RD"}
+    )
+    with patch(
+        "cre_mcp.comps.records.arcgis_query",
+        new=AsyncMock(return_value=[row]),
+    ) as query:
+        comps = await sale_comps(_geo("37183"), subject)
+
+    assert len(comps) == 1
+    assert query.await_args.args[0] == COUNTY_SALES_ENDPOINTS["37183"].sales_layer
+    assert "TOTSALPRICE" in query.await_args.kwargs["out_fields"]

@@ -1,6 +1,6 @@
 """Coverage-aware sale-comparable and value-estimate models."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SaleComp(BaseModel):
@@ -36,4 +36,12 @@ class ValueEstimate(BaseModel):
     source: str
 
 
-__all__ = ["SaleComp", "ValueEstimate"]
+class CompsProviderResult(BaseModel):
+    """Normalized boundary between free-first tools and optional paid providers."""
+
+    provider: str
+    comps: list[SaleComp] = Field(default_factory=list)
+    value_estimate: ValueEstimate | None = None
+
+
+__all__ = ["CompsProviderResult", "SaleComp", "ValueEstimate"]

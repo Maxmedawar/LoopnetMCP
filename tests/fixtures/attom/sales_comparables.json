@@ -1,0 +1,32 @@
+{
+  "status": {"code": 0, "msg": "SuccessWithResult", "total": 3},
+  "property": [
+    {
+      "identifier": {"fips": "48453", "apn": "COMP-1"},
+      "address": {"oneLine": "110 MAIN ST, AUSTIN, TX 78701"},
+      "location": {"latitude": 30.268, "longitude": -97.742},
+      "summary": {"propType": "RETAIL"},
+      "building": {"size": {"bldgSize": 12000}},
+      "sale": {"amount": {"saleAmt": 2350000}, "saleTransDate": "2025-04-10"},
+      "distance": 0.3
+    },
+    {
+      "identifier": {"fips": "48453", "apn": "COMP-2"},
+      "address": {"oneLine": "200 CONGRESS AVE, AUSTIN, TX 78701"},
+      "location": {"latitude": 30.265, "longitude": -97.744},
+      "summary": {"propType": "RETAIL"},
+      "building": {"size": {"bldgSize": 13000}},
+      "sale": {"amount": {"saleAmt": 2500000}, "saleTransDate": "2025-01-15"},
+      "distance": 0.5
+    },
+    {
+      "identifier": {"fips": "48453", "apn": "COMP-3"},
+      "address": {"oneLine": "300 LAVACA ST, AUSTIN, TX 78701"},
+      "location": {"latitude": 30.269, "longitude": -97.745},
+      "summary": {"propType": "RETAIL"},
+      "building": {"size": {"bldgSize": 11800}},
+      "sale": {"amount": {"saleAmt": 2290000}, "saleTransDate": "2024-11-20"},
+      "distance": 0.7
+    }
+  ]
+}

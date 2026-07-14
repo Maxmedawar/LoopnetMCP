@@ -10,6 +10,8 @@ def test_config_loads_cre_keys_from_dotenv_file(tmp_path, monkeypatch):
         "CRE_FRED_API_KEY",
         "CRE_HUD_API_TOKEN",
         "CRE_BEA_API_KEY",
+        "CRE_ATTOM_API_KEY",
+        "CRE_REGRID_API_KEY",
     )
     for name in names:
         monkeypatch.delenv(name, raising=False)
@@ -26,3 +28,5 @@ def test_config_loads_cre_keys_from_dotenv_file(tmp_path, monkeypatch):
     assert config.fred_api_key.get_secret_value() == "cre_fred_api_key-fixture"
     assert config.hud_api_token.get_secret_value() == "cre_hud_api_token-fixture"
     assert config.bea_api_key.get_secret_value() == "cre_bea_api_key-fixture"
+    assert config.attom_api_key.get_secret_value() == "cre_attom_api_key-fixture"
+    assert config.regrid_api_key.get_secret_value() == "cre_regrid_api_key-fixture"

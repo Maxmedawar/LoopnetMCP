@@ -112,6 +112,8 @@ def build_arcgis_policies(config: CreConfig | None = None) -> dict[str, FetchPol
         "gis.sara-tx.org",
         "gismaps.fultoncountyga.gov",
         "gis.charlottenc.gov",
+        "maps.wakegov.com",
+        "gis.franklincountyohio.gov",
         "gis.dot.nv.gov",
         "egisp.dot.ga.gov",
     )

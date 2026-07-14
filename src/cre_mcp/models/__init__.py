@@ -10,7 +10,7 @@ from cre_mcp.models.capital import (
     WaterfallResult,
     WaterfallYear,
 )
-from cre_mcp.models.comps import SaleComp, ValueEstimate
+from cre_mcp.models.comps import CompsProviderResult, SaleComp, ValueEstimate
 from cre_mcp.models.deals import Deal, DealContext
 from cre_mcp.models.enrichment import ListingFacts, OwnerRecord, ParcelRecord
 from cre_mcp.models.evaluation import CalibrationReport, GradeCalibration
@@ -91,6 +91,7 @@ __all__ = [
     "CalibrationReport",
     "CommitmentRecord",
     "ComplianceCheck",
+    "CompsProviderResult",
     "ContactInfo",
     "CounterAdvice",
     "ClosingPlan",

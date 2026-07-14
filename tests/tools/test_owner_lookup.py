@@ -58,7 +58,7 @@ async def test_owner_lookup_returns_error_dict_for_missing_record():
     engine.lookup = AsyncMock(return_value=None)
     with patch("cre_mcp.tools.owner_tools._engine", return_value=engine):
         result = await owner_lookup(apn="missing", county="Guilford County, NC")
-    assert result == {"error": "No configured county parcel record found"}
+    assert result == {"error": "No parcel record found in the enabled provider chain"}
 
 
 @pytest.mark.asyncio
