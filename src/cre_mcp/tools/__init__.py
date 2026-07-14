@@ -26,7 +26,10 @@ def register_all(mcp: Any) -> None:
         structure_tools,
         truth_tools,
     )
+    from cre_mcp.command import tools as command_tools
+    from cre_mcp.leases import tools as lease_tools
     from cre_mcp.scenarios import tools as scenario_tools
+    from cre_mcp.taxecon import tools as taxecon_tools
 
     mcp.tool()(listing_tools.search_properties)
     mcp.tool()(listing_tools.get_property_details)
@@ -112,6 +115,17 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(scenario_tools.sensitivity_drivers)
     mcp.tool()(scenario_tools.breakeven_analysis)
     mcp.tool()(scenario_tools.model_lease_up)
+    mcp.tool()(lease_tools.abstract_lease_document)
+    mcp.tool()(lease_tools.lease_critical_dates)
+    mcp.tool()(lease_tools.calc_rent_schedule)
+    mcp.tool()(taxecon_tools.estimate_tax_reassessment)
+    mcp.tool()(taxecon_tools.audit_assessor_record)
+    mcp.tool()(taxecon_tools.net_sale_proceeds)
+    mcp.tool()(command_tools.morning_queue)
+    mcp.tool()(command_tools.overnight_changes)
+    mcp.tool()(command_tools.flag_unattended)
+    mcp.tool()(command_tools.record_listing_snapshot)
+    mcp.tool()(command_tools.stale_listing_signals)
 
 
 __all__ = ["register_all"]
