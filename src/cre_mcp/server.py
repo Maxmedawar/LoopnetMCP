@@ -7,6 +7,7 @@ from fastmcp import FastMCP
 
 from cre_mcp.tools import register_all
 from cre_mcp.tools.deal_tools import analyze_deal, find_deals, find_distressed
+from cre_mcp.tools.execution_tools import generate_loi, recommend_offer
 from cre_mcp.tools.listing_tools import (
     get_market_overview,
     get_property_details,
@@ -38,6 +39,8 @@ mcp = FastMCP(
         " and find_distressed for REO, auction, foreclosure, and tax-sale opportunities."
         " Use owner_lookup for public assessor parcel and owner enrichment."
         " Use get_rent_comparables for public ZORI, ACS, and HUD rent benchmarks."
+        " Use recommend_offer for an explained negotiation range and generate_loi"
+        " for a non-binding attorney-review draft."
     ),
 )
 register_all(mcp)
@@ -55,8 +58,10 @@ __all__ = [
     "get_market_overview",
     "get_property_details",
     "get_rent_comparables",
+    "generate_loi",
     "market_intel",
     "mcp",
     "owner_lookup",
+    "recommend_offer",
     "search_properties",
 ]

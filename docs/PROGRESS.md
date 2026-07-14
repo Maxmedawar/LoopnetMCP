@@ -15,7 +15,8 @@ Fable reviews independently after each phase before advancing.
 | 6 | Distressed sources | 🟢 complete | 285 passed, 1 warning |
 | 7 | Owner/parcel enrichment | 🟢 complete | 304 passed, 1 warning |
 | 8 | Attributes, traffic counts + rent comparables | 🟢 complete | 325 passed, 1 warning |
-| **Overall** | **8-phase build** | **🟢 FEATURE-COMPLETE — 10 tools** | **325 passed, 1 warning** |
+| 9 | Offer & LOI engine | 🟢 complete | 343 passed, 1 warning |
+| **Overall** | **9 phases delivered** | **🟢 V2 EXECUTION LAYER IN PROGRESS — 12 tools** | **343 passed, 1 warning** |
 
 ## Log
 
@@ -97,3 +98,12 @@ Fable reviews independently after each phase before advancing.
     live-captured traffic/ZORI/OSM fixtures and acceptance tests. All six DOT layers and both ZORI
     CSV endpoints were confirmed live. Only the paid-key RentCast fixture is marked `# VERIFY`.
   - Pytest: `325 passed, 1 warning in 23.46s`
+- 2026-07-13 — Phase 9 offer and LOI execution engine complete.
+  - Status: GREEN; underwriting-grounded open/target/walk recommendations, motivation-aware
+    negotiation buffers, confidence/caveats, complete explained non-binding LOI drafts, six
+    state-specific closing notes plus the general fallback, and all 12 tools are verified.
+  - Files changed: added execution models and the reusable draft-not-advice guardrail; added
+    centralized offer/LOI policy constants, strategy-aware offer pricing and financing limits,
+    jurisdiction-aware LOI generation, MCP execution tools, server registration/exports, and
+    Phase 9 offer/LOI/tool acceptance tests; updated prior tool-count assertions to 12.
+  - Pytest: `343 passed, 1 warning in 23.06s`

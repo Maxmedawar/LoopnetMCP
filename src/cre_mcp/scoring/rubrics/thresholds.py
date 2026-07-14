@@ -408,3 +408,63 @@ DISQUALIFIER_REASONS = {
     "distressed_collateral_below_30": "Collateral quality score is below 30.",
     "distressed_1031_clock": "The 1031 clock is under ten days without a signed PSA.",
 }
+
+
+# OFFER & LOI POLICY
+# These values are deliberately centralized so the execution layer remains code
+# while negotiation posture, buy-box thresholds, and default timelines remain data.
+OFFER_TARGET_CAP_PCT_BY_STRATEGY = {
+    "core": 7.00,
+    "distressed": 9.00,
+    "location_retail": 6.50,
+    "nnn_retail": 6.50,
+    "value_add_multifamily": 6.50,
+}
+OFFER_WALK_CAP_PCT_BY_STRATEGY = {
+    "core": 6.00,
+    "distressed": 7.50,
+    "location_retail": 5.75,
+    "nnn_retail": 5.75,
+    "value_add_multifamily": 5.75,
+}
+OFFER_NNN_TARGET_BAND_POSITION = 0.50
+OFFER_NNN_WALK_BAND_POSITION = 0.00
+OFFER_TARGET_TREASURY_SPREAD_BPS = 250.0
+OFFER_WALK_TREASURY_SPREAD_BPS = 150.0
+OFFER_VAM_TARGET_YOC_PCT = 7.50
+OFFER_VAM_WALK_YOC_PCT = 6.50
+OFFER_OPEN_BUFFER_PCT = 0.03
+OFFER_MOTIVATION_BUFFER_PER_SIGNAL_PCT = 0.015
+OFFER_MAX_OPEN_BUFFER_PCT = 0.09
+OFFER_MOTIVATION_LONG_TENURE_YEARS = 10.0
+OFFER_MOTIVATION_DOM_DAYS = 120.0
+OFFER_MOTIVATION_PRICE_CUT_COUNT = 1
+OFFER_MISSING_NOI_TARGET_DISCOUNT_PCT = 0.03
+OFFER_TARGET_MAX_ASK_MULTIPLIER = 1.00
+OFFER_WALK_MAX_ASK_MULTIPLIER = 1.00
+OFFER_COMP_TARGET_MAX_MULTIPLIER = 1.00
+OFFER_COMP_WALK_MAX_MULTIPLIER = 1.05
+OFFER_MIN_DSCR_BY_STRATEGY = {
+    "core": 1.25,
+    "distressed": 1.20,
+    "location_retail": 1.25,
+    "nnn_retail": 1.25,
+    "value_add_multifamily": 1.25,
+}
+OFFER_TARGET_DSCR_HEADROOM_MULTIPLIER = 0.97
+OFFER_TARGET_TO_WALK_MARGIN_PCT = 0.02
+OFFER_PRICE_ROUNDING_INCREMENT = 1_000.0
+OFFER_CONFIDENCE_WEIGHTS = {
+    "ask_price": 0.15,
+    "noi": 0.30,
+    "underwriting": 0.15,
+    "market_context": 0.10,
+    "sale_comps": 0.30,
+}
+OFFER_EARNEST_MONEY_PCT_RANGE = (1.0, 2.0)
+OFFER_DD_DAYS_RANGE = (21, 30)
+OFFER_CLOSE_DAYS_RANGE = (30, 45)
+LOI_DEFAULT_EARNEST_MONEY_PCT = 1.0
+LOI_DEFAULT_DD_DAYS = 30
+LOI_DEFAULT_CLOSING_DAYS = 45
+LOI_DEFAULT_EXPIRATION_DAYS = 3

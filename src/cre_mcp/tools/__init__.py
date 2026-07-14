@@ -5,7 +5,13 @@ from typing import Any
 
 def register_all(mcp: Any) -> None:
     """Register every tool module on the provided FastMCP application."""
-    from cre_mcp.tools import deal_tools, listing_tools, market_tools, owner_tools
+    from cre_mcp.tools import (
+        deal_tools,
+        execution_tools,
+        listing_tools,
+        market_tools,
+        owner_tools,
+    )
 
     mcp.tool()(listing_tools.search_properties)
     mcp.tool()(listing_tools.get_property_details)
@@ -17,6 +23,8 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(deal_tools.find_deals)
     mcp.tool()(deal_tools.find_distressed)
     mcp.tool()(owner_tools.owner_lookup)
+    mcp.tool()(execution_tools.recommend_offer)
+    mcp.tool()(execution_tools.generate_loi)
 
 
 __all__ = ["register_all"]

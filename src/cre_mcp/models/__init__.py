@@ -1,9 +1,10 @@
 """Pydantic data models for commercial real estate data."""
 
-from cre_mcp.models.geo import GeoLevel, GeoRef
 from cre_mcp.models.attributes import DealAttributes
 from cre_mcp.models.deals import Deal, DealContext
 from cre_mcp.models.enrichment import OwnerRecord, ParcelRecord
+from cre_mcp.models.execution import LoiDraft, OfferRecommendation
+from cre_mcp.models.geo import GeoLevel, GeoRef
 from cre_mcp.models.listings import (
     AggregatedSearchResult,
     Listing,
@@ -47,11 +48,13 @@ __all__ = [
     "Listing",
     "ListingRef",
     "ListingType",
+    "LoiDraft",
     "MarketOverview",
     "MarketPack",
     "MetricSeries",
     "MetricValue",
     "OwnerRecord",
+    "OfferRecommendation",
     "ParcelRecord",
     "PropertyDetail",
     "PropertySummary",

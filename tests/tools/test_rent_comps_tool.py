@@ -58,7 +58,7 @@ async def test_rent_comps_tool_validation_and_error_dict():
 
 
 @pytest.mark.asyncio
-async def test_get_rent_comparables_is_the_tenth_registered_tool():
+async def test_get_rent_comparables_is_registered_with_execution_tools():
     tools = await mcp.get_tools()
     assert "get_rent_comparables" in tools
-    assert len(tools) == 10
+    assert len(tools) == 12
