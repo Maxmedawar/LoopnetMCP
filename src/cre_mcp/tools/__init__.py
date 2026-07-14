@@ -26,10 +26,12 @@ def register_all(mcp: Any) -> None:
         structure_tools,
         truth_tools,
     )
+    from cre_mcp.books import tools as book_tools
     from cre_mcp.command import tools as command_tools
     from cre_mcp.dataroom import tools as dataroom_tools
     from cre_mcp.debt import tools as debt_tools
     from cre_mcp.envscreen import tools as envscreen_tools
+    from cre_mcp.negotiation import tools as negotiation_tools
     from cre_mcp.obligations import tools as obligation_tools
     from cre_mcp.verifyreg import tools as verifyreg_tools
     from cre_mcp.zoning import tools as zoning_tools
@@ -163,6 +165,19 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(envscreen_tools.hazard_profile)
     mcp.tool()(verifyreg_tools.verify_license)
     mcp.tool()(verifyreg_tools.counterparty_screen)
+    mcp.tool()(book_tools.setup_tenancy)
+    mcp.tool()(book_tools.post_charges)
+    mcp.tool()(book_tools.import_bank_transactions)
+    mcp.tool()(book_tools.reconcile_rent_to_cash)
+    mcp.tool()(book_tools.ar_aging)
+    mcp.tool()(book_tools.audit_lease_billing)
+    mcp.tool()(negotiation_tools.build_negotiation_plan)
+    mcp.tool()(negotiation_tools.value_concession)
+    mcp.tool()(negotiation_tools.detect_term_drift)
+    mcp.tool()(negotiation_tools.record_negotiation_commitment)
+    mcp.tool()(negotiation_tools.list_negotiation_commitments)
+    mcp.tool()(negotiation_tools.record_term_approval)
+    mcp.tool()(negotiation_tools.negotiation_approval_log)
 
 
 __all__ = ["register_all"]
