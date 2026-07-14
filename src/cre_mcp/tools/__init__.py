@@ -9,6 +9,7 @@ def register_all(mcp: Any) -> None:
         capital_tools,
         control_tools,
         deal_tools,
+        decision_tools,
         eval_tools,
         execution_tools,
         listing_tools,
@@ -88,6 +89,8 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(memory_tools.log_deal_event)
     mcp.tool()(memory_tools.deal_timeline)
     mcp.tool()(memory_tools.ic_scorecard)
+    mcp.tool()(decision_tools.set_buyer_profile)
+    mcp.tool()(decision_tools.decision_frontier)
 
 
 __all__ = ["register_all"]
