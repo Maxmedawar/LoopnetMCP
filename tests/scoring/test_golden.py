@@ -15,6 +15,7 @@ def _snapshot(score) -> dict:
         "strategy": score.strategy,
         "score": score.score,
         "grade": score.grade,
+        "gated": score.gated,
         "confidence": score.confidence,
         "market_score": score.market_score,
         "rubric_raw_score": score.rubric_result.raw_score,

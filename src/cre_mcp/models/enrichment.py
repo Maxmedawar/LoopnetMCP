@@ -1,8 +1,19 @@
-"""County parcel and owner enrichment models."""
+"""Source-normalized enrichment models."""
 
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+class ListingFacts(BaseModel):
+    """Headline investment facts deterministically extracted from listing prose."""
+
+    strategy_hint: str | None = None
+    lease_years_remaining: float | None = None
+    rent_escalations: float | None = None
+    nnn_purity: str | None = None
+    tenant_name: str | None = None
+    guaranty: str | None = None
 
 
 class ParcelRecord(BaseModel):
@@ -34,4 +45,4 @@ class OwnerRecord(BaseModel):
     parcels: list[ParcelRecord] = Field(default_factory=list)
 
 
-__all__ = ["OwnerRecord", "ParcelRecord"]
+__all__ = ["ListingFacts", "OwnerRecord", "ParcelRecord"]

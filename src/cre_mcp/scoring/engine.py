@@ -179,6 +179,7 @@ def score(ctx: DealContext, rubric: Rubric) -> DealScore:
             rubric_result=result,
             market_score=None,
             explanation=explanation,
+            gated=False,
         )
 
     strategy_eval = _evaluate_signals(ctx, rubric)
@@ -218,7 +219,11 @@ def score(ctx: DealContext, rubric: Rubric) -> DealScore:
         confidence *= strategy_eval.required_present / strategy_eval.required_total
     confidence = _clamp(confidence)
     final_score = max(T.NO_COVERAGE, min(T.SCORE_SCALE, final_score))
-    grade = _grade(final_score)
+    gated = (
+        strategy_eval.result.coverage < T.GATE_MIN_COVERAGE
+        or confidence < T.GATE_MIN_CONFIDENCE
+    )
+    grade = T.NOT_RATED_GRADE if gated else _grade(final_score)
     explanation = render_explanation(
         ctx,
         rubric,
@@ -227,6 +232,7 @@ def score(ctx: DealContext, rubric: Rubric) -> DealScore:
         grade=grade,
         market_component=market_value,
         core_component=core_eval.result.raw_score if core_eval else None,
+        gated=gated,
     )
     return DealScore(
         strategy=rubric.strategy,
@@ -236,6 +242,7 @@ def score(ctx: DealContext, rubric: Rubric) -> DealScore:
         rubric_result=strategy_eval.result,
         market_score=market_value,
         explanation=explanation,
+        gated=gated,
     )
 
 

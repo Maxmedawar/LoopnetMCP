@@ -2,7 +2,7 @@
 
 from cre_mcp.models.attributes import DealAttributes
 from cre_mcp.models.deals import Deal, DealContext
-from cre_mcp.models.enrichment import OwnerRecord, ParcelRecord
+from cre_mcp.models.enrichment import ListingFacts, OwnerRecord, ParcelRecord
 from cre_mcp.models.execution import LoiDraft, OfferRecommendation
 from cre_mcp.models.geo import GeoLevel, GeoRef
 from cre_mcp.models.listings import (
@@ -46,6 +46,7 @@ __all__ = [
     "GeoLevel",
     "GeoRef",
     "Listing",
+    "ListingFacts",
     "ListingRef",
     "ListingType",
     "LoiDraft",

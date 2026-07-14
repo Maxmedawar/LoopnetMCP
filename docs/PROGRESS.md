@@ -16,7 +16,8 @@ Fable reviews independently after each phase before advancing.
 | 7 | Owner/parcel enrichment | 🟢 complete | 304 passed, 1 warning |
 | 8 | Attributes, traffic counts + rent comparables | 🟢 complete | 325 passed, 1 warning |
 | 9 | Offer & LOI engine | 🟢 complete | 343 passed, 1 warning |
-| **Overall** | **9 phases delivered** | **🟢 V2 EXECUTION LAYER IN PROGRESS — 12 tools** | **343 passed, 1 warning** |
+| 14 | Listing intelligence + confidence gating | 🟢 complete | 352 passed, 1 warning |
+| **Overall** | **Phases 1–9 + 14 delivered** | **🟢 V2 TRUST LAYER IN PROGRESS — 12 tools** | **352 passed, 1 warning** |
 
 ## Log
 
@@ -107,3 +108,12 @@ Fable reviews independently after each phase before advancing.
     jurisdiction-aware LOI generation, MCP execution tools, server registration/exports, and
     Phase 9 offer/LOI/tool acceptance tests; updated prior tool-count assertions to 12.
   - Pytest: `343 passed, 1 warning in 23.06s`
+- 2026-07-13 — Phase 14 listing intelligence and confidence gating complete.
+  - Status: GREEN; deterministic listing-prose extraction now routes lease-heavy deals to the
+    correct strategy, extracted NNN facts feed existing signals, and low-evidence numeric scores
+    are honestly surfaced as gated `NR` results with prioritized document/comps next steps.
+  - Files changed: added `ListingFacts` and the offline `listing_facts` extractor; wired facts
+    through deal contexts, routing, NNN signals, analysis/search output, and execution context;
+    added tunable 50% confidence/coverage gates, `DealScore.gated`, actionable explanations,
+    updated scoring goldens, and Phase 14 extraction/routing/gating regression tests.
+  - Pytest: `352 passed, 1 warning in 26.39s`

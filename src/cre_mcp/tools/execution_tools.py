@@ -27,6 +27,7 @@ async def _deal_context(
         listing = listing.model_copy(update={"raw": raw})
     return DealContext(
         listing=listing,
+        facts=deal.facts,
         market=deal.market_pack,
         parcel=deal.parcel,
         attributes=deal.attributes,

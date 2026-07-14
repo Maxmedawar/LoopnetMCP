@@ -9,6 +9,7 @@ from cre_mcp.enrichment.attributes import (
     drive_thru_from_text,
     parking_from_listing,
 )
+from cre_mcp.enrichment.listing_facts import extract_facts
 from cre_mcp.enrichment.owner import OwnerLookup
 from cre_mcp.enrichment.traffic import TrafficProvider
 from cre_mcp.geo.resolver import resolve
@@ -21,6 +22,7 @@ from cre_mcp.models import (
     DealScore,
     GeoRef,
     Listing,
+    ListingFacts,
     ListingRef,
     MarketPack,
     OwnerRecord,
@@ -240,6 +242,18 @@ def _underwrite(
     return result
 
 
+def _facts_for(listing: Listing) -> ListingFacts | None:
+    try:
+        return extract_facts(listing)
+    except Exception as exc:
+        logger.warning(
+            "Listing-fact extraction unavailable for %s: %s",
+            listing.url,
+            exc,
+        )
+        return None
+
+
 def _scores(ctx: DealContext, strategy: str | None) -> list[DealScore]:
     if strategy is None:
         return score_all(ctx)
@@ -261,9 +275,11 @@ def _deal(
     attributes: DealAttributes | None = None,
     rent_comps: RentComps | None = None,
 ) -> Deal:
+    facts = _facts_for(listing)
     underwriting = _underwrite(listing, market, assumptions)
     context = DealContext(
         listing=listing,
+        facts=facts,
         market=market,
         parcel=parcel,
         attributes=attributes or _base_attributes(listing),
@@ -273,6 +289,7 @@ def _deal(
     scores = _scores(context, strategy)
     return Deal(
         listing=listing,
+        facts=facts,
         market_pack=market,
         parcel=parcel,
         owner=owner,

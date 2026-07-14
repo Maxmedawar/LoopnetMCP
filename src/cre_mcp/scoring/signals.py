@@ -8,6 +8,7 @@ from cre_mcp.enrichment.attributes import parking_ratio
 from cre_mcp.enrichment.owner import is_absentee
 from cre_mcp.models.deals import DealContext
 from cre_mcp.scoring.rubrics import thresholds as T
+from cre_mcp.underwriting.metrics import tenant_credit_tier as lookup_tenant_credit
 
 
 def _number(ctx: DealContext, key: str) -> float | None:
@@ -58,7 +59,12 @@ def _credit_rating(ctx: DealContext) -> str | None:
     if ctx.underwriting and ctx.underwriting.tenant_credit_tier:
         return ctx.underwriting.tenant_credit_tier.upper()
     rating = ctx.listing.raw.get("tenant_credit_rating")
-    return str(rating).upper() if rating else None
+    if rating:
+        return str(rating).upper()
+    if ctx.facts and ctx.facts.tenant_name:
+        inferred = lookup_tenant_credit(ctx.facts.tenant_name)
+        return inferred.upper() if inferred else None
+    return None
 
 
 def _credit_score(ctx: DealContext) -> float | None:
@@ -90,12 +96,17 @@ def tenant_credit_tier(ctx: DealContext) -> float | None:
 
 
 def lease_years_remaining(ctx: DealContext) -> float | None:
-    return _number(ctx, "lease_years_remaining")
+    direct = _number(ctx, "lease_years_remaining")
+    if direct is not None:
+        return direct
+    return ctx.facts.lease_years_remaining if ctx.facts else None
 
 
 def rent_escalations(ctx: DealContext) -> float | None:
     annual = _number(ctx, "rent_escalation_pct")
     five_year = _number(ctx, "rent_escalation_5yr_pct")
+    if annual is None and ctx.facts:
+        annual = ctx.facts.rent_escalations
     if annual is not None and annual >= T.RENT_ESCALATION_ANNUAL_FULL_PCT:
         return T.RENT_ESCALATION_FULL_SCORE
     if five_year is not None and five_year >= T.RENT_ESCALATION_FIVE_YEAR_FULL_PCT:
@@ -125,11 +136,18 @@ def cap_rate_vs_band(ctx: DealContext) -> float | None:
 
 
 def nnn_purity(ctx: DealContext) -> float | None:
-    return _category(ctx, "lease_type", T.NNN_PURITY_SCORES)
+    direct = _category(ctx, "lease_type", T.NNN_PURITY_SCORES)
+    if direct is not None:
+        return direct
+    if ctx.facts and ctx.facts.nnn_purity:
+        return T.NNN_PURITY_SCORES.get(ctx.facts.nnn_purity.casefold())
+    return None
 
 
 def corporate_vs_franchisee(ctx: DealContext) -> float | None:
     guaranty = _text(ctx, "guaranty_type")
+    if guaranty is None and ctx.facts:
+        guaranty = ctx.facts.guaranty
     if guaranty in T.GUARANTY_SCORES:
         return T.GUARANTY_SCORES[guaranty]
     units = _number(ctx, "franchisee_units")

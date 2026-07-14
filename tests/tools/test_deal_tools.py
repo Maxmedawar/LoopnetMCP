@@ -113,7 +113,9 @@ async def test_analyze_deal_deep_fetches_underwrites_and_scores():
     }
     assert result["scores"][0]["strategy"] == "nnn_retail"
     assert result["scores"][0]["explanation"]
+    assert result["scores"][0]["gated"] is False
     assert result["best_strategy"] == "nnn_retail"
+    assert result["facts"]["strategy_hint"] == "location_retail"
     source.get_detail.assert_awaited_once()
     assert source.get_detail.await_args.args[0].source_id == "31948105"
     market_engine.get_market_pack.assert_awaited_once()
@@ -256,6 +258,9 @@ async def test_find_deals_reuses_one_market_pack_and_scores_low_data():
         "low",
     ]
     assert result["deals"][1]["scores"][0]["score"] >= 0
+    assert result["deals"][1]["scores"][0]["grade"] == "NR"
+    assert result["deals"][1]["scores"][0]["gated"] is True
+    assert result["deals"][0]["facts"]["strategy_hint"] == "location_retail"
     assert (
         result["deals"][1]["scores"][0]["confidence"]
         < result["deals"][0]["scores"][0]["confidence"]

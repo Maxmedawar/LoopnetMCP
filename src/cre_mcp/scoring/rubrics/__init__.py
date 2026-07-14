@@ -21,7 +21,7 @@ RUBRIC_REGISTRY: dict[str, Rubric] = {
 
 
 def applicable_rubrics(ctx: DealContext) -> list[Rubric]:
-    """Map listing property type and explicit raw hints to strategy rubrics."""
+    """Map explicit, extracted, then property-type hints to strategy rubrics."""
     explicit = ctx.listing.raw.get("strategy")
     if isinstance(explicit, str) and explicit in RUBRIC_REGISTRY:
         routed = [RUBRIC_REGISTRY[explicit]]
@@ -29,6 +29,17 @@ def applicable_rubrics(ctx: DealContext) -> list[Rubric]:
             return [DISTRESSED_RUBRIC, *routed]
         if not ctx.listing.is_distressed:
             return routed
+    fact_hint = ctx.facts.strategy_hint if ctx.facts else None
+    fact_routes = {
+        "nnn_retail": NNN_RETAIL_RUBRIC,
+        "value_add_multifamily": VALUE_ADD_MULTIFAMILY_RUBRIC,
+        "location_retail": LOCATION_RETAIL_RUBRIC,
+    }
+    if fact_hint in fact_routes:
+        asset_rubrics = [fact_routes[fact_hint]]
+        if ctx.listing.is_distressed:
+            return [DISTRESSED_RUBRIC, *asset_rubrics]
+        return asset_rubrics
     property_type = (ctx.listing.property_type or "").casefold()
     if property_type == "multifamily":
         asset_rubrics = [VALUE_ADD_MULTIFAMILY_RUBRIC]

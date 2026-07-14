@@ -59,3 +59,4 @@ class DealScore(BaseModel):
     rubric_result: RubricResult
     market_score: float | None = None
     explanation: str
+    gated: bool = False

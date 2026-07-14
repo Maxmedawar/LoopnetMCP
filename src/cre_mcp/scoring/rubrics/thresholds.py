@@ -22,6 +22,33 @@ GRADE_CUTOFFS = (
 )
 FAIL_GRADE = "F"
 DISQUALIFIED_GRADE = "DQ"
+NOT_RATED_GRADE = "NR"
+
+# Trust gate: both headline strategy coverage and required-input confidence
+# must clear these minimums before a letter grade is presented.
+GATE_MIN_CONFIDENCE = 0.50
+GATE_MIN_COVERAGE = 0.50
+GATE_MISSING_SIGNAL_LIMIT = 3
+GATE_MISSING_INPUT_GUIDANCE = {
+    "tenant_credit_tier": "the executed lease, guaranty, and current tenant credit report",
+    "lease_years_remaining": "the executed lease and all amendments",
+    "rent_escalations": "the lease rent schedule and amendments",
+    "nnn_purity": "the lease expense and maintenance clauses",
+    "corporate_vs_franchisee": "the signed guaranty and tenant entity documents",
+    "cap_rate_vs_band": "seller NOI support and verified market sale comps",
+    "going_in_cap": "a current T-12, rent roll, and seller operating statements",
+    "dscr_year1": "a lender term sheet plus verified NOI",
+    "rent_gap_to_market": "the rent roll, lease files, and verified rent comps",
+    "price_per_unit_vs_submarket": "verified sale comps and unit counts",
+    "price_per_sf_vs_replacement": "verified sale comps and replacement-cost support",
+    "traffic_count": "the nearest state DOT traffic-count station",
+    "demographics_3mi": "a geocoded three-mile demographic report",
+    "pedestrian_score_100m": "a site visit and pedestrian-count evidence",
+    "street_level_frontage": "a survey, floor plan, and site inspection",
+}
+GATE_DEFAULT_MISSING_INPUT_GUIDANCE = (
+    "the source documents, verified comps, and applicable lease or financial records"
+)
 
 NNN_BASE_WEIGHTS = {
     "tenant_credit_tier": 0.18,
@@ -229,19 +256,23 @@ RENT_ESCALATION_OPTION_SCORE = 0.60
 RENT_ESCALATION_FLAT_SCORE = 0.15
 
 NNN_PURITY_SCORES = {
+    "absolute": 1.0,
     "absolute nnn": 1.0,
     "absolute-net": 1.0,
     "nnn": 0.90,
     "triple net": 0.90,
     "nn": 0.60,
     "double net": 0.60,
+    "gross": 0.20,
     "modified gross": 0.20,
 }
 GUARANTY_SCORES = {
+    "corporate": 0.70,
     "corporate investment grade": 1.0,
     "corporate ig": 1.0,
     "corporate sub-investment grade": 0.70,
     "corporate sub-ig": 0.70,
+    "franchisee": 0.15,
     "single-unit franchisee": 0.15,
 }
 FRANCHISEE_SCALE_MIN_UNITS = 50.0
