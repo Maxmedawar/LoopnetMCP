@@ -107,7 +107,13 @@ class CreConfig(BaseSettings):
         validation_alias=_env_aliases("cache_db_path"),
     )
 
-    model_config = SettingsConfigDict(env_prefix="CRE_", populate_by_name=True)
+    model_config = SettingsConfigDict(
+        env_prefix="CRE_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        populate_by_name=True,
+    )
 
 
 # Backward-compatible name retained for existing callers.

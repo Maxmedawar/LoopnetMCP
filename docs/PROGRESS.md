@@ -18,7 +18,8 @@ Fable reviews independently after each phase before advancing.
 | 9 | Offer & LOI engine | 🟢 complete | 343 passed, 1 warning |
 | 14 | Listing intelligence + confidence gating | 🟢 complete | 352 passed, 1 warning |
 | 15 | Free comps engine + AVM | 🟢 complete | 371 passed, 1 warning |
-| **Overall** | **Phases 1–9 + 14–15 delivered** | **🟢 V2 TRUST LAYER IN PROGRESS — 13 tools** | **371 passed, 1 warning** |
+| 16 | Live-API hardening | 🟢 complete | 378 passed, 1 warning |
+| **Overall** | **Phases 1–9 + 14–16 delivered** | **🟢 V2 TRUST LAYER IN PROGRESS — 13 tools** | **378 passed, 1 warning** |
 
 ## Log
 
@@ -131,3 +132,16 @@ Fable reviews independently after each phase before advancing.
     CO remains deliberately unwired because no public sale-price layer was verified. No Phase 15
     fixture is marked `# VERIFY`.
   - Pytest: `371 passed, 1 warning in 23.09s`
+- 2026-07-13 — Phase 16 live-API hardening complete.
+  - Status: GREEN; keys load from `.env` without shell exports, Austin live market coverage rose
+    from the Director's 53% baseline to 17/18 metrics (94.44%), and provider failures remain
+    isolated coverage gaps.
+  - Files changed: enabled pydantic-settings dotenv loading; corrected FRED `api_key` query auth,
+    HUD metro/county entity formatting, and BEA Regional `Year=LAST5` parsing; replaced the broken
+    Census permits endpoint with the official final annual county BPS file; added lazy persistent
+    loading of official IRS SOI county inflow/outflow CSVs; added persistent host policies, fresh
+    live fixtures/provenance notes, and provider/config regression tests. Census ACS/BPS, BLS,
+    FRED DGS10/MORTGAGE30US/SOFR, HUD FMR/IL/crosswalk, BEA Regional, FHFA, and IRS SOI were
+    verified live. HUD initially returned 401 while the new token propagated, then returned 200
+    with the corrected Austin entity `METRO12420M12420`.
+  - Pytest: `378 passed, 1 warning in 22.92s`

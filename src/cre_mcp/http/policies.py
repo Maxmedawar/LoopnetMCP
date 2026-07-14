@@ -137,6 +137,13 @@ def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy
             cache_ttl_seconds=30 * 24 * 60 * 60,
             **common,
         ),
+        "www2.census.gov": FetchPolicy(
+            host="www2.census.gov",
+            delay_seconds=0.2,
+            cache_namespace="census-bps",
+            cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
         "geocoding.geo.census.gov": FetchPolicy(
             host="geocoding.geo.census.gov",
             delay_seconds=0.2,
@@ -163,6 +170,13 @@ def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy
             delay_seconds=0.2,
             cache_namespace="fhfa-hpi",
             cache_ttl_seconds=30 * 24 * 60 * 60,
+            **common,
+        ),
+        "www.irs.gov": FetchPolicy(
+            host="www.irs.gov",
+            delay_seconds=0.2,
+            cache_namespace="irs-soi-migration",
+            cache_ttl_seconds=90 * 24 * 60 * 60,
             **common,
         ),
         "www.huduser.gov": FetchPolicy(

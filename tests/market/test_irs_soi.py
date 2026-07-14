@@ -1,6 +1,7 @@
 """IRS SOI migration loader tests."""
 
 import pytest
+from unittest.mock import AsyncMock
 
 from cre_mcp.market.irs_soi import IrsSoiProvider
 from tests.conftest import load_fixture
@@ -30,3 +31,21 @@ async def test_official_inflow_outflow_layout_uses_county_total_rows(tmp_path):
     assert await provider.load_csv(inflow, year="2022-2023") == 1
     assert await provider.load_csv(outflow, year="2022-2023") == 1
     assert (await provider.net_migration("48453")).value == 45
+
+
+@pytest.mark.asyncio
+async def test_net_migration_lazily_downloads_real_official_csv_layout(tmp_path):
+    fetch = AsyncMock()
+    fetch.get_text.side_effect = [
+        load_fixture("irs/county_inflow_travis.csv"),
+        load_fixture("irs/county_outflow_travis.csv"),
+    ]
+    provider = IrsSoiProvider(fetch=fetch, db_path=tmp_path / "live.db")
+
+    first = await provider.net_migration("48453")
+    second = await provider.net_migration("48453")
+
+    assert first.value == -8_895
+    assert first.as_of == "2022-2023"
+    assert second == first
+    assert fetch.get_text.await_count == 2

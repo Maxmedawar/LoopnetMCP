@@ -54,10 +54,11 @@ class HudProvider(MarketDataProvider):
 
     @staticmethod
     def _geo_id(geo: GeoRef) -> str:
-        value = geo.cbsa or geo.county_fips or geo.zip
-        if not value:
-            raise ValueError("HUD lookup requires CBSA, county, or ZIP geography")
-        return value
+        if geo.cbsa:
+            return f"METRO{geo.cbsa}M{geo.cbsa}"
+        if geo.county_fips:
+            return f"{geo.county_fips}99999"
+        raise ValueError("HUD lookup requires CBSA or county geography")
 
     async def fmr(self, geo: GeoRef, year: int) -> MetricValue:
         """Return HUD two-bedroom Fair Market Rent."""

@@ -1,5 +1,7 @@
-"""Census ACS and building-permits provider."""
+"""Census ACS and annual county building-permits provider."""
 
+import csv
+import io
 import logging
 from typing import Any
 
@@ -121,30 +123,31 @@ class CensusProvider(MarketDataProvider):
         geo: GeoRef,
         year: int,
     ) -> MetricValue:
-        """Return summed permits from the Census BPS time-series helper."""
-        params = {
-            "get": "PERIOD,PERMITS",
-            "time": f"from {year}-01 to {year}-12",
-            **_geo_params(geo),
-        }
-        payload = await self.client.get("timeseries/eits/bp", params)
-        if not isinstance(payload, list) or len(payload) < 2:
-            raise ValueError("Census BPS response did not contain permit rows")
-        headers = payload[0]
+        """Return final annual housing units from Census's county BPS file."""
+        url = f"https://www2.census.gov/econ/bps/County/co{year}a.txt"
+        payload = await self.client.fetch.get_text(url)
         total = 0.0
-        latest: str | None = None
         found = False
-        for values in payload[1:]:
-            row = dict(zip(headers, values, strict=False))
-            permits = _number(row.get("PERMITS"))
-            if permits is not None:
-                total += permits
-                found = True
-            latest = max(latest or "", str(row.get("PERIOD", ""))) or latest
+        reader = csv.reader(io.StringIO(payload))
+        for row in reader:
+            if len(row) < 18 or not row[0].strip().isdigit():
+                continue
+            state_fips = row[1].strip().zfill(2)
+            county_fips = row[2].strip().zfill(3)
+            if state_fips != geo.state_fips:
+                continue
+            if geo.county_fips and county_fips != geo.county_fips[-3:]:
+                continue
+            units = sum(
+                value
+                for index in (7, 10, 13, 16)
+                if (value := _number(row[index])) is not None
+            )
+            total += units
+            found = True
         return MetricValue(
             value=total if found else None,
             unit="housing units",
-            as_of=latest or str(year),
-            source="Census Building Permits Survey",
+            as_of=str(year),
+            source="Census Building Permits Survey final annual county file",
         )
-

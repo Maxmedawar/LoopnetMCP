@@ -1,9 +1,11 @@
 {
-  "__note": "# VERIFY against live response",
   "data": {
+    "year": "2026",
+    "quarter": "1",
+    "input": "78701",
+    "crosswalk_type": "zip-county",
     "results": [
-      {"zip": "78701", "geoid": "48453", "res_ratio": 0.9972},
-      {"zip": "78701", "geoid": "48021", "res_ratio": 0.0028}
+      {"zip": "78701", "geoid": "48453", "city": "AUSTIN", "state": "TX", "res_ratio": 1, "bus_ratio": 1, "oth_ratio": 1, "tot_ratio": 1}
     ]
   }
 }

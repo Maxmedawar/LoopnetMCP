@@ -1,5 +1,4 @@
 {
-  "__note": "# VERIFY against live response",
   "realtime_start": "2026-07-13",
   "realtime_end": "2026-07-13",
   "observation_start": "2026-01-01",
@@ -13,8 +12,8 @@
   "offset": 0,
   "limit": 100000,
   "observations": [
-    {"realtime_start": "2026-07-13", "realtime_end": "2026-07-13", "date": "2026-07-08", "value": "4.15"},
-    {"realtime_start": "2026-07-13", "realtime_end": "2026-07-13", "date": "2026-07-09", "value": "."},
-    {"realtime_start": "2026-07-13", "realtime_end": "2026-07-13", "date": "2026-07-10", "value": "4.18"}
+    {"realtime_start": "2026-07-13", "realtime_end": "2026-07-13", "date": "2026-07-08", "value": "4.56"},
+    {"realtime_start": "2026-07-13", "realtime_end": "2026-07-13", "date": "2026-07-09", "value": "4.54"},
+    {"realtime_start": "2026-07-13", "realtime_end": "2026-07-13", "date": "2026-07-10", "value": "4.56"}
   ]
 }

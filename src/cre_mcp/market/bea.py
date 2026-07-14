@@ -54,17 +54,30 @@ class BeaProvider(MarketDataProvider):
                 "TableName": table,
                 "LineCode": 1,
                 "GeoFIPS": geo_fips,
-                "Year": "X",
+                "Year": "LAST5",
                 "ResultFormat": "JSON",
             },
         )
         try:
-            rows = payload["BEAAPI"]["Results"]["Data"]
+            results = payload["BEAAPI"]["Results"]
         except (KeyError, TypeError) as exc:
-            raise ValueError("BEA response did not contain Regional data") from exc
+            raise ValueError("BEA response did not contain Results") from exc
+        if not isinstance(results, dict):
+            raise ValueError("BEA response Results must be an object")
+        error = results.get("Error")
+        if error:
+            description = (
+                error.get("APIErrorDescription")
+                if isinstance(error, dict)
+                else str(error)
+            )
+            raise ValueError(f"BEA Regional request failed: {description}")
+        rows = results.get("Data")
+        if not isinstance(rows, list):
+            raise ValueError("BEA response did not contain Regional data")
         points: list[tuple[str, float]] = []
         unit = "USD thousands"
-        for row in rows if isinstance(rows, list) else []:
+        for row in rows:
             try:
                 value = float(str(row["DataValue"]).replace(",", ""))
                 points.append((str(row["TimePeriod"]), value))

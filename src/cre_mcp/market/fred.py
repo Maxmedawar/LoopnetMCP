@@ -14,7 +14,7 @@ from cre_mcp.models.market import MetricSeries
 
 
 class FredProvider(MarketDataProvider):
-    """FRED series observations authenticated by Bearer token."""
+    """FRED series observations authenticated by API-key query parameter."""
 
     name = "fred"
 
@@ -33,7 +33,11 @@ class FredProvider(MarketDataProvider):
             client
             or GovApiClient(
                 fetch or get_fetch_client(),
-                AuthSpec(kind="bearer", secret=config.fred_api_key),
+                AuthSpec(
+                    kind="query_param",
+                    param_name="api_key",
+                    secret=config.fred_api_key,
+                ),
                 "https://api.stlouisfed.org/fred",
             )
         )

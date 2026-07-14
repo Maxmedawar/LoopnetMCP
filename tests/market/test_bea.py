@@ -21,6 +21,7 @@ async def test_bea_query_auth_and_regional_mapping():
     url = fetch.get_json.await_args.args[0]
     assert url.startswith("https://apps.bea.gov/api/data/?")
     assert "datasetname=Regional" in url and "GeoFIPS=48453" in url
+    assert "TableName=CAGDP1" in url and "LineCode=1" in url
+    assert "Year=LAST5" in url
     assert "UserID=bea-key" in url
-    assert series.points[-1] == ("2023", 201435118.0)
-
+    assert series.points[-1] == ("2024", 165671955.0)

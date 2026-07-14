@@ -54,9 +54,9 @@ async def test_persistent_policy_second_client_skips_network(tmp_path):
             persistent_cache=persistent,
         ) as first:
             metrics = await CensusProvider(config=config, fetch=first).acs5_profile(
-                geo, 2023
+                geo, 2024
             )
-            assert metrics["population"].value == 1_326_436
+            assert metrics["population"].value == 1_330_015
         session.get.assert_awaited_once()
 
     with patch("cre_mcp.http.fetch.AsyncSession") as session_class:
@@ -66,7 +66,7 @@ async def test_persistent_policy_second_client_skips_network(tmp_path):
             persistent_cache=SQLiteCache(config.cache_db_path),
         ) as second:
             metrics = await CensusProvider(config=config, fetch=second).acs5_profile(
-                geo, 2023
+                geo, 2024
             )
-            assert metrics["population"].value == 1_326_436
+            assert metrics["population"].value == 1_330_015
         session_class.assert_not_called()

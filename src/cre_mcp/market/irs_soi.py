@@ -3,6 +3,7 @@
 import asyncio
 import csv
 import io
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -10,6 +11,12 @@ from cre_mcp.config import CreConfig
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.market.base import AuthSpec, GovApiClient, MarketDataProvider
 from cre_mcp.models.market import MetricValue
+
+logger = logging.getLogger(__name__)
+
+LATEST_MIGRATION_YEAR = "2022-2023"
+COUNTY_INFLOW_URL = "https://www.irs.gov/pub/irs-soi/countyinflow2223.csv"
+COUNTY_OUTFLOW_URL = "https://www.irs.gov/pub/irs-soi/countyoutflow2223.csv"
 
 
 def _float(value: str | None) -> float:
@@ -34,10 +41,12 @@ class IrsSoiProvider(MarketDataProvider):
     ):
         config = config or CreConfig()
         self.db_path = Path(db_path or config.cache_db_path).expanduser()
+        self.fetch = fetch or (client.fetch if client is not None else get_fetch_client())
+        self._load_lock = asyncio.Lock()
         super().__init__(
             client
             or GovApiClient(
-                fetch or get_fetch_client(),
+                self.fetch,
                 AuthSpec(kind="none"),
                 "https://www.irs.gov/statistics/soi-tax-stats-migration-data",
             )
@@ -62,7 +71,30 @@ class IrsSoiProvider(MarketDataProvider):
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS soi_migration_meta (
+                dataset TEXT PRIMARY KEY,
+                loaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         return connection
+
+    def _dataset_loaded(self) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM soi_migration_meta WHERE dataset = ?",
+                (LATEST_MIGRATION_YEAR,),
+            ).fetchone()
+        return row is not None
+
+    def _mark_dataset_loaded(self) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO soi_migration_meta(dataset) VALUES (?)",
+                (LATEST_MIGRATION_YEAR,),
+            )
 
     def _load_csv(
         self,
@@ -178,6 +210,28 @@ class IrsSoiProvider(MarketDataProvider):
         """Load normalized or official IRS county inflow/outflow CSV data."""
         return await asyncio.to_thread(self._load_csv, text, direction, year)
 
+    async def _ensure_latest_loaded(self) -> None:
+        if await asyncio.to_thread(self._dataset_loaded):
+            return
+        async with self._load_lock:
+            if await asyncio.to_thread(self._dataset_loaded):
+                return
+            inflow, outflow = await asyncio.gather(
+                self.fetch.get_text(COUNTY_INFLOW_URL),
+                self.fetch.get_text(COUNTY_OUTFLOW_URL),
+            )
+            await self.load_csv(
+                inflow,
+                direction="inflow",
+                year=LATEST_MIGRATION_YEAR,
+            )
+            await self.load_csv(
+                outflow,
+                direction="outflow",
+                year=LATEST_MIGRATION_YEAR,
+            )
+            await asyncio.to_thread(self._mark_dataset_loaded)
+
     def _net_migration(self, county_fips: str) -> tuple[float, str] | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -193,6 +247,12 @@ class IrsSoiProvider(MarketDataProvider):
     async def net_migration(self, county_fips: str) -> MetricValue:
         """Return latest net exemptions, used as a people-migration proxy."""
         row = await asyncio.to_thread(self._net_migration, county_fips)
+        if row is None and county_fips:
+            try:
+                await self._ensure_latest_loaded()
+                row = await asyncio.to_thread(self._net_migration, county_fips)
+            except Exception as exc:
+                logger.warning("IRS SOI migration data unavailable: %s", exc)
         return MetricValue(
             value=row[0] if row else None,
             unit="people",

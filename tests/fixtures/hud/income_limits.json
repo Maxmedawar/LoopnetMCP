@@ -1,9 +1,15 @@
 {
-  "__note": "# VERIFY against live response",
   "data": {
-    "year": "2026",
-    "area_name": "Austin-Round Rock-Georgetown, TX MSA",
-    "median_income": 133800,
-    "very_low": {"il50_p4": 66850}
+    "county_name": "",
+    "counties_msa": "Bastrop County, TX; Caldwell County, TX; Hays County, TX; Travis County, TX; and Williamson County, TX",
+    "town_name": "",
+    "metro_status": "1",
+    "metro_name": "Austin-Round Rock-Georgetown, TX",
+    "area_name": "Austin-Round Rock, TX MSA",
+    "year": "2024",
+    "median_income": 126000,
+    "very_low": {"il50_p4": 63000},
+    "extremely_low": {"il30_p4": 37800},
+    "low": {"il80_p4": 97800}
   }
 }
