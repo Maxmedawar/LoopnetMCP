@@ -29,6 +29,7 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.books import tools as book_tools
     from cre_mcp.closing import tools as closing_tools
     from cre_mcp.command import tools as command_tools
+    from cre_mcp.compliance import tools as compliance_tools
     from cre_mcp.construction import tools as construction_tools
     from cre_mcp.dataroom import tools as dataroom_tools
     from cre_mcp.debt import tools as debt_tools
@@ -40,7 +41,9 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.negotiation import tools as negotiation_tools
     from cre_mcp.obligations import tools as obligation_tools
     from cre_mcp.physical import tools as physical_tools
+    from cre_mcp.relations import tools as relations_tools
     from cre_mcp.siteintel import tools as siteintel_tools
+    from cre_mcp.title import tools as title_tools
     from cre_mcp.valuation import tools as valuation_tools
     from cre_mcp.verifyreg import tools as verifyreg_tools
     from cre_mcp.zoning import tools as zoning_tools
@@ -250,6 +253,30 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(construction_tools.ve_option)
     mcp.tool()(construction_tools.percent_complete)
     mcp.tool()(construction_tools.closeout_register)
+    mcp.tool()(title_tools.parse_title_commitment)
+    mcp.tool()(title_tools.screen_encumbrances)
+    mcp.tool()(title_tools.compare_legal_descriptions)
+    mcp.tool()(title_tools.assess_recorded_burdens)
+    mcp.tool()(title_tools.survey_vs_title)
+    mcp.tool()(title_tools.attorney_issue_list)
+    mcp.tool()(compliance_tools.build_appeal_package)
+    mcp.tool()(compliance_tools.record_policy)
+    mcp.tool()(compliance_tools.record_claim)
+    mcp.tool()(compliance_tools.renewal_radar)
+    mcp.tool()(compliance_tools.utility_anomalies)
+    mcp.tool()(compliance_tools.retrofit_screen)
+    mcp.tool()(compliance_tools.energy_compliance)
+    mcp.tool()(compliance_tools.compliance_calendar)
+    mcp.tool()(compliance_tools.unpermitted_work_screen)
+    mcp.tool()(compliance_tools.phase2_scope)
+    mcp.tool()(relations_tools.counterparty_dossier)
+    mcp.tool()(relations_tools.who_to_call)
+    mcp.tool()(relations_tools.meeting_briefing)
+    mcp.tool()(relations_tools.record_thread_state)
+    mcp.tool()(relations_tools.stalled_threads)
+    mcp.tool()(relations_tools.deal_coverage_report)
+    mcp.tool()(relations_tools.route_lead)
+    mcp.tool()(relations_tools.challenge_appraisal)
 
 
 __all__ = ["register_all"]
