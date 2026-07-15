@@ -10,7 +10,7 @@ investor operate like a 20-year expert.
 **Status legend:** ✅ shipped & live-verified · 🔶 partial (primitive exists, workflow doesn't)
 · ⬜ to build · 🔨 in build (wave dispatched)
 
-**Verified coverage before this program: 30 ✅ / 47 🔶 / 163 ⬜** (definitive per-row count;
+**PROGRAM COMPLETE 2026-07-14: 176 ✅ / 59 🔶 / 5 ⬜ (all remaining ⬜ are blocked on Max/reality — PACER, email creds, municipal corpora, paid contact data, relationships).** Was 30/47/163 at start (definitive per-row count;
 corrects the earlier 29/46/165 headline — see COVERAGE_MAP.md changelog).
 
 **Build model:** Fable directs + integrates + verifies (runs the suite, reads real diffs; sole
@@ -95,7 +95,7 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 5 | Counterparty briefing before a call | P | W3 | ✅ |
 | 6 | Surface unanswered messages likely to stall a deal | M | W3 | 🔶 |
 | 7 | Rank opportunities by expected value of the next hour | M | W3 | ✅ |
-| 8 | Forecast 30/60/90-day cash requirements | M | W4 | ⬜ |
+| 8 | Forecast 30/60/90-day cash requirements | M | W4 | ✅ |
 | 9 | Detect assumption drift across underwriting/IC/loan/investor docs | P | W3 | 🔶 |
 | 10 | Record expert overrides + realized outcomes → calibration | C | — | ✅ |
 
@@ -108,7 +108,7 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 14 | Detect stale listings open to structure/speed/discount | M | W3 | ✅ |
 | 15 | Rank new listings by fit, hidden upside, data confidence | C | — | ✅ |
 | 16 | Compare ask vs debt-constrained value | P | W5 | 🔶 |
-| 17 | Identify assumable/favorable existing financing | M | W5 | ⬜ |
+| 17 | Identify assumable/favorable existing financing | M | W5 | ✅ |
 | 18 | Extract broker claims from OM, mark verified/contradicted | P | W1 | 🔶 |
 | 19 | Daily coverage report: searched/screened/rejected/untouched | M | W3 | ✅ |
 | 20 | Route new listings by mandate, geography, capacity | M | W3 | 🔶 |
@@ -137,8 +137,8 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 35 | Frontage, visibility, access, curb cuts, signals | M | W13 | 🔶 |
 | 36 | Retail leakage / surplus / category demand | M | W13 | 🔶 |
 | 37 | Track employers: openings, layoffs, relocations | M | W13 | 🔶 |
-| 38 | Growth forecasts w/ confidence bands | M | W13 | ⬜ |
-| 39 | Compare regulatory burden (rent control, eviction, …) | M | W13 | ⬜ |
+| 38 | Growth forecasts w/ confidence bands | M | W13 | 🔶 |
+| 39 | Compare regulatory burden (rent control, eviction, …) | M | W13 | 🔶 |
 | 40 | Market-entry memo: facts vs estimates vs questions | P | W13 | 🔶 |
 
 ### 5 · Core underwriting
@@ -162,7 +162,7 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 52 | Insurance repricing, deductibles, BI gaps | M | W14 | ✅ |
 | 53 | Value assumable below-market debt separately | M | W5 | ✅ |
 | 54 | TI, LC, free rent, downtime, renewal prob by suite | M | W14 | ✅ |
-| 55 | Cost seg, depreciation, passive-loss, recapture (CPA signoff) | M | W14 | ⬜ |
+| 55 | Cost seg, depreciation, passive-loss, recapture (CPA signoff) | M | W14 | ✅ |
 | 56 | Value fee/leasehold/ground-lease/air-rights separately | M | W14 | ✅ |
 | 57 | Reconcile income/sales/cost approaches | M | W14 | ✅ |
 | 58 | Forced-sale / liquidation value | M | W14 | ✅ |
@@ -174,12 +174,12 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 |---|-----|-------|------|----|
 | 61 | Ingest OM/rent roll/T12/leases → verified NOI | C | — | ✅ |
 | 62 | Trace every input to exact page/row/cell | P | W2 | ✅ |
-| 63 | Detect hidden rows, hardcodes, circular formulas | M | W4 | ⬜ |
+| 63 | Detect hidden rows, hardcodes, circular formulas | M | W4 | ✅ |
 | 64 | Rebuild T12 from GL, deposits, tenant ledgers | M | W4 | 🔶 |
 | 65 | Reconcile scheduled rent → billed → cash → bad debt | M | W4 | ✅ |
 | 66 | Normalize one-time/related-party/capitalized expenses | P | W4 | 🔶 |
-| 67 | Detect deferred maintenance buried in repairs | M | W4 | ⬜ |
-| 68 | Validate deposits, prepaid, receivables, payables | M | W4 | ⬜ |
+| 67 | Detect deferred maintenance buried in repairs | M | W4 | ✅ |
+| 68 | Validate deposits, prepaid, receivables, payables | M | W4 | ✅ |
 | 69 | Seller→verified→lender NOI bridge + verdict | C | — | ✅ |
 | 70 | Diligence request list ranked by valuation impact | P | W2 | ✅ |
 
@@ -202,7 +202,7 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 |---|-----|-------|------|----|
 | 81 | Current zoning, overlays, permitted uses, nonconforming | M | W13 | 🔶 |
 | 82 | By-right vs conditional vs variance vs rezone | M | W13 | ⬜ |
-| 83 | Max FAR, density, height, coverage, setbacks, parking | M | W13 | ⬜ |
+| 83 | Max FAR, density, height, coverage, setbacks, parking | M | W13 | 🔶 |
 | 84 | Nearby approval/denial precedents | M | W13 | 🔶 |
 | 85 | Entitlement path, milestones, appeal risk, timeline | M | W13 | 🔶 |
 | 86 | Parse staff reports/conditions → cost & schedule | M | W13 | 🔶 |
@@ -287,27 +287,27 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 141 | Audit monthly rent billing vs lease terms | M | W4 | ✅ |
 | 142 | CAM reconciliations + true-ups w/ audit backup | M | W4 | 🔶 |
 | 143 | Delinquency patterns → collection/notice/escalation | M | W4 | 🔶 |
-| 144 | Triage work orders (life safety, SLA, repeats, cost) | M | W4 | ⬜ |
-| 145 | Preventive maintenance scheduling | M | W4 | ⬜ |
-| 146 | Vendor pricing/quality/compliance comparison | M | W4 | ⬜ |
+| 144 | Triage work orders (life safety, SLA, repeats, cost) | M | W4 | ✅ |
+| 145 | Preventive maintenance scheduling | M | W4 | ✅ |
+| 146 | Vendor pricing/quality/compliance comparison | M | W4 | ✅ |
 | 147 | Weekly cash collections/payables/reserves forecast | M | W4 | 🔶 |
 | 148 | Monthly owner variance narrative | M | W4 | 🔶 |
-| 149 | Recurring repairs → replace or root-cause | M | W4 | ⬜ |
-| 150 | Coordinate unit/suite turns | M | W4 | ⬜ |
+| 149 | Recurring repairs → replace or root-cause | M | W4 | ✅ |
+| 150 | Coordinate unit/suite turns | M | W4 | ✅ |
 
 ### 16 · Debt & lender execution
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 151 | Screen financing options + size debt | C | — | ✅ |
 | 152 | Lender-ready package w/ source-traced underwriting | P | W5 | 🔶 |
-| 153 | Match deal to lenders by live appetite | M | W5 | ⬜ |
+| 153 | Match deal to lenders by live appetite | M | W5 | 🔶 |
 | 154 | Compare term sheets (cost, recourse, covenants, prepay) | M | W5 | ✅ |
 | 155 | Score lender execution: quote-to-close, retrades | M | W1-ledger→W5 | 🔶 |
-| 156 | Rate caps, swaps, extensions, hedge renewal | M | W5 | ⬜ |
+| 156 | Rate caps, swaps, extensions, hedge renewal | M | W5 | ✅ |
 | 157 | Forecast covenant compliance, cash traps, triggers | M | W5 | ✅ |
 | 158 | Assumption vs refi vs supplemental vs sale | M | W5 | ✅ |
-| 159 | Waiver/extension/modification request prep | M | W5 | ⬜ |
-| 160 | Track lender reporting obligations + draws | M | W5 | ⬜ |
+| 159 | Waiver/extension/modification request prep | M | W5 | ✅ |
+| 160 | Track lender reporting obligations + draws | M | W5 | ✅ |
 
 ### 17 · Capital formation, fund & IR
 | # | Job | Grade | Wave | St |
@@ -369,7 +369,7 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 201 | Price a note (collateral, liens, timeline, recovery) | M | W10 | ✅ |
-| 202 | Reconcile note/mortgage/assignments/allonges chain | M | W10 | ⬜ |
+| 202 | Reconcile note/mortgage/assignments/allonges chain | M | W10 | ✅ |
 | 203 | Lien priority + recovery waterfall | M | W10 | ✅ |
 | 204 | Cure/mod/forbear/foreclose/DIL/sale/REO comparison | M | W10 | ✅ |
 | 205 | Foreclosure/redemption/BK/eviction timelines by state | M | W10 | ✅ |
@@ -413,7 +413,7 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 231 | Independently re-underwrite a sponsor deal | P | W12 | 🔶 |
 | 232 | Sponsor track record: realized vs projected | M | W12 | 🔶 |
 | 233 | PPM/JV/OA economics + counsel flags | P | W12 | 🔶 |
-| 234 | LP portfolio exposure look-through | M | W12 | ⬜ |
+| 234 | LP portfolio exposure look-through | M | W12 | ✅ |
 | 235 | Challenge an appraisal (comps, adjustments, cap) | M | W12 | ✅ |
 | 236 | Reconsideration-of-value package | M | W12 | ✅ |
 | 237 | Broker credibility from accuracy/retrades/closes | M | W1-ledger→W12 | 🔶 |
