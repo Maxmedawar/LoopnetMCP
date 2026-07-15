@@ -36,7 +36,9 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.debt import tools as debt_tools
     from cre_mcp.disposition import tools as disposition_tools
     from cre_mcp.envscreen import tools as envscreen_tools
+    from cre_mcp.finops import tools as finops_tools
     from cre_mcp.fund import tools as fund_tools
+    from cre_mcp.pmops import tools as pmops_tools
     from cre_mcp.leaseops import tools as leaseops_tools
     from cre_mcp.leasing import tools as leasing_tools
     from cre_mcp.mlops import tools as mlops_tools
@@ -302,6 +304,25 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(leaseops_tools.draft_obligation_notice)
     mcp.tool()(leaseops_tools.trace_input_lineage)
     mcp.tool()(leaseops_tools.diligence_request_list)
+    mcp.tool()(pmops_tools.record_workorder)
+    mcp.tool()(pmops_tools.triage_queue)
+    mcp.tool()(pmops_tools.pm_schedule)
+    mcp.tool()(pmops_tools.record_vendor)
+    mcp.tool()(pmops_tools.compare_vendors)
+    mcp.tool()(pmops_tools.repeat_repair_analysis)
+    mcp.tool()(pmops_tools.record_turn)
+    mcp.tool()(pmops_tools.turn_board)
+    mcp.tool()(pmops_tools.deferred_maintenance_screen)
+    mcp.tool()(pmops_tools.balance_validation)
+    mcp.tool()(finops_tools.cash_requirements)
+    mcp.tool()(finops_tools.detect_assumable)
+    mcp.tool()(finops_tools.record_lender_profile)
+    mcp.tool()(finops_tools.match_lenders)
+    mcp.tool()(finops_tools.cap_cost_context)
+    mcp.tool()(finops_tools.prepare_waiver_request)
+    mcp.tool()(finops_tools.record_reporting)
+    mcp.tool()(finops_tools.reporting_calendar)
+    mcp.tool()(finops_tools.reconcile_note_chain)
 
 
 __all__ = ["register_all"]
