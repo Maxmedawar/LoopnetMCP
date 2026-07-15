@@ -27,6 +27,7 @@ def register_all(mcp: Any) -> None:
         truth_tools,
     )
     from cre_mcp.books import tools as book_tools
+    from cre_mcp.closing import tools as closing_tools
     from cre_mcp.command import tools as command_tools
     from cre_mcp.dataroom import tools as dataroom_tools
     from cre_mcp.debt import tools as debt_tools
@@ -38,6 +39,7 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.negotiation import tools as negotiation_tools
     from cre_mcp.obligations import tools as obligation_tools
     from cre_mcp.physical import tools as physical_tools
+    from cre_mcp.siteintel import tools as siteintel_tools
     from cre_mcp.valuation import tools as valuation_tools
     from cre_mcp.verifyreg import tools as verifyreg_tools
     from cre_mcp.zoning import tools as zoning_tools
@@ -226,6 +228,16 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(mlops_tools.record_ml_watch_item)
     mcp.tool()(mlops_tools.ml_breach_report)
     mcp.tool()(mlops_tools.package_control_exit)
+    mcp.tool()(closing_tools.extract_contract_obligations)
+    mcp.tool()(closing_tools.reconcile_settlement)
+    mcp.tool()(closing_tools.verify_funding_package)
+    mcp.tool()(closing_tools.closing_day_runbook)
+    mcp.tool()(closing_tools.record_deal_postmortem)
+    mcp.tool()(siteintel_tools.dedupe_listings)
+    mcp.tool()(siteintel_tools.trade_area_profile)
+    mcp.tool()(siteintel_tools.supply_pipeline_signal)
+    mcp.tool()(siteintel_tools.employer_warn_events)
+    mcp.tool()(siteintel_tools.retail_gap_note)
 
 
 __all__ = ["register_all"]
