@@ -26,6 +26,7 @@ def register_all(mcp: Any) -> None:
         structure_tools,
         truth_tools,
     )
+    from cre_mcp.assetmgmt import tools as assetmgmt_tools
     from cre_mcp.books import tools as book_tools
     from cre_mcp.closing import tools as closing_tools
     from cre_mcp.command import tools as command_tools
@@ -277,6 +278,16 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(relations_tools.deal_coverage_report)
     mcp.tool()(relations_tools.route_lead)
     mcp.tool()(relations_tools.challenge_appraisal)
+    mcp.tool()(assetmgmt_tools.upsert_initiative)
+    mcp.tool()(assetmgmt_tools.business_plan)
+    mcp.tool()(assetmgmt_tools.rank_initiatives)
+    mcp.tool()(assetmgmt_tools.noi_by_tenant)
+    mcp.tool()(assetmgmt_tools.variance_explain)
+    mcp.tool()(assetmgmt_tools.prioritize_capex)
+    mcp.tool()(assetmgmt_tools.initiative_tracker)
+    mcp.tool()(assetmgmt_tools.flag_underperformance)
+    mcp.tool()(assetmgmt_tools.marginal_return)
+    mcp.tool()(assetmgmt_tools.portfolio_watchlist)
 
 
 __all__ = ["register_all"]
