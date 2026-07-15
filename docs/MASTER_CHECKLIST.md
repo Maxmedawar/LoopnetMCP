@@ -25,7 +25,7 @@ on `feature/cre-engine`.
 ## Already shipped (do not rebuild)
 
 **Wave 1 SHIPPED 2026-07-14** (093f6f6..aebb6a7): ledger 6 · scenarios 4 · leases 3 · taxecon 3 · command 5 · notes 4 · debt 4 — 74 → 103 tools.
-**Wave 2 SHIPPED 2026-07-14** (4c386d5..16c52e2): accountability (assign_deal/unassigned_deals) · obligations 4 (collisions, consent DEAL-KILLER screen, estoppels) · dataroom 6 (completeness index, critical path, closing runway) · recoveries + option econ 2 — **74 → 117 tools, 803 tests.** LoopNet 60s-hang fixed (0bf591d, live-proven 25 listings x2 @8.8s). Wave 3 SHIPPED (f2630b9..a882c3b): zoning (live CBD-DDB400 proof + Houston branch) · envscreen (61 live ship-channel hits) · verifyreg (live FINRA CRD 361) · books (system of record, penny-exact) · negotiation (drift catches dropped contingencies) — **74 → 138 tools, 924 tests.** In build: disposition (kwargs fix), physical, leasing, fund.
+**Wave 2 SHIPPED 2026-07-14** (4c386d5..16c52e2): accountability (assign_deal/unassigned_deals) · obligations 4 (collisions, consent DEAL-KILLER screen, estoppels) · dataroom 6 (completeness index, critical path, closing runway) · recoveries + option econ 2 — **74 → 117 tools, 803 tests.** LoopNet 60s-hang fixed (0bf591d, live-proven 25 listings x2 @8.8s). Wave 3 SHIPPED (f2630b9..a882c3b): zoning (live CBD-DDB400 proof + Houston branch) · envscreen (61 live ship-channel hits) · verifyreg (live FINRA CRD 361) · books (system of record, penny-exact) · negotiation (drift catches dropped contingencies) — **74 → 138 tools, 924 tests.** Waves 4-6 SHIPPED (c45a94b..62aed8b): disposition · physical · leasing · fund · closing · mlops · valuation · siteintel · title · construction · assetmgmt · compliance · relations — **74 → 235 tools, 1208 tests.** W7 mop-up in build: leaseops (123/129/130/62/70), prospect (23/24/26/27/33/35). Genuinely blocked-on-Max/reality: 206 (PACER paid), 4-full (email integration creds), 89 (utility-capacity relationships), 84-85 (municipal precedent corpus), 29-full (call-report parsing deferred).
 
 ### The original 74
 
@@ -91,9 +91,9 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 1 | Morning action queue ranked by $ impact, urgency, close prob | M | W3 | ✅ |
 | 2 | Overnight change brief (listings, bids, docs, signals, deadlines) | M | W3 | ✅ |
 | 3 | Flag deals with no owner, next action, or due date | M | W1→W3 | ✅ |
-| 4 | Convert meeting/email/call commitments into tasks + deadlines | M | W12 | ⬜ |
-| 5 | Counterparty briefing before a call | P | W3 | 🔶 |
-| 6 | Surface unanswered messages likely to stall a deal | M | W3 | ⬜ |
+| 4 | Convert meeting/email/call commitments into tasks + deadlines | M | W12 | 🔶 |
+| 5 | Counterparty briefing before a call | P | W3 | ✅ |
+| 6 | Surface unanswered messages likely to stall a deal | M | W3 | 🔶 |
 | 7 | Rank opportunities by expected value of the next hour | M | W3 | ✅ |
 | 8 | Forecast 30/60/90-day cash requirements | M | W4 | ⬜ |
 | 9 | Detect assumption drift across underwriting/IC/loan/investor docs | P | W3 | 🔶 |
@@ -103,26 +103,26 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 11 | Find LoopNet/Crexi listings matching a precise buy box | C | — | ✅ |
-| 12 | Dedupe same property across brokers/portals w/ price history | P | W13 | 🔨 |
+| 12 | Dedupe same property across brokers/portals w/ price history | P | W13 | ✅ |
 | 13 | Alert on price, status, OM, broker, DOM changes | P | W3 | ✅ |
 | 14 | Detect stale listings open to structure/speed/discount | M | W3 | ✅ |
 | 15 | Rank new listings by fit, hidden upside, data confidence | C | — | ✅ |
 | 16 | Compare ask vs debt-constrained value | P | W5 | 🔶 |
 | 17 | Identify assumable/favorable existing financing | M | W5 | ⬜ |
 | 18 | Extract broker claims from OM, mark verified/contradicted | P | W1 | 🔶 |
-| 19 | Daily coverage report: searched/screened/rejected/untouched | M | W3 | ⬜ |
-| 20 | Route new listings by mandate, geography, capacity | M | W3 | ⬜ |
+| 19 | Daily coverage report: searched/screened/rejected/untouched | M | W3 | ✅ |
+| 20 | Route new listings by mandate, geography, capacity | M | W3 | 🔶 |
 
 ### 3 · Off-market & event sourcing
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 21 | Find off-market owners/parcels matching a thesis | C | — | ✅ |
 | 22 | Rank owner motivation from trigger events | C | — | ✅ |
-| 23 | Identify adjacent parcels for assemblage | M | W13 | ⬜ |
-| 24 | Find owner-occupied assets for sale-leaseback | M | W13 | ⬜ |
+| 23 | Identify adjacent parcels for assemblage | M | W13 | 🔨 |
+| 24 | Find owner-occupied assets for sale-leaseback | M | W13 | 🔨 |
 | 25 | Identify dark stores / corporate closures | P | W11 | 🔶 |
-| 26 | Find stalled entitled projects | M | W13 | ⬜ |
-| 27 | Find portfolio owners likely to sell a package | P | W13 | 🔶 |
+| 26 | Find stalled entitled projects | M | W13 | 🔨 |
+| 27 | Find portfolio owners likely to sell a package | P | W13 | 🔨 |
 | 28 | Monitor permits/CO/demolition/planning filings | M | W13 | 🔶 |
 | 29 | Find banks/servicers with OREO or criticized CRE exposure | P | W13 | 🔶 |
 | 30 | Owner-specific outreach from identity + pain point | C | — | ✅ |
@@ -131,12 +131,12 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 31 | Compare markets on Census/BLS/FRED/HUD/BEA | C | — | ✅ |
-| 32 | Quantify inventory, pipeline, absorption, vacancy | P | W13 | 🔨 |
-| 33 | Achievable rent w/ size/condition/frontage adjustments | P | W13 | 🔶 |
-| 34 | Drive-time / trade-area demographics | P | W13 | 🔨 |
-| 35 | Frontage, visibility, access, curb cuts, signals | M | W13 | ⬜ |
-| 36 | Retail leakage / surplus / category demand | M | W13 | 🔨 |
-| 37 | Track employers: openings, layoffs, relocations | M | W13 | 🔨 |
+| 32 | Quantify inventory, pipeline, absorption, vacancy | P | W13 | ✅ |
+| 33 | Achievable rent w/ size/condition/frontage adjustments | P | W13 | 🔨 |
+| 34 | Drive-time / trade-area demographics | P | W13 | 🔶 |
+| 35 | Frontage, visibility, access, curb cuts, signals | M | W13 | ✅ |
+| 36 | Retail leakage / surplus / category demand | M | W13 | 🔶 |
+| 37 | Track employers: openings, layoffs, relocations | M | W13 | 🔶 |
 | 38 | Growth forecasts w/ confidence bands | M | W13 | ⬜ |
 | 39 | Compare regulatory burden (rent control, eviction, …) | M | W13 | ⬜ |
 | 40 | Market-entry memo: facts vs estimates vs questions | P | W13 | 🔶 |
@@ -159,21 +159,21 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 51 | Sale-triggered property-tax reassessment → NOI hit | M | W1 | ✅ |
-| 52 | Insurance repricing, deductibles, BI gaps | M | W14 | 🔨 |
+| 52 | Insurance repricing, deductibles, BI gaps | M | W14 | ✅ |
 | 53 | Value assumable below-market debt separately | M | W5 | ✅ |
-| 54 | TI, LC, free rent, downtime, renewal prob by suite | M | W14 | 🔨 |
+| 54 | TI, LC, free rent, downtime, renewal prob by suite | M | W14 | ✅ |
 | 55 | Cost seg, depreciation, passive-loss, recapture (CPA signoff) | M | W14 | ⬜ |
-| 56 | Value fee/leasehold/ground-lease/air-rights separately | M | W14 | 🔨 |
-| 57 | Reconcile income/sales/cost approaches | M | W14 | 🔨 |
-| 58 | Forced-sale / liquidation value | M | W14 | 🔨 |
-| 59 | Incentive expiration + clawback modeling | M | W14 | 🔨 |
-| 60 | Risk-adjusted residual value (entitlement/construction) | M | W14 | 🔨 |
+| 56 | Value fee/leasehold/ground-lease/air-rights separately | M | W14 | ✅ |
+| 57 | Reconcile income/sales/cost approaches | M | W14 | ✅ |
+| 58 | Forced-sale / liquidation value | M | W14 | ✅ |
+| 59 | Incentive expiration + clawback modeling | M | W14 | ✅ |
+| 60 | Risk-adjusted residual value (entitlement/construction) | M | W14 | ✅ |
 
 ### 7 · Document truth & accounting
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 61 | Ingest OM/rent roll/T12/leases → verified NOI | C | — | ✅ |
-| 62 | Trace every input to exact page/row/cell | P | W2 | 🔶 |
+| 62 | Trace every input to exact page/row/cell | P | W2 | 🔨 |
 | 63 | Detect hidden rows, hardcodes, circular formulas | M | W4 | ⬜ |
 | 64 | Rebuild T12 from GL, deposits, tenant ledgers | M | W4 | 🔶 |
 | 65 | Reconcile scheduled rent → billed → cash → bad debt | M | W4 | ✅ |
@@ -181,21 +181,21 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 67 | Detect deferred maintenance buried in repairs | M | W4 | ⬜ |
 | 68 | Validate deposits, prepaid, receivables, payables | M | W4 | ⬜ |
 | 69 | Seller→verified→lender NOI bridge + verdict | C | — | ✅ |
-| 70 | Diligence request list ranked by valuation impact | P | W2 | 🔶 |
+| 70 | Diligence request list ranked by valuation impact | P | W2 | 🔨 |
 
 ### 8 · Title, legal & survey
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
-| 71 | Parse title commitment → exceptions, cures, deadlines | M | W6 | ⬜ |
-| 72 | Liens, judgments, UCC, taxes blocking closing | P | W6 | 🔶 |
-| 73 | Deed/legal-description/title/survey/parcel conflicts | M | W6 | ⬜ |
-| 74 | Easements, REAs, use restrictions affecting value | M | W6 | ⬜ |
+| 71 | Parse title commitment → exceptions, cures, deadlines | M | W6 | ✅ |
+| 72 | Liens, judgments, UCC, taxes blocking closing | P | W6 | ✅ |
+| 73 | Deed/legal-description/title/survey/parcel conflicts | M | W6 | ✅ |
+| 74 | Easements, REAs, use restrictions affecting value | M | W6 | ✅ |
 | 75 | Abstract CC&Rs, exclusives, prohibited uses, co-tenancy | M | W2 | ✅ |
-| 76 | ALTA survey vs title vs site plan | M | W6 | ⬜ |
-| 77 | Encroachments, setbacks, missing access | M | W6 | ⬜ |
+| 76 | ALTA survey vs title vs site plan | M | W6 | ✅ |
+| 77 | Encroachments, setbacks, missing access | M | W6 | ✅ |
 | 78 | Entity good standing, authority, AML/sanctions | P | W6 | 🔶 |
 | 79 | Litigation/bankruptcy/dispute risk summary | P | W6 | 🔶 |
-| 80 | Attorney issue list (no legal conclusions) | M | W6 | ⬜ |
+| 80 | Attorney issue list (no legal conclusions) | M | W6 | ✅ |
 
 ### 9 · Zoning & entitlements
 | # | Job | Grade | Wave | St |
@@ -203,27 +203,27 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 81 | Current zoning, overlays, permitted uses, nonconforming | M | W13 | 🔶 |
 | 82 | By-right vs conditional vs variance vs rezone | M | W13 | ⬜ |
 | 83 | Max FAR, density, height, coverage, setbacks, parking | M | W13 | ⬜ |
-| 84 | Nearby approval/denial precedents | M | W13 | ⬜ |
-| 85 | Entitlement path, milestones, appeal risk, timeline | M | W13 | ⬜ |
-| 86 | Parse staff reports/conditions → cost & schedule | M | W13 | ⬜ |
-| 87 | Impact fees, exactions, inclusionary, permit fees | M | W13 | ⬜ |
-| 88 | Subdivision, lot-line, assemblage, TDR, air rights | M | W13 | ⬜ |
+| 84 | Nearby approval/denial precedents | M | W13 | 🔶 |
+| 85 | Entitlement path, milestones, appeal risk, timeline | M | W13 | 🔶 |
+| 86 | Parse staff reports/conditions → cost & schedule | M | W13 | 🔶 |
+| 87 | Impact fees, exactions, inclusionary, permit fees | M | W13 | 🔶 |
+| 88 | Subdivision, lot-line, assemblage, TDR, air rights | M | W13 | 🔶 |
 | 89 | Utility capacity, allocations, moratoria | M | W13 | ⬜ |
-| 90 | Entitlement-risk-adjusted land residual | M | W13 | ⬜ |
+| 90 | Entitlement-risk-adjusted land residual | M | W13 | ✅ |
 
 ### 10 · Development & construction
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
-| 91 | Development budget from program + local costs | M | W14 | ⬜ |
-| 92 | Compare A/E/GC/consultant proposals | M | W14 | ⬜ |
-| 93 | Level trade bids, detect scope gaps | M | W14 | ⬜ |
-| 94 | Reconcile GMP to drawings/specs | M | W14 | ⬜ |
-| 95 | Forecast draws, interest reserve, cost-to-complete | M | W14 | ⬜ |
-| 96 | Audit pay apps vs progress, lien waivers, COs | M | W14 | ⬜ |
-| 97 | Track RFIs, submittals, lead times, critical path | M | W14 | ⬜ |
-| 98 | Model VE choices vs leasing/NOI/exit | M | W14 | ⬜ |
-| 99 | Verify percent complete from evidence | M | W14 | ⬜ |
-| 100 | Closeout docs/warranties/as-builts → operating system | M | W14 | ⬜ |
+| 91 | Development budget from program + local costs | M | W14 | ✅ |
+| 92 | Compare A/E/GC/consultant proposals | M | W14 | ✅ |
+| 93 | Level trade bids, detect scope gaps | M | W14 | ✅ |
+| 94 | Reconcile GMP to drawings/specs | M | W14 | ✅ |
+| 95 | Forecast draws, interest reserve, cost-to-complete | M | W14 | ✅ |
+| 96 | Audit pay apps vs progress, lien waivers, COs | M | W14 | ✅ |
+| 97 | Track RFIs, submittals, lead times, critical path | M | W14 | ✅ |
+| 98 | Model VE choices vs leasing/NOI/exit | M | W14 | ✅ |
+| 99 | Verify percent complete from evidence | M | W14 | ✅ |
+| 100 | Closeout docs/warranties/as-builts → operating system | M | W14 | ✅ |
 
 ### 11 · Physical & environmental diligence
 | # | Job | Grade | Wave | St |
@@ -243,29 +243,29 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 111 | Audit assessor record for errors/overvaluation | M | W1 | ✅ |
-| 112 | Property-tax appeal package + deadlines | M | W7 | ⬜ |
+| 112 | Property-tax appeal package + deadlines | M | W7 | ✅ |
 | 113 | Compare insurance quotes (limits, exclusions, carriers) | M | W7 | ⬜ |
 | 114 | Detect coinsurance/ordinance/flood/BI coverage gaps | M | W7 | ⬜ |
-| 115 | Track carrier appetite, renewals, nonrenewal risk | M | W7 | ⬜ |
-| 116 | Utility bill/tariff/demand-charge anomalies | M | W7 | ⬜ |
-| 117 | Underwrite solar/storage/EV/efficiency projects | M | W7 | ⬜ |
-| 118 | Energy benchmarking/emissions obligations | M | W7 | ⬜ |
-| 119 | Retrofit cost / fines from performance standards | M | W7 | ⬜ |
-| 120 | Compliance calendar (taxes, licenses, inspections, filings) | M | W7 | ⬜ |
+| 115 | Track carrier appetite, renewals, nonrenewal risk | M | W7 | ✅ |
+| 116 | Utility bill/tariff/demand-charge anomalies | M | W7 | ✅ |
+| 117 | Underwrite solar/storage/EV/efficiency projects | M | W7 | 🔶 |
+| 118 | Energy benchmarking/emissions obligations | M | W7 | ✅ |
+| 119 | Retrofit cost / fines from performance standards | M | W7 | 🔶 |
+| 120 | Compliance calendar (taxes, licenses, inspections, filings) | M | W7 | ✅ |
 
 ### 13 · Lease abstraction & administration  ← THE WEDGE
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
 | 121 | Abstract every lease/amendment/guaranty to standard fields | P | W1 | ✅ |
 | 122 | Critical-date calendar: options, notices, expirations, steps | M | W1 | ✅ |
-| 123 | Reconcile lease vs amendments vs ledger vs rent roll | M | W2 | ⬜ |
+| 123 | Reconcile lease vs amendments vs ledger vs rent roll | M | W2 | 🔨 |
 | 124 | Contractual rent schedules (CPI, %, caps, partial periods) | M | W1 | ✅ |
 | 125 | Abstract CAM/tax/insurance recovery language | M | W2 | ✅ |
 | 126 | Estoppels + SNDAs: track, compare, surface exceptions | M | W2 | ✅ |
 | 127 | Detect exclusives, radius, co-tenancy, go-dark, ROFR/ROFO | M | W2 | ✅ |
 | 128 | Price renewal/termination/expansion options vs market | M | W2 | ✅ |
-| 129 | Track COIs, guaranties, security, LCs, default notices | M | W2 | ⬜ |
-| 130 | Obligation-specific notices routed to counsel | M | W2 | ⬜ |
+| 129 | Track COIs, guaranties, security, LCs, default notices | M | W2 | 🔨 |
+| 130 | Obligation-specific notices routed to counsel | M | W2 | 🔨 |
 
 ### 14 · Leasing, tenant rep & retail
 | # | Job | Grade | Wave | St |
@@ -342,27 +342,27 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 |---|-----|-------|------|----|
 | 181 | DD + closing plans tailored to the deal | C | — | ✅ |
 | 182 | Data-room completeness index, assigned gaps | P | W3 | ✅ |
-| 183 | Extract reps, covenants, CPs, post-closing obligations | M | W8 | 🔨 |
+| 183 | Extract reps, covenants, CPs, post-closing obligations | M | W8 | ✅ |
 | 184 | Track title/survey/financing/estoppel/consent deadlines | P | W3 | ✅ |
-| 185 | Reconcile settlement-statement prorations | M | W8 | 🔨 |
-| 186 | Verify sources/uses, payoffs, wires (call-back controls) | M | W8 | 🔨 |
+| 185 | Reconcile settlement-statement prorations | M | W8 | ✅ |
+| 186 | Verify sources/uses, payoffs, wires (call-back controls) | M | W8 | ✅ |
 | 187 | Track third-party reports, reliance, lender conditions | P | W8 | 🔶 |
 | 188 | Verify buyer qualification, proof of funds, close prob | C | — | ✅ |
-| 189 | Closing-day command center + post-closing calendar | M | W8 | 🔨 |
-| 190 | Failed-deal postmortem → screening changes | P | W8 | 🔶 |
+| 189 | Closing-day command center + post-closing calendar | M | W8 | ✅ |
+| 190 | Failed-deal postmortem → screening changes | P | W8 | ✅ |
 
 ### 20 · Asset management & repositioning
 | # | Job | Grade | Wave | St |
 |---|-----|-------|------|----|
-| 191 | Annual business plan w/ owners, costs, milestones | P | W9 | 🔶 |
-| 192 | Rank initiatives by NPV, risk, time, bandwidth | M | W9 | ⬜ |
-| 193 | NOI forecast by tenant/unit + variance drivers | M | W9 | ⬜ |
-| 194 | Prioritize CapEx (safety, retention, return, saleability) | M | W9 | ⬜ |
-| 195 | Forecast-vs-actual for every initiative | M | W9 | ⬜ |
-| 196 | Detect underperforming assets/managers/vendors | M | W9 | ⬜ |
+| 191 | Annual business plan w/ owners, costs, milestones | P | W9 | ✅ |
+| 192 | Rank initiatives by NPV, risk, time, bandwidth | M | W9 | ✅ |
+| 193 | NOI forecast by tenant/unit + variance drivers | M | W9 | ✅ |
+| 194 | Prioritize CapEx (safety, retention, return, saleability) | M | W9 | ✅ |
+| 195 | Forecast-vs-actual for every initiative | M | W9 | ✅ |
+| 196 | Detect underperforming assets/managers/vendors | M | W9 | ✅ |
 | 197 | Hold / sell / refi / recap / invest-more | P | W9 | 🔶 |
-| 198 | Marginal return on next dollar + month | M | W9 | ⬜ |
-| 199 | Portfolio watchlist: rollover, maturity, tax, credit | M | W9 | ⬜ |
+| 198 | Marginal return on next dollar + month | M | W9 | ✅ |
+| 199 | Portfolio watchlist: rollover, maturity, tax, credit | M | W9 | ✅ |
 | 200 | Realized outcome vs thesis vs system verdict | C | — | ✅ |
 
 ### 21 · Distressed, notes & wholesale
@@ -387,11 +387,11 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 213 | Compare ML/mgmt/option/sandwich/seller-fi/purchase | P | W11 | 🔶 |
 | 214 | Verify assignability, lender consent, due-on-sale | M | **W2** | ✅ ← fatal-flaw gap in shipped product |
 | 215 | Match vacant space to subtenants + sequence outreach | C | — | ✅ |
-| 216 | Track rent owed/received, deposits, reserves | M | W11 | 🔨 |
-| 217 | Model termination, casualty, co-tenancy, owner default | M | W11 | 🔨 |
-| 218 | Price option strike, extensions, control premium | M | W11 | 🔨 |
-| 219 | Detect subtenant breaches before owner default | M | W11 | 🔨 |
-| 220 | Package + value sale of a control position | M | W11 | 🔨 |
+| 216 | Track rent owed/received, deposits, reserves | M | W11 | ✅ |
+| 217 | Model termination, casualty, co-tenancy, owner default | M | W11 | ✅ |
+| 218 | Price option strike, extensions, control premium | M | W11 | ✅ |
+| 219 | Detect subtenant breaches before owner default | M | W11 | ✅ |
+| 220 | Package + value sale of a control position | M | W11 | ✅ |
 
 ### 23 · Disposition & 1031 recycling
 | # | Job | Grade | Wave | St |
@@ -414,11 +414,11 @@ recording ledger accrues the outcome history that makes W12's scoring honest ins
 | 232 | Sponsor track record: realized vs projected | M | W12 | ⬜ |
 | 233 | PPM/JV/OA economics + counsel flags | P | W12 | 🔶 |
 | 234 | LP portfolio exposure look-through | M | W12 | ⬜ |
-| 235 | Challenge an appraisal (comps, adjustments, cap) | M | W12 | ⬜ |
-| 236 | Reconsideration-of-value package | M | W12 | ⬜ |
+| 235 | Challenge an appraisal (comps, adjustments, cap) | M | W12 | ✅ |
+| 236 | Reconsideration-of-value package | M | W12 | ✅ |
 | 237 | Broker credibility from accuracy/retrades/closes | M | W1-ledger→W12 | 🔶 |
-| 238 | Counterparty dossiers from permissioned history | M | W12 | ⬜ |
-| 239 | Recommend the best human to call now | M | W12 | ⬜ |
+| 238 | Counterparty dossiers from permissioned history | M | W12 | ✅ |
+| 239 | Recommend the best human to call now | M | W12 | ✅ |
 | 240 | Verify licenses, registrations, disciplinary history | M | W12 | ✅ |
 
 ---
