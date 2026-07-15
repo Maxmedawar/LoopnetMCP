@@ -30,6 +30,7 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.command import tools as command_tools
     from cre_mcp.dataroom import tools as dataroom_tools
     from cre_mcp.debt import tools as debt_tools
+    from cre_mcp.disposition import tools as disposition_tools
     from cre_mcp.envscreen import tools as envscreen_tools
     from cre_mcp.fund import tools as fund_tools
     from cre_mcp.leasing import tools as leasing_tools
@@ -201,6 +202,13 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(fund_tools.quarterly_investor_report)
     mcp.tool()(fund_tools.record_investor_touch)
     mcp.tool()(fund_tools.investor_engagement_report)
+    mcp.tool()(disposition_tools.disposition_readiness)
+    mcp.tool()(disposition_tools.record_buyer)
+    mcp.tool()(disposition_tools.match_buyers)
+    mcp.tool()(disposition_tools.record_bid)
+    mcp.tool()(disposition_tools.normalize_bids)
+    mcp.tool()(disposition_tools.design_sale_process)
+    mcp.tool()(disposition_tools.compare_exit_paths)
 
 
 __all__ = ["register_all"]
