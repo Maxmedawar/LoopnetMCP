@@ -26,6 +26,7 @@ def register_all(mcp: Any) -> None:
         structure_tools,
         truth_tools,
     )
+    from cre_mcp.analytics import tools as analytics_tools
     from cre_mcp.assetmgmt import tools as assetmgmt_tools
     from cre_mcp.books import tools as book_tools
     from cre_mcp.closing import tools as closing_tools
@@ -323,6 +324,14 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(finops_tools.record_reporting)
     mcp.tool()(finops_tools.reporting_calendar)
     mcp.tool()(finops_tools.reconcile_note_chain)
+    mcp.tool()(analytics_tools.audit_seller_model)
+    mcp.tool()(analytics_tools.cost_seg_preview)
+    mcp.tool()(analytics_tools.trend_bands)
+    mcp.tool()(analytics_tools.regulatory_burden)
+    mcp.tool()(analytics_tools.zoning_envelope)
+    mcp.tool()(analytics_tools.lp_portfolio_exposure)
+    mcp.tool()(analytics_tools.cam_true_up)
+    mcp.tool()(analytics_tools.owner_report)
 
 
 __all__ = ["register_all"]

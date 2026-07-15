@@ -4,4 +4,4 @@ Bump EXPECTED_TOOL_COUNT in the same commit that registers new tools —
 every registration test imports it instead of hardcoding a magic number.
 """
 
-EXPECTED_TOOL_COUNT = 266
+EXPECTED_TOOL_COUNT = 274
