@@ -42,6 +42,7 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.negotiation import tools as negotiation_tools
     from cre_mcp.obligations import tools as obligation_tools
     from cre_mcp.physical import tools as physical_tools
+    from cre_mcp.prospect import tools as prospect_tools
     from cre_mcp.relations import tools as relations_tools
     from cre_mcp.siteintel import tools as siteintel_tools
     from cre_mcp.title import tools as title_tools
@@ -288,6 +289,12 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(assetmgmt_tools.flag_underperformance)
     mcp.tool()(assetmgmt_tools.marginal_return)
     mcp.tool()(assetmgmt_tools.portfolio_watchlist)
+    mcp.tool()(prospect_tools.find_adjacent_parcels)
+    mcp.tool()(prospect_tools.sale_leaseback_candidates)
+    mcp.tool()(prospect_tools.stalled_project_signals)
+    mcp.tool()(prospect_tools.portfolio_owner_scan)
+    mcp.tool()(prospect_tools.adjust_rent_comp)
+    mcp.tool()(prospect_tools.micro_location_score)
 
 
 __all__ = ["register_all"]
