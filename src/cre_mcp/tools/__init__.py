@@ -31,8 +31,11 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.dataroom import tools as dataroom_tools
     from cre_mcp.debt import tools as debt_tools
     from cre_mcp.envscreen import tools as envscreen_tools
+    from cre_mcp.fund import tools as fund_tools
+    from cre_mcp.leasing import tools as leasing_tools
     from cre_mcp.negotiation import tools as negotiation_tools
     from cre_mcp.obligations import tools as obligation_tools
+    from cre_mcp.physical import tools as physical_tools
     from cre_mcp.verifyreg import tools as verifyreg_tools
     from cre_mcp.zoning import tools as zoning_tools
     from cre_mcp.leases import tools as lease_tools
@@ -178,6 +181,26 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(negotiation_tools.list_negotiation_commitments)
     mcp.tool()(negotiation_tools.record_term_approval)
     mcp.tool()(negotiation_tools.negotiation_approval_log)
+    mcp.tool()(physical_tools.estimate_capex_from_findings)
+    mcp.tool()(physical_tools.remaining_useful_life)
+    mcp.tool()(physical_tools.vintage_risk_screen)
+    mcp.tool()(physical_tools.ada_code_exposure)
+    mcp.tool()(physical_tools.physical_risk_register)
+    mcp.tool()(leasing_tools.tenant_sales_capacity)
+    mcp.tool()(leasing_tools.compare_lease_proposals)
+    mcp.tool()(leasing_tools.opening_critical_path)
+    mcp.tool()(leasing_tools.record_tenant_signal)
+    mcp.tool()(leasing_tools.tenant_watch_report)
+    mcp.tool()(leasing_tools.tenant_prospect_list)
+    mcp.tool()(fund_tools.compare_jv_structures)
+    mcp.tool()(fund_tools.forecast_capital_calls)
+    mcp.tool()(fund_tools.record_fund_mark)
+    mcp.tool()(fund_tools.record_fund_flow)
+    mcp.tool()(fund_tools.nav_report)
+    mcp.tool()(fund_tools.check_mandate_limits)
+    mcp.tool()(fund_tools.quarterly_investor_report)
+    mcp.tool()(fund_tools.record_investor_touch)
+    mcp.tool()(fund_tools.investor_engagement_report)
 
 
 __all__ = ["register_all"]
