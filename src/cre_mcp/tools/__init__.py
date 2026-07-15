@@ -29,6 +29,7 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.books import tools as book_tools
     from cre_mcp.closing import tools as closing_tools
     from cre_mcp.command import tools as command_tools
+    from cre_mcp.construction import tools as construction_tools
     from cre_mcp.dataroom import tools as dataroom_tools
     from cre_mcp.debt import tools as debt_tools
     from cre_mcp.disposition import tools as disposition_tools
@@ -238,6 +239,17 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(siteintel_tools.supply_pipeline_signal)
     mcp.tool()(siteintel_tools.employer_warn_events)
     mcp.tool()(siteintel_tools.retail_gap_note)
+    mcp.tool()(construction_tools.development_budget)
+    mcp.tool()(construction_tools.compare_proposals)
+    mcp.tool()(construction_tools.level_bids)
+    mcp.tool()(construction_tools.reconcile_gmp)
+    mcp.tool()(construction_tools.forecast_draws)
+    mcp.tool()(construction_tools.audit_pay_app)
+    mcp.tool()(construction_tools.record_tracking_item)
+    mcp.tool()(construction_tools.critical_path_slippage)
+    mcp.tool()(construction_tools.ve_option)
+    mcp.tool()(construction_tools.percent_complete)
+    mcp.tool()(construction_tools.closeout_register)
 
 
 __all__ = ["register_all"]
