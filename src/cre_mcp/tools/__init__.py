@@ -34,9 +34,11 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.envscreen import tools as envscreen_tools
     from cre_mcp.fund import tools as fund_tools
     from cre_mcp.leasing import tools as leasing_tools
+    from cre_mcp.mlops import tools as mlops_tools
     from cre_mcp.negotiation import tools as negotiation_tools
     from cre_mcp.obligations import tools as obligation_tools
     from cre_mcp.physical import tools as physical_tools
+    from cre_mcp.valuation import tools as valuation_tools
     from cre_mcp.verifyreg import tools as verifyreg_tools
     from cre_mcp.zoning import tools as zoning_tools
     from cre_mcp.leases import tools as lease_tools
@@ -209,6 +211,21 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(disposition_tools.normalize_bids)
     mcp.tool()(disposition_tools.design_sale_process)
     mcp.tool()(disposition_tools.compare_exit_paths)
+    mcp.tool()(valuation_tools.suite_rollover_model)
+    mcp.tool()(valuation_tools.value_interest_split)
+    mcp.tool()(valuation_tools.reconcile_valuation_approaches)
+    mcp.tool()(valuation_tools.forced_sale_value)
+    mcp.tool()(valuation_tools.incentive_cliff_analysis)
+    mcp.tool()(valuation_tools.risk_adjusted_residual)
+    mcp.tool()(valuation_tools.insurance_repricing_impact)
+    mcp.tool()(mlops_tools.open_ml_position)
+    mcp.tool()(mlops_tools.record_ml_flow)
+    mcp.tool()(mlops_tools.ml_position_status)
+    mcp.tool()(mlops_tools.ml_control_scenarios)
+    mcp.tool()(mlops_tools.price_control_option)
+    mcp.tool()(mlops_tools.record_ml_watch_item)
+    mcp.tool()(mlops_tools.ml_breach_report)
+    mcp.tool()(mlops_tools.package_control_exit)
 
 
 __all__ = ["register_all"]
