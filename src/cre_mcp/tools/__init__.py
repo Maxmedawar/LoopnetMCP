@@ -37,6 +37,7 @@ def register_all(mcp: Any) -> None:
     from cre_mcp.disposition import tools as disposition_tools
     from cre_mcp.envscreen import tools as envscreen_tools
     from cre_mcp.fund import tools as fund_tools
+    from cre_mcp.leaseops import tools as leaseops_tools
     from cre_mcp.leasing import tools as leasing_tools
     from cre_mcp.mlops import tools as mlops_tools
     from cre_mcp.negotiation import tools as negotiation_tools
@@ -295,6 +296,12 @@ def register_all(mcp: Any) -> None:
     mcp.tool()(prospect_tools.portfolio_owner_scan)
     mcp.tool()(prospect_tools.adjust_rent_comp)
     mcp.tool()(prospect_tools.micro_location_score)
+    mcp.tool()(leaseops_tools.reconcile_lease_vs_books)
+    mcp.tool()(leaseops_tools.record_certificate)
+    mcp.tool()(leaseops_tools.certificate_radar)
+    mcp.tool()(leaseops_tools.draft_obligation_notice)
+    mcp.tool()(leaseops_tools.trace_input_lineage)
+    mcp.tool()(leaseops_tools.diligence_request_list)
 
 
 __all__ = ["register_all"]
