@@ -1,0 +1,3725 @@
+{
+  "search_properties": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "location"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.listing_tools"
+  },
+  "get_property_details": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.listing_tools"
+  },
+  "get_market_overview": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "location"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.listing_tools"
+  },
+  "market_intel": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "location"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.market_tools"
+  },
+  "compare_markets": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "locations"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.market_tools"
+  },
+  "get_rent_comparables": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "location"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.market_tools"
+  },
+  "get_comps": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.market_tools"
+  },
+  "analyze_deal": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.deal_tools"
+  },
+  "find_deals": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "location"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.deal_tools"
+  },
+  "find_distressed": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "location"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.deal_tools"
+  },
+  "owner_lookup": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "address",
+      "county"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.owner_tools"
+  },
+  "recommend_offer": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "generate_loi": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": true,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": "transaction",
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "find_contact": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "draft_outreach": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "handle_counter": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "financing_options": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "qualify_me": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "size_debt": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "due_diligence_plan": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "closing_plan": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "save_deal": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "list_deals": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.execution_tools"
+  },
+  "add_to_pipeline": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.pipeline_tools"
+  },
+  "update_deal_stage": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.pipeline_tools"
+  },
+  "assign_deal": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.pipeline_tools"
+  },
+  "unassigned_deals": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.pipeline_tools"
+  },
+  "list_pipeline": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.pipeline_tools"
+  },
+  "save_search": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "location"
+    ],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.pipeline_tools"
+  },
+  "list_searches": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.pipeline_tools"
+  },
+  "check_alerts": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.pipeline_tools"
+  },
+  "recommend_structure": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.structure_tools"
+  },
+  "start_exchange": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.structure_tools"
+  },
+  "exchange_status": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.structure_tools"
+  },
+  "identify_replacement": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.structure_tools"
+  },
+  "calc_boot_basis": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.structure_tools"
+  },
+  "add_investor": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.capital_tools"
+  },
+  "list_investors": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.capital_tools"
+  },
+  "record_commitment": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.capital_tools"
+  },
+  "check_solicitation": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.capital_tools"
+  },
+  "model_waterfall": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.capital_tools"
+  },
+  "draft_ppm": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.capital_tools"
+  },
+  "draft_form_d": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.capital_tools"
+  },
+  "after_tax_returns": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.ops_tools"
+  },
+  "operating_playbook": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.ops_tools"
+  },
+  "backtest_score": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.eval_tools"
+  },
+  "record_deal_outcome": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.eval_tools"
+  },
+  "ingest_document": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.truth_tools"
+  },
+  "list_deal_documents": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.truth_tools"
+  },
+  "reconcile_deal_docs": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.truth_tools"
+  },
+  "build_noi_bridge": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.truth_tools"
+  },
+  "deal_truth_report": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.truth_tools"
+  },
+  "nearby_brands": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.nearby_tools"
+  },
+  "trade_area_anchors": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.tools.nearby_tools"
+  },
+  "find_control_opportunities": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.control_tools"
+  },
+  "match_tenants_to_site": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.control_tools"
+  },
+  "evaluate_tenant_site_fit": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.control_tools"
+  },
+  "model_lease_creation_spread": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.control_tools"
+  },
+  "recommend_control_structure": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.control_tools"
+  },
+  "build_tenant_pitch": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.control_tools"
+  },
+  "owner_motivation": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.motivation_tools"
+  },
+  "record_trigger_event": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.motivation_tools"
+  },
+  "find_motivated_owners": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.motivation_tools"
+  },
+  "record_ic_decision": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.memory_tools"
+  },
+  "log_deal_event": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.memory_tools"
+  },
+  "deal_timeline": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.memory_tools"
+  },
+  "ic_scorecard": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.memory_tools"
+  },
+  "set_buyer_profile": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "preserve_params": [
+      "profile"
+    ],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.decision_tools"
+  },
+  "decision_frontier": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.decision_tools"
+  },
+  "capabilities": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.about_tools"
+  },
+  "deal_assumptions": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.about_tools"
+  },
+  "analyze_master_lease": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.arbitrage_tools"
+  },
+  "find_arbitrage_opportunities": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.arbitrage_tools"
+  },
+  "draft_master_lease_proposal": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.arbitrage_tools"
+  },
+  "draft_subtenant_outreach": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.arbitrage_tools"
+  },
+  "master_lease_playbook": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.arbitrage_tools"
+  },
+  "record_lender_quote": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.ledger_tools"
+  },
+  "resolve_lender_quote": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.ledger_tools"
+  },
+  "record_defect_outcome": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.ledger_tools"
+  },
+  "counterparty_track_record": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.ledger_tools"
+  },
+  "lender_track_record": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.ledger_tools"
+  },
+  "defect_track_record": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.tools.ledger_tools"
+  },
+  "stress_test_deal": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.scenarios.tools"
+  },
+  "sensitivity_drivers": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.scenarios.tools"
+  },
+  "breakeven_analysis": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.scenarios.tools"
+  },
+  "model_lease_up": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.scenarios.tools"
+  },
+  "abstract_lease_document": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leases.tools"
+  },
+  "lease_critical_dates": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leases.tools"
+  },
+  "calc_rent_schedule": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leases.tools"
+  },
+  "analyze_lease_recoveries": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leases.tools"
+  },
+  "price_lease_option": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leases.tools"
+  },
+  "estimate_tax_reassessment": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "state"
+    ],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.taxecon.tools"
+  },
+  "audit_assessor_record": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.taxecon.tools"
+  },
+  "net_sale_proceeds": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "state"
+    ],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.taxecon.tools"
+  },
+  "morning_queue": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.command.tools"
+  },
+  "overnight_changes": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.command.tools"
+  },
+  "flag_unattended": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.command.tools"
+  },
+  "record_listing_snapshot": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.command.tools"
+  },
+  "stale_listing_signals": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.command.tools"
+  },
+  "estimate_foreclosure_timeline": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "state"
+    ],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.notes.tools"
+  },
+  "model_lien_waterfall": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.notes.tools"
+  },
+  "price_note": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "state"
+    ],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.notes.tools"
+  },
+  "compare_note_workouts": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.notes.tools"
+  },
+  "compare_term_sheets": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.debt.tools"
+  },
+  "covenant_forecast": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.debt.tools"
+  },
+  "value_assumable_debt": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.debt.tools"
+  },
+  "compare_capital_paths": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.debt.tools"
+  },
+  "extract_lease_restrictions": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.obligations.tools"
+  },
+  "detect_obligation_collisions": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.obligations.tools"
+  },
+  "screen_transfer_consents": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.obligations.tools"
+  },
+  "compare_estoppel_to_lease": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.obligations.tools"
+  },
+  "init_data_room": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.dataroom.tools"
+  },
+  "data_room_index": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.dataroom.tools"
+  },
+  "update_data_room_item": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.dataroom.tools"
+  },
+  "init_transaction_plan": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.dataroom.tools"
+  },
+  "transaction_critical_path": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.dataroom.tools"
+  },
+  "closing_runway": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.dataroom.tools"
+  },
+  "lookup_zoning": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.zoning.tools"
+  },
+  "nearby_permits": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.zoning.tools"
+  },
+  "zoning_code_link": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "state"
+    ],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.zoning.tools"
+  },
+  "environmental_screen": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.envscreen.tools"
+  },
+  "flood_zone": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.envscreen.tools"
+  },
+  "hazard_profile": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.envscreen.tools"
+  },
+  "verify_license": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "state"
+    ],
+    "preserve_params": [
+      "role"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.verifyreg.tools"
+  },
+  "counterparty_screen": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "state"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.verifyreg.tools"
+  },
+  "setup_tenancy": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.books.tools"
+  },
+  "post_charges": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.books.tools"
+  },
+  "import_bank_transactions": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.books.tools"
+  },
+  "reconcile_rent_to_cash": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.books.tools"
+  },
+  "ar_aging": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.books.tools"
+  },
+  "audit_lease_billing": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.books.tools"
+  },
+  "build_negotiation_plan": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.negotiation.tools"
+  },
+  "value_concession": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.negotiation.tools"
+  },
+  "detect_term_drift": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.negotiation.tools"
+  },
+  "record_negotiation_commitment": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.negotiation.tools"
+  },
+  "list_negotiation_commitments": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.negotiation.tools"
+  },
+  "record_term_approval": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.negotiation.tools"
+  },
+  "negotiation_approval_log": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.negotiation.tools"
+  },
+  "estimate_capex_from_findings": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.physical.tools"
+  },
+  "remaining_useful_life": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.physical.tools"
+  },
+  "vintage_risk_screen": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "state"
+    ],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.physical.tools"
+  },
+  "ada_code_exposure": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.physical.tools"
+  },
+  "physical_risk_register": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.physical.tools"
+  },
+  "tenant_sales_capacity": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leasing.tools"
+  },
+  "compare_lease_proposals": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leasing.tools"
+  },
+  "opening_critical_path": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leasing.tools"
+  },
+  "record_tenant_signal": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leasing.tools"
+  },
+  "tenant_watch_report": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leasing.tools"
+  },
+  "tenant_prospect_list": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leasing.tools"
+  },
+  "compare_jv_structures": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.fund.tools"
+  },
+  "forecast_capital_calls": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.fund.tools"
+  },
+  "record_fund_mark": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.fund.tools"
+  },
+  "record_fund_flow": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.fund.tools"
+  },
+  "nav_report": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.fund.tools"
+  },
+  "check_mandate_limits": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.fund.tools"
+  },
+  "quarterly_investor_report": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.fund.tools"
+  },
+  "record_investor_touch": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.fund.tools"
+  },
+  "investor_engagement_report": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.fund.tools"
+  },
+  "disposition_readiness": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.disposition.tools"
+  },
+  "record_buyer": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.disposition.tools"
+  },
+  "match_buyers": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.disposition.tools"
+  },
+  "record_bid": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.disposition.tools"
+  },
+  "normalize_bids": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.disposition.tools"
+  },
+  "design_sale_process": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.disposition.tools"
+  },
+  "compare_exit_paths": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.disposition.tools"
+  },
+  "suite_rollover_model": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.valuation.tools"
+  },
+  "value_interest_split": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.valuation.tools"
+  },
+  "reconcile_valuation_approaches": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.valuation.tools"
+  },
+  "forced_sale_value": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.valuation.tools"
+  },
+  "incentive_cliff_analysis": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.valuation.tools"
+  },
+  "risk_adjusted_residual": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.valuation.tools"
+  },
+  "insurance_repricing_impact": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.valuation.tools"
+  },
+  "open_ml_position": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.mlops.tools"
+  },
+  "record_ml_flow": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.mlops.tools"
+  },
+  "ml_position_status": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.mlops.tools"
+  },
+  "ml_control_scenarios": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.mlops.tools"
+  },
+  "price_control_option": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.mlops.tools"
+  },
+  "record_ml_watch_item": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.mlops.tools"
+  },
+  "ml_breach_report": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.mlops.tools"
+  },
+  "package_control_exit": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.mlops.tools"
+  },
+  "extract_contract_obligations": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.closing.tools"
+  },
+  "reconcile_settlement": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.closing.tools"
+  },
+  "verify_funding_package": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.closing.tools"
+  },
+  "closing_day_runbook": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.closing.tools"
+  },
+  "record_deal_postmortem": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.closing.tools"
+  },
+  "dedupe_listings": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.siteintel.tools"
+  },
+  "trade_area_profile": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.siteintel.tools"
+  },
+  "supply_pipeline_signal": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.siteintel.tools"
+  },
+  "employer_warn_events": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "state"
+    ],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.siteintel.tools"
+  },
+  "retail_gap_note": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.siteintel.tools"
+  },
+  "development_budget": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "compare_proposals": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "level_bids": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "reconcile_gmp": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "forecast_draws": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "audit_pay_app": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "record_tracking_item": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "critical_path_slippage": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "ve_option": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "percent_complete": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "closeout_register": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.construction.tools"
+  },
+  "parse_title_commitment": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.title.tools"
+  },
+  "screen_encumbrances": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.title.tools"
+  },
+  "compare_legal_descriptions": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.title.tools"
+  },
+  "assess_recorded_burdens": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.title.tools"
+  },
+  "survey_vs_title": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.title.tools"
+  },
+  "attorney_issue_list": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.title.tools"
+  },
+  "build_appeal_package": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "record_policy": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "record_claim": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "renewal_radar": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "utility_anomalies": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "retrofit_screen": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "energy_compliance": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "jurisdiction"
+    ],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "compliance_calendar": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "unpermitted_work_screen": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "phase2_scope": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.compliance.tools"
+  },
+  "counterparty_dossier": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.relations.tools"
+  },
+  "who_to_call": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.relations.tools"
+  },
+  "meeting_briefing": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.relations.tools"
+  },
+  "record_thread_state": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.relations.tools"
+  },
+  "stalled_threads": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.relations.tools"
+  },
+  "deal_coverage_report": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.relations.tools"
+  },
+  "route_lead": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.relations.tools"
+  },
+  "challenge_appraisal": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.relations.tools"
+  },
+  "upsert_initiative": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "business_plan": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "rank_initiatives": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "noi_by_tenant": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "variance_explain": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "prioritize_capex": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "initiative_tracker": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "flag_underperformance": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "marginal_return": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "portfolio_watchlist": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.assetmgmt.tools"
+  },
+  "find_adjacent_parcels": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": "search",
+    "approval": null,
+    "module": "cre_mcp.prospect.tools"
+  },
+  "sale_leaseback_candidates": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.prospect.tools"
+  },
+  "stalled_project_signals": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.prospect.tools"
+  },
+  "portfolio_owner_scan": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.prospect.tools"
+  },
+  "adjust_rent_comp": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.prospect.tools"
+  },
+  "micro_location_score": {
+    "allowed_profiles": [
+      "national_scout",
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.prospect.tools"
+  },
+  "reconcile_lease_vs_books": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leaseops.tools"
+  },
+  "record_certificate": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leaseops.tools"
+  },
+  "certificate_radar": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leaseops.tools"
+  },
+  "draft_obligation_notice": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leaseops.tools"
+  },
+  "trace_input_lineage": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leaseops.tools"
+  },
+  "diligence_request_list": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.leaseops.tools"
+  },
+  "record_workorder": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "triage_queue": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "pm_schedule": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "record_vendor": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "compare_vendors": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "repeat_repair_analysis": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "record_turn": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "turn_board": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "deferred_maintenance_screen": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "balance_validation": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.pmops.tools"
+  },
+  "cash_requirements": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.finops.tools"
+  },
+  "detect_assumable": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.finops.tools"
+  },
+  "record_lender_profile": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.finops.tools"
+  },
+  "match_lenders": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.finops.tools"
+  },
+  "cap_cost_context": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.finops.tools"
+  },
+  "prepare_waiver_request": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.finops.tools"
+  },
+  "record_reporting": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.finops.tools"
+  },
+  "reporting_calendar": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.finops.tools"
+  },
+  "reconcile_note_chain": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.finops.tools"
+  },
+  "audit_seller_model": {
+    "allowed_profiles": [
+      "full_operator"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.analytics.tools"
+  },
+  "cost_seg_preview": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.analytics.tools"
+  },
+  "trend_bands": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.analytics.tools"
+  },
+  "regulatory_burden": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [
+      "jurisdictions"
+    ],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.analytics.tools"
+  },
+  "zoning_envelope": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.analytics.tools"
+  },
+  "lp_portfolio_exposure": {
+    "allowed_profiles": [
+      "local_scout",
+      "national_scout",
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": false,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.analytics.tools"
+  },
+  "cam_true_up": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.analytics.tools"
+  },
+  "owner_report": {
+    "allowed_profiles": [
+      "full_operator",
+      "jv_partner"
+    ],
+    "sensitive": false,
+    "sensitive_params": [],
+    "territory_params": [],
+    "ownership_relevant": true,
+    "quota": null,
+    "approval": null,
+    "module": "cre_mcp.analytics.tools"
+  }
+}

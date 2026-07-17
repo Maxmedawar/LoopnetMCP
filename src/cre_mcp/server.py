@@ -77,8 +77,32 @@ def resolve_transport(
     return (config or CreConfig()).transport
 
 
-def create_http_app(path: str = "/mcp"):
+def install_access_control(config: CreConfig | None = None):
+    """Install tenant-aware access control on the module server instance.
+
+    Hosted mode authenticates API keys against the server-side workspace
+    registry; stdio mode resolves to the explicit trusted local workspace.
+    Re-invoking replaces any prior access middleware so the last config wins
+    (and two apps never stack duplicate enforcement); returns the uninstaller.
+    """
+    from cre_mcp.access.audit import AuditLog
+    from cre_mcp.access.middleware import AccessMiddleware, install_access
+    from cre_mcp.access.registry import WorkspaceRegistry
+
+    # Drop any existing access middleware rather than no-op, so a later call
+    # with a different registry/audit config is honored instead of ignored.
+    for existing in [m for m in mcp.middleware if isinstance(m, AccessMiddleware)]:
+        mcp.middleware.remove(existing)
+    config = config or CreConfig()
+    access_dir = config.cache_db_path.parent / "access"
+    registry = WorkspaceRegistry(config.access_registry_path or access_dir / "registry.json")
+    audit_log = AuditLog(config.access_audit_path or access_dir / "audit.jsonl")
+    return install_access(mcp, registry=registry, audit_log=audit_log)
+
+
+def create_http_app(path: str = "/mcp", config: CreConfig | None = None):
     """Construct the opt-in Streamable HTTP ASGI application without binding."""
+    install_access_control(config)
     return mcp.http_app(path=path, transport="http")
 
 
@@ -90,6 +114,7 @@ def run_server(
     """Run stdio by default or the configured opt-in Streamable HTTP server."""
     config = config or CreConfig()
     transport = resolve_transport(config, force_http=force_http)
+    install_access_control(config)
     if transport == "http":
         mcp.run(
             transport="http",

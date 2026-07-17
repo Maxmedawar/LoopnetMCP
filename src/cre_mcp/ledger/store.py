@@ -13,7 +13,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cre_mcp.config import CreConfig
+from cre_mcp.config import default_cache_db_path
 from cre_mcp.ledger.models import (
     ClaimOutcomeRecord,
     DefectRecord,
@@ -112,7 +112,7 @@ class LedgerStore:
     """Async façade over the append-only evidence ledgers."""
 
     def __init__(self, db_path: str | Path | None = None) -> None:
-        self.db_path = Path(db_path or CreConfig().cache_db_path).expanduser()
+        self.db_path = Path(db_path).expanduser() if db_path else default_cache_db_path()
 
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -358,17 +358,22 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:12]}"
 
 
-_STORE: LedgerStore | None = None
+_STORES: dict[Path, LedgerStore] = {}
 
 
 def get_ledger_store() -> LedgerStore:
-    global _STORE
-    if _STORE is None:
-        _STORE = LedgerStore()
-    return _STORE
+    # Keyed by resolved database path so workspace-scoped configs (tenant
+    # contexts) never share a store instance across workspaces. The path is
+    # resolved per call (not cached) precisely so it tracks the active context
+    # — that per-config keying is what keeps tenants isolated.
+    resolved = default_cache_db_path()
+    store = _STORES.get(resolved)
+    if store is None:
+        store = LedgerStore(resolved)
+        _STORES[resolved] = store
+    return store
 
 
 def reset_ledger_store() -> None:
-    """Test hook: drop the cached singleton."""
-    global _STORE
-    _STORE = None
+    """Test hook: drop every cached store."""
+    _STORES.clear()

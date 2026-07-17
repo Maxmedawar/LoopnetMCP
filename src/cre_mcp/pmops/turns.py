@@ -117,8 +117,9 @@ class TurnStore:
     """Own only the ``pm_turns`` table in a selected SQLite database."""
 
     def __init__(self, db_path: str | Path | None = None) -> None:
-        resolved = db_path or Path.home() / ".cache" / "cre_mcp" / "cache.db"
-        self.db_path = Path(resolved).expanduser()
+        from cre_mcp.config import default_cache_db_path
+
+        self.db_path = Path(db_path).expanduser() if db_path else default_cache_db_path()
 
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

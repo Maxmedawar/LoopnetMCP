@@ -141,6 +141,29 @@ class CreConfig(BaseSettings):
         default=Path.home() / ".cache" / "cre_mcp" / "cache.db",
         validation_alias=_env_aliases("cache_db_path"),
     )
+    access_registry_path: Path | None = Field(
+        default=None,
+        validation_alias=_env_aliases("access_registry_path"),
+    )
+    access_audit_path: Path | None = Field(
+        default=None,
+        validation_alias=_env_aliases("access_audit_path"),
+    )
+
+    def model_post_init(self, __context) -> None:
+        super().model_post_init(__context)
+        # Workspace-scoped storage: when a tool call runs under a cloud tenant
+        # context, every store constructed from this config lands in that
+        # workspace's own database. The trusted local workspace (and any code
+        # outside a request) keeps the configured path untouched.
+        try:
+            from cre_mcp.access.context import current_context
+            from cre_mcp.access.storage import workspace_db_path
+        except ImportError:
+            return
+        ctx = current_context()
+        if ctx is not None and not ctx.trusted:
+            self.cache_db_path = workspace_db_path(ctx, self.cache_db_path)
 
     model_config = SettingsConfigDict(
         env_prefix="CRE_",
@@ -153,3 +176,14 @@ class CreConfig(BaseSettings):
 
 # Backward-compatible name retained for existing callers.
 LoopnetConfig = CreConfig
+
+
+def default_cache_db_path() -> Path:
+    """The resolved default cache-database path for the active context.
+
+    Single source of the "db_path or the configured default" resolution shared
+    by every per-table store. Honors workspace scoping: inside a cloud tenant's
+    tool call this is that workspace's database (via CreConfig.model_post_init);
+    elsewhere it is the configured base path.
+    """
+    return Path(CreConfig().cache_db_path).expanduser()

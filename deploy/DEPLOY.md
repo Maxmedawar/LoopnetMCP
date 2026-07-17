@@ -116,6 +116,27 @@ If a service token is used, configure Cloudflare Access and the client together;
 secret in this repository. Cloudflare Access is the authentication gate for this artifact—the
 application does not claim that an unauthenticated public HTTP endpoint is safe.
 
+## 4b. In-app tenant access control (workspaces)
+
+Independent of Cloudflare Access, the HTTP transport enforces tenant-aware access control
+(spec: `.claude/specs/tenant-access-control.md`). Every hosted connection must present a
+workspace API key (`Authorization: Bearer <key>` or `X-API-Key`), resolved against the
+server-side workspace registry — a connection without a valid key sees no tools and every
+call is denied.
+
+- Registry file: `CRE_ACCESS_REGISTRY_PATH` (default `<cache dir>/access/registry.json`).
+  Grants map a key to a workspace, one of four profiles (`local_scout`, `national_scout`,
+  `full_operator`, `jv_partner`), a plan, and territories. Manage it server-side only;
+  identity is never accepted from MCP arguments.
+- Audit log: `CRE_ACCESS_AUDIT_PATH` (default `<cache dir>/access/audit.jsonl`) records
+  every allow/deny/approval decision.
+- Each cloud workspace gets its own database under `<cache dir>/workspaces/<workspace_id>/`,
+  so records never cross workspaces. Volume sizing: one SQLite file per workspace.
+- Sensitive transaction tools return `approval_required` until the pending approval is
+  granted in the registry (server-side), even for `full_operator`.
+- Local stdio mode is unaffected: it runs as the explicit trusted local workspace against
+  the legacy database path, preserving all existing records.
+
 ## 5. Connect Claude Code from Max's MacBook
 
 After the tunnel and Access policy are live:
@@ -130,7 +151,9 @@ stores only the remote connection/auth session; CRE provider keys remain server-
 ## Verification and operations
 
 - Confirm `https://mcp.example.com/mcp` is denied before Access authentication.
-- Confirm Claude Code can list all 45 tools after login.
+- Confirm Claude Code lists exactly the tools permitted by the connecting workspace's
+  profile (the full 274 only for a trusted-equivalent `full_operator` grant; scouts and JV
+  partners see a filtered list).
 - Exercise one keyless market tool and one scraper tool; verify proxy usage/cost separately if
   `CRE_PROXY_URL` is enabled.
 - Monitor container restarts, tunnel health, scraper blocking, proxy spend, cache volume, and
