@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from curl_cffi.requests import RequestsError
 
-from loopnet_mcp.cache import TTLCache
-from loopnet_mcp.config import LoopnetConfig
-from loopnet_mcp.scraper.client import (
+from cre_mcp.cache import TTLCache
+from cre_mcp.config import LoopnetConfig
+from cre_mcp.scraper.client import (
     LoopnetBlockedError,
     LoopnetClient,
     LoopnetClientError,
@@ -36,7 +36,7 @@ def _test_client(**overrides) -> LoopnetClient:
 
 @pytest.mark.asyncio
 async def test_fetch_success():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(200, SAMPLE_HTML))
         mock_session.close = AsyncMock()
@@ -57,7 +57,7 @@ async def test_fetch_cache_hit():
 
 @pytest.mark.asyncio
 async def test_fetch_403_raises_blocked():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(403))
         mock_session.close = AsyncMock()
@@ -70,7 +70,7 @@ async def test_fetch_403_raises_blocked():
 
 @pytest.mark.asyncio
 async def test_fetch_429_retries_and_raises():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(429))
         mock_session.close = AsyncMock()
@@ -82,7 +82,7 @@ async def test_fetch_429_retries_and_raises():
 
 @pytest.mark.asyncio
 async def test_fetch_429_then_success():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(
             side_effect=[MockResponse(429), MockResponse(200, SAMPLE_HTML)]
@@ -96,7 +96,7 @@ async def test_fetch_429_then_success():
 
 @pytest.mark.asyncio
 async def test_fetch_500_retries_and_raises():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(500))
         mock_session.close = AsyncMock()
@@ -108,7 +108,7 @@ async def test_fetch_500_retries_and_raises():
 
 @pytest.mark.asyncio
 async def test_fetch_timeout_retries():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(side_effect=RequestsError("timeout"))
         mock_session.close = AsyncMock()
@@ -120,7 +120,7 @@ async def test_fetch_timeout_retries():
 
 @pytest.mark.asyncio
 async def test_fetch_connection_error_retries():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(side_effect=RequestsError("connection refused"))
         mock_session.close = AsyncMock()
@@ -132,7 +132,7 @@ async def test_fetch_connection_error_retries():
 
 @pytest.mark.asyncio
 async def test_rate_limiting_enforces_delay():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(
             side_effect=[MockResponse(200, "a"), MockResponse(200, "b")]
@@ -153,7 +153,7 @@ async def test_rate_limiting_enforces_delay():
 
 @pytest.mark.asyncio
 async def test_request_impersonation():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(200, SAMPLE_HTML))
         mock_session.close = AsyncMock()
@@ -168,7 +168,7 @@ async def test_request_impersonation():
 
 @pytest.mark.asyncio
 async def test_context_manager():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(200, SAMPLE_HTML))
         mock_session.close = AsyncMock()
@@ -189,12 +189,12 @@ REAL_HTML = "<html><body>" + "x" * 15_000 + "</body></html>"
 @pytest.mark.asyncio
 async def test_challenge_triggers_browser_fallback():
     browser_html = "<html><body><article class='placard'>Real listing</article></body></html>"
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(200, CHALLENGE_HTML))
         mock_session.close = AsyncMock()
 
-        with patch("loopnet_mcp.scraper.browser.BrowserFetcher.fetch", new_callable=AsyncMock) as mock_fetch:
+        with patch("cre_mcp.scraper.browser.BrowserFetcher.fetch", new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = browser_html
             async with _test_client() as client:
                 result = await client.fetch(TEST_URL)
@@ -205,7 +205,7 @@ async def test_challenge_triggers_browser_fallback():
 
 @pytest.mark.asyncio
 async def test_challenge_with_browser_disabled():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(200, CHALLENGE_HTML))
         mock_session.close = AsyncMock()
@@ -216,12 +216,12 @@ async def test_challenge_with_browser_disabled():
 
 @pytest.mark.asyncio
 async def test_no_challenge_skips_browser():
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(200, SAMPLE_HTML))
         mock_session.close = AsyncMock()
 
-        with patch("loopnet_mcp.scraper.browser.BrowserFetcher.fetch", new_callable=AsyncMock) as mock_fetch:
+        with patch("cre_mcp.scraper.browser.BrowserFetcher.fetch", new_callable=AsyncMock) as mock_fetch:
             async with _test_client() as client:
                 result = await client.fetch(TEST_URL)
 
@@ -233,12 +233,12 @@ async def test_no_challenge_skips_browser():
 async def test_large_page_with_markers_not_challenge():
     """A large page (>10K chars) with challenge markers is NOT a challenge page."""
     large_with_markers = '<html><body><div id="sec-if-cpt-container">' + "x" * 15_000 + "</body></html>"
-    with patch("loopnet_mcp.scraper.client.AsyncSession") as MockSession:
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
         mock_session = MockSession.return_value
         mock_session.get = AsyncMock(return_value=MockResponse(200, large_with_markers))
         mock_session.close = AsyncMock()
 
-        with patch("loopnet_mcp.scraper.browser.BrowserFetcher.fetch", new_callable=AsyncMock) as mock_fetch:
+        with patch("cre_mcp.scraper.browser.BrowserFetcher.fetch", new_callable=AsyncMock) as mock_fetch:
             async with _test_client() as client:
                 result = await client.fetch(TEST_URL)
 

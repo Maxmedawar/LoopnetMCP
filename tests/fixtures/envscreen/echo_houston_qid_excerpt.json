@@ -1,0 +1,57 @@
+{
+  "Results": {
+    "Message": "Working",
+    "QueryRows": "5",
+    "QueryID": "79",
+    "PageNo": "1",
+    "Facilities": [
+      {
+        "FacName": "CHEVRON USA INC",
+        "FacStreet": "9101 E CLINTON",
+        "FacCity": "HOUSTON",
+        "FacState": "TX",
+        "FacZip": "77029",
+        "RegistryID": "110008164244",
+        "FacCounty": "HARRIS",
+        "FacNAICSCodes": null,
+        "FacLat": "29.73726",
+        "FacSNCFlg": "N",
+        "FacQtrsWithNC": "0",
+        "FacComplianceStatus": "No Violation Identified",
+        "CWAComplianceStatus": null,
+        "RCRAComplianceStatus": "No Violation Identified",
+        "FacInspectionCount": "0",
+        "FacDateLastFormalAction": null,
+        "FacPenaltyCount": null,
+        "FacActiveFlag": null,
+        "AIRFlag": "N",
+        "TRIFlag": "N"
+      },
+      {
+        "FacName": "O'NEAL STEEL INC",
+        "FacStreet": "9500 CLINTON DR",
+        "FacCity": "HOUSTON",
+        "FacState": "TX",
+        "FacZip": "77029",
+        "RegistryID": "110005055313",
+        "FacCounty": "HARRIS",
+        "FacSICCodes": "3499",
+        "FacNAICSCodes": "423320 332999",
+        "FacLat": "29.7364",
+        "FacSNCFlg": "N",
+        "FacQtrsWithNC": "9",
+        "FacComplianceStatus": "No Violation Identified",
+        "CWAComplianceStatus": "Terminated Permit",
+        "RCRAComplianceStatus": "No Violation Identified",
+        "FacInspectionCount": "1",
+        "FacDaysLastInspection": "1171",
+        "FacDateLastInspection": "04/28/2023",
+        "FacDateLastFormalAction": null,
+        "FacPenaltyCount": null,
+        "AIRFlag": "N",
+        "TRIFlag": "N",
+        "CWAComplianceTracking": "Off"
+      }
+    ]
+  }
+}

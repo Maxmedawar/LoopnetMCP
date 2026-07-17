@@ -1,0 +1,66 @@
+{
+  "hits": {
+    "total": 680,
+    "hits": [
+      {
+        "_type": "_doc",
+        "_source": {
+          "ind_source_id": "6658650",
+          "ind_firstname": "DAVID",
+          "ind_middlename": "CHARLES",
+          "ind_lastname": "SMITH",
+          "ind_other_names": [
+            "Dave C Smith",
+            "Dave  Smith",
+            "David C Smith",
+            "David  Smith"
+          ],
+          "ind_bc_scope": "Active",
+          "ind_ia_scope": "NotInScope",
+          "ind_ia_disclosure_fl": "N",
+          "ind_approved_finra_registration_count": 1,
+          "ind_employments_count": 1,
+          "ind_ia_current_employments": [
+            {
+              "firm_id": "6271",
+              "firm_name": "TRUIST SECURITIES, INC.",
+              "branch_city": "NEW YORK",
+              "branch_state": "NY",
+              "branch_zip": "10001",
+              "ia_only": "N",
+              "firm_bd_sec_number": "17212",
+              "firm_bd_full_sec_number": "8-17212"
+            }
+          ]
+        }
+      },
+      {
+        "_type": "_doc",
+        "_source": {
+          "ind_source_id": "1407110",
+          "ind_firstname": "THOMAS",
+          "ind_middlename": "NEIL",
+          "ind_lastname": "SMITH",
+          "ind_other_names": ["NEIL  SMITH", "T NEIL SMITH", "THOMAS N. SMITH"],
+          "ind_bc_scope": "Active",
+          "ind_ia_scope": "NotInScope",
+          "ind_ia_disclosure_fl": "N",
+          "ind_approved_finra_registration_count": 1,
+          "ind_employments_count": 1,
+          "ind_ia_current_employments": [
+            {
+              "firm_id": "134",
+              "firm_name": "CANTOR FITZGERALD & CO.",
+              "branch_city": "NEW YORK",
+              "branch_state": "NY",
+              "branch_zip": "10022",
+              "ia_only": "N",
+              "firm_bd_sec_number": "201",
+              "firm_bd_full_sec_number": "8-201"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

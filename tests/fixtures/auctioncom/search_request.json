@@ -1,0 +1,14 @@
+{
+  "operationName": "SearchListings",
+  "query": "query SearchListings($filters: ListingCompatabilityFilters!) { seek_listings_from_filters(filters: $filters) { total_count total_pages size current_page content { ... on Listing { listing_id urn listing_status listing_status_group listing_page_path formatted_address(format: DOUBLE_LINE) listing_configuration { product_type asset_type occupancy_status } seller_property { street_description municipality country_primary_subdivision country_secondary_subdivision postal_code } valuation { seller_current_value_amount } primary_property { property_id summary { total_bedrooms total_bathrooms square_footage lot_size year_built valuation structure_type_code structure_type_group address { coordinates { lon lat } } } } auction { start_date end_date starting_bid is_online } external_information(resolvePolicy: CACHE_ONLY) { collateral { summary { estimated low high type } } } } } } }",
+  "variables": {
+    "filters": {
+      "property_state": "TX",
+      "listing_type": "active",
+      "sort": "auction_date_order",
+      "limit": 3,
+      "version": 1,
+      "offset": 0
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "objectIdFieldName": "OBJECTID",
+  "geometryType": "esriGeometryPoint",
+  "features": [
+    {
+      "attributes": {
+        "OBJECTID": 354,
+        "CASE_NUM": "512-485170",
+        "STREET_NUM": "18896",
+        "DIRECTION_PREFIX": null,
+        "STREET_NAME": "ROLLING HILLS",
+        "ADDRESS": "18896 ROLLING HILLS",
+        "CITY": "PORTER",
+        "STATE_CODE": "TX",
+        "DISPLAY_ZIP_CODE": "77365",
+        "FIPS_STATE_CODE": "48",
+        "MAP_LATITUDE": 30.142231,
+        "MAP_LONGITUDE": -95.277861,
+        "DATE_ACQUIRED": 1718064000000
+      }
+    },
+    {
+      "attributes": {
+        "OBJECTID": 360,
+        "CASE_NUM": "514-243917",
+        "ADDRESS": "4115 SUNRISE CREEK DR",
+        "CITY": "SAN ANTONIO",
+        "STATE_CODE": "TX",
+        "DISPLAY_ZIP_CODE": "78244",
+        "MAP_LATITUDE": 29.474882,
+        "MAP_LONGITUDE": -98.407985,
+        "DATE_ACQUIRED": 1718064000000
+      }
+    }
+  ]
+}

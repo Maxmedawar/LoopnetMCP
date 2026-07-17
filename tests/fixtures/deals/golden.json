@@ -1,0 +1,144 @@
+{
+  "lwl_dq": [
+    {
+      "confidence": 0.0,
+      "disqualified": true,
+      "disqualifier_hits": [
+        "Space is not street-level or lacks a ground-floor entrance."
+      ],
+      "explanation": "DQ under Location-Within-Location Retail: Space is not street-level or lacks a ground-floor entrance. FACTS next step: resolve the disqualifier before analysis continues.",
+      "gated": false,
+      "grade": "DQ",
+      "market_score": null,
+      "rubric_coverage": 0.0,
+      "rubric_raw_score": 0.0,
+      "score": 0.0,
+      "strategy": "location_retail"
+    }
+  ],
+  "lwl_partial": [
+    {
+      "confidence": 0.12,
+      "disqualified": false,
+      "disqualifier_hits": [],
+      "explanation": "Not rated \u2014 insufficient data to score. Biggest missing inputs: pedestrian_score_100m, micro_location_rank, demand_generator_proximity. Get them by: a site visit and pedestrian-count evidence; the source documents, verified comps, and applicable lease or financial records. Location-Within-Location Retail scored 36.16/100 (NR) at 24% rubric coverage. Top strengths: size_sweet_spot (1.00 \u2192 1.00), street_level_frontage (0.40 \u2192 0.40), path_of_growth_score (0.60 \u2192 0.60). Top weaknesses: street_level_frontage (0.40 \u2192 0.40), path_of_growth_score (0.60 \u2192 0.60), size_sweet_spot (1.00 \u2192 1.00). Missing signals: pedestrian_score_100m, micro_location_rank, demand_generator_proximity, irreplaceability, condo_hoa_health, income_upside_vs_current_rent. Market component 35.00/100. Core component 0.00/100. Path-of-progress permit data is unavailable. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "gated": true,
+      "grade": "NR",
+      "market_score": 35.0,
+      "rubric_coverage": 0.24,
+      "rubric_raw_score": 58.33,
+      "score": 36.16,
+      "strategy": "location_retail"
+    }
+  ],
+  "lwl_strong": [
+    {
+      "confidence": 1.0,
+      "disqualified": false,
+      "disqualifier_hits": [],
+      "explanation": "Location-Within-Location Retail scored 96.20/100 (A) at 100% rubric coverage. Top strengths: pedestrian_score_100m (0.95 \u2192 1.00), micro_location_rank (4.00 \u2192 1.00), street_level_frontage (1.00 \u2192 1.00). Top weaknesses: tax_incentive_layer (2.00 \u2192 1.00), signage_visibility (1.00 \u2192 1.00), size_sweet_spot (1.00 \u2192 1.00). Missing signals: none. Market component 96.25/100. Core component 89.85/100. Path of progress: 6000 permitted units as of 2024. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "gated": false,
+      "grade": "A",
+      "market_score": 96.25,
+      "rubric_coverage": 1.0,
+      "rubric_raw_score": 100.0,
+      "score": 96.2,
+      "strategy": "location_retail"
+    }
+  ],
+  "nnn_dq": [
+    {
+      "confidence": 0.0,
+      "disqualified": true,
+      "disqualifier_hits": [
+        "Lease is under five years with no renewal option and sub-investment-grade credit.",
+        "Single-unit franchisee is offered below the minimum seven-percent cap rate."
+      ],
+      "explanation": "DQ under Single-Tenant NNN Retail: Lease is under five years with no renewal option and sub-investment-grade credit.; Single-unit franchisee is offered below the minimum seven-percent cap rate. FACTS next step: resolve the disqualifier before analysis continues.",
+      "gated": false,
+      "grade": "DQ",
+      "market_score": null,
+      "rubric_coverage": 0.0,
+      "rubric_raw_score": 0.0,
+      "score": 0.0,
+      "strategy": "nnn_retail"
+    }
+  ],
+  "nnn_partial": [
+    {
+      "confidence": 0.4234,
+      "disqualified": false,
+      "disqualifier_hits": [],
+      "explanation": "Not rated \u2014 insufficient data to score. Biggest missing inputs: rent_escalations, corporate_vs_franchisee, demographics_3mi. Get them by: the lease rent schedule and amendments; the signed guaranty and tenant entity documents; a geocoded three-mile demographic report. Single-Tenant NNN Retail scored 43.24/100 (NR) at 42% rubric coverage. Top strengths: tenant_credit_tier (0.75 \u2192 0.75), lease_years_remaining (10.00 \u2192 0.70), cap_rate_vs_band (0.70 \u2192 0.70). Top weaknesses: price_vs_replacement (1.36 \u2192 0.10), cap_rate_vs_band (0.70 \u2192 0.70), lease_years_remaining (10.00 \u2192 0.70). Missing signals: rent_escalations, nnn_purity, corporate_vs_franchisee, traffic_count, demographics_3mi, visibility_corner. Market component unavailable and excluded from the blend. Core component 0.00/100. Path-of-progress permit data is unavailable. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "gated": true,
+      "grade": "NR",
+      "market_score": null,
+      "rubric_coverage": 0.4234,
+      "rubric_raw_score": 69.18,
+      "score": 43.24,
+      "strategy": "nnn_retail"
+    }
+  ],
+  "nnn_strong": [
+    {
+      "confidence": 0.96,
+      "disqualified": false,
+      "disqualifier_hits": [],
+      "explanation": "Single-Tenant NNN Retail scored 90.50/100 (A) at 96% rubric coverage. Top strengths: lease_years_remaining (15.00 \u2192 1.00), tenant_credit_tier (0.60 \u2192 0.60), cap_rate_vs_band (1.00 \u2192 1.00). Top weaknesses: tenant_credit_tier (0.60 \u2192 0.60), rent_escalations (0.85 \u2192 0.85), visibility_corner (1.00 \u2192 1.00). Missing signals: parking_adequacy. Market component 96.83/100. Core component 84.45/100. Path of progress: 10000 permitted units as of 2024. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "gated": false,
+      "grade": "A",
+      "market_score": 96.83,
+      "rubric_coverage": 0.96,
+      "rubric_raw_score": 91.6,
+      "score": 90.5,
+      "strategy": "nnn_retail"
+    }
+  ],
+  "vam_dq": [
+    {
+      "confidence": 0.0,
+      "disqualified": true,
+      "disqualifier_hits": [
+        "Year-one DSCR is below 1.0x."
+      ],
+      "explanation": "DQ under Value-Add Multifamily: Year-one DSCR is below 1.0x. FACTS next step: resolve the disqualifier before analysis continues.",
+      "gated": false,
+      "grade": "DQ",
+      "market_score": null,
+      "rubric_coverage": 0.0,
+      "rubric_raw_score": 0.0,
+      "score": 0.0,
+      "strategy": "value_add_multifamily"
+    }
+  ],
+  "vam_partial": [
+    {
+      "confidence": 0.578,
+      "disqualified": false,
+      "disqualifier_hits": [],
+      "explanation": "Value-Add Multifamily scored 73.38/100 (B) at 58% rubric coverage. Top strengths: going_in_cap (2.50 \u2192 1.00), rent_gap_to_market (10.00 \u2192 0.50), dscr_year1 (1.32 \u2192 0.75). Top weaknesses: rent_gap_to_market (10.00 \u2192 0.50), submarket_pop_growth_5yr (0.80 \u2192 0.70), supply_pipeline (3.00 \u2192 0.70). Missing signals: price_per_unit_vs_submarket, stabilized_yoc, unit_mix_bias, capex_defensibility, 1031_fit. Market component 72.88/100. Core component 74.60/100. Path-of-progress permit data is unavailable. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "gated": false,
+      "grade": "B",
+      "market_score": 72.88,
+      "rubric_coverage": 0.578,
+      "rubric_raw_score": 72.84,
+      "score": 73.38,
+      "strategy": "value_add_multifamily"
+    }
+  ],
+  "vam_strong": [
+    {
+      "confidence": 1.0,
+      "disqualified": false,
+      "disqualifier_hits": [],
+      "explanation": "Value-Add Multifamily scored 90.92/100 (A) at 100% rubric coverage. Top strengths: rent_gap_to_market (18.00 \u2192 0.80), going_in_cap (4.90 \u2192 1.00), price_per_sf_vs_replacement (0.62 \u2192 1.00). Top weaknesses: stabilized_yoc (1.00 \u2192 0.40), price_per_unit_vs_submarket (0.83 \u2192 0.75), rent_gap_to_market (18.00 \u2192 0.80). Missing signals: none. Market component 96.54/100. Core component 93.20/100. Path of progress: 9000 permitted units as of 2024. FACTS next step: verify the highest-impact missing inputs, then Analyze and Control the deal assumptions.",
+      "gated": false,
+      "grade": "A",
+      "market_score": 96.54,
+      "rubric_coverage": 1.0,
+      "rubric_raw_score": 87.3,
+      "score": 90.92,
+      "strategy": "value_add_multifamily"
+    }
+  ]
+}

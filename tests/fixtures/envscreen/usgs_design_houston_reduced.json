@@ -1,0 +1,28 @@
+{
+  "name": "ASCE7-22 Web Services",
+  "request": {
+    "referenceDocument": "ASCE7-22",
+    "status": "success",
+    "date": "2026-07-14T19:40:57Z",
+    "parameters": {
+      "siteClass": "D",
+      "latitude": 29.7355,
+      "longitude": -95.2654,
+      "riskCategory": "II",
+      "title": "Pre-Phase I Screen"
+    }
+  },
+  "response": {
+    "data": {
+      "pgam": 0.044,
+      "sms": 0.11,
+      "sm1": 0.098,
+      "sds": 0.072,
+      "sd1": 0.065,
+      "sdc": "A",
+      "ss": 0.082,
+      "s1": 0.044,
+      "tl": 12
+    }
+  }
+}

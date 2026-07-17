@@ -3,7 +3,7 @@
 import time
 from unittest.mock import patch
 
-from loopnet_mcp.cache import TTLCache
+from cre_mcp.cache import TTLCache
 
 
 def test_set_and_get():
@@ -22,7 +22,7 @@ def test_ttl_expiration():
     cache.set("key1", "value1")
 
     # Simulate time passing
-    with patch("loopnet_mcp.cache.time") as mock_time:
+    with patch("cre_mcp.cache.memory.time") as mock_time:
         # First call (set) used real time, now mock for get
         mock_time.time.return_value = time.time() + 2
         assert cache.get("key1") is None

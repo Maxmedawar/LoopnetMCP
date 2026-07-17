@@ -1,0 +1,90 @@
+{
+  "hits": {
+    "total": 23,
+    "hits": [
+      {
+        "_type": "_doc",
+        "_source": {
+          "ind_source_id": "4539401",
+          "ind_firstname": "JOHN",
+          "ind_middlename": "N",
+          "ind_lastname": "SMITH",
+          "ind_other_names": [
+            "JOHN NEWTON SMITH III",
+            "JOHN NEWTON SMITH",
+            "JOHN NEWTON  SMITH III",
+            "JOHN NEWTON  SMITH"
+          ],
+          "ind_bc_scope": "Active",
+          "ind_ia_scope": "Active",
+          "ind_bc_disclosure_fl": "N",
+          "ind_approved_finra_registration_count": 1,
+          "ind_employments_count": 3,
+          "ind_industry_cal_date": "2003-06-15",
+          "ind_current_employments": [
+            {
+              "firm_id": "149777",
+              "firm_name": "MORGAN STANLEY",
+              "branch_city": "PURCHASE",
+              "branch_state": "NY",
+              "branch_zip": "10577-2530",
+              "ia_only": "N",
+              "firm_bd_sec_number": "68191",
+              "firm_bd_full_sec_number": "8-68191",
+              "firm_ia_sec_number": "70103",
+              "firm_ia_full_sec_number": "801-70103"
+            },
+            {
+              "firm_id": "149777",
+              "firm_name": "MORGAN STANLEY",
+              "branch_city": "Winston Salem",
+              "branch_state": "NC",
+              "ia_only": "N",
+              "firm_bd_sec_number": "68191",
+              "firm_bd_full_sec_number": "8-68191",
+              "firm_ia_sec_number": "70103",
+              "firm_ia_full_sec_number": "801-70103"
+            }
+          ]
+        }
+      },
+      {
+        "_type": "_doc",
+        "_source": {
+          "ind_source_id": "2796112",
+          "ind_firstname": "JOHN",
+          "ind_middlename": "WESLEY",
+          "ind_lastname": "SMITH",
+          "ind_other_names": ["J. WESLEY SMITH", "WESLEY  SMITH"],
+          "ind_bc_scope": "Active",
+          "ind_ia_scope": "NotInScope",
+          "ind_bc_disclosure_fl": "Y",
+          "ind_approved_finra_registration_count": 1,
+          "ind_employments_count": 2,
+          "ind_industry_cal_date": "2004-01-26",
+          "ind_current_employments": [
+            {
+              "firm_id": "44158",
+              "firm_name": "CAPITAL ONE SECURITIES, INC.",
+              "branch_city": "Stamford",
+              "branch_state": "CT",
+              "branch_zip": "06902",
+              "ia_only": "N",
+              "firm_bd_sec_number": "50561",
+              "firm_bd_full_sec_number": "8-50561"
+            },
+            {
+              "firm_id": "44158",
+              "firm_name": "CAPITAL ONE SECURITIES, INC.",
+              "branch_city": "Larchmont",
+              "branch_state": "NY",
+              "ia_only": "N",
+              "firm_bd_sec_number": "50561",
+              "firm_bd_full_sec_number": "8-50561"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

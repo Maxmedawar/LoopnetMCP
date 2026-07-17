@@ -1,0 +1,4 @@
+Survey,FIPS,FIPS,Region,Division,County,,1-unit,,,2-units,,,3-4 units,,,5+ units,,,1-unit rep,,,2-units rep,,,3-4 units rep,,, 5+units rep
+Date,State,County,Code,Code,Name,Bldgs,Units,Value,Bldgs,Units,Value,Bldgs,Units,Value,Bldgs,Units,Value,Bldgs,Units,Value,Bldgs,Units,Value,Bldgs,Units,Value,Bldgs,Units,Value
+
+2024,48,453,3,7,Travis County                 ,4559,4559,1602422203,113,226,29404841,16,60,10204448,292,12145,1395342767,3700,3700,1300362163,87,174,23060823,12,48,9004448,292,12145,1395342767

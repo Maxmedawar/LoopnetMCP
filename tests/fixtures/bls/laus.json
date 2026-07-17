@@ -1,0 +1,19 @@
+{
+  "status": "REQUEST_SUCCEEDED",
+  "responseTime": 71,
+  "message": [],
+  "Results": {
+    "series": [
+      {
+        "seriesID": "LAUCN484530000000003",
+        "data": [
+          {"year": "2025", "period": "M12", "periodName": "December", "value": "3.1", "footnotes": [{"code": "T", "text": "Data were subject to revision on May 19, 2026."}]},
+          {"year": "2025", "period": "M11", "periodName": "November", "value": "3.5", "footnotes": [{"code": "T", "text": "Data were subject to revision on May 19, 2026."}]},
+          {"year": "2025", "period": "M10", "periodName": "October", "value": "-", "footnotes": [{"code": "X", "text": "Data unavailable due to the 2025 lapse in appropriations."}]},
+          {"year": "2025", "period": "M09", "periodName": "September", "value": "3.6", "footnotes": [{"code": "T", "text": "Data were subject to revision on May 19, 2026."}]},
+          {"year": "2024", "period": "M12", "periodName": "December", "value": "3.2", "footnotes": [{"code": "T", "text": "Data were subject to revision on May 19, 2026."}]}
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+[
+  {
+    "license_type": "A/C Technician",
+    "license_number": "2935",
+    "business_county": "MEDINA",
+    "business_name": "MEYER, JAMES",
+    "license_expiration_date_mmddccyy": "06/02/2027",
+    "owner_name": "MEYER, JAMES",
+    "mailing_address_county": "MEDINA",
+    "license_subtype": "REG",
+    "continuing_education_flag": "N"
+  },
+  {
+    "license_type": "A/C Technician",
+    "license_number": "5721",
+    "business_county": "HARRIS",
+    "business_name": "KOL, YAIR",
+    "license_expiration_date_mmddccyy": "06/24/2027",
+    "owner_name": "KOL, YAIR",
+    "mailing_address_county": "HARRIS",
+    "license_subtype": "REG",
+    "continuing_education_flag": "N"
+  }
+]

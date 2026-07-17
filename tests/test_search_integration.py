@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastmcp import Client
 
-from loopnet_mcp.server import mcp
-from loopnet_mcp.scraper import client as client_module
-from loopnet_mcp.scraper.client import LoopnetBlockedError, LoopnetClientError
+from cre_mcp.server import mcp
+from cre_mcp.scraper import client as client_module
+from cre_mcp.scraper.client import LoopnetBlockedError, LoopnetClientError
 from tests.conftest import load_fixture
 
 
@@ -30,7 +30,7 @@ async def test_search_properties_returns_listings(mcp_client):
     """Full pipeline: MCP tool -> URL builder -> client (mocked) -> parser -> response."""
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "loopnet_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ):
@@ -53,7 +53,7 @@ async def test_search_properties_empty_results(mcp_client):
     """HTML with no placards returns 0 properties without crashing."""
     empty_html = "<html><body><div id='searchResults'></div></body></html>"
     with patch(
-        "loopnet_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=empty_html,
     ):
@@ -71,7 +71,7 @@ async def test_search_properties_with_property_type(mcp_client):
     """property_type='office' -> URL uses 'office' slug."""
     fixture_html = load_fixture("search_results.html")
     with patch(
-        "loopnet_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         return_value=fixture_html,
     ) as mock_fetch:
@@ -89,7 +89,7 @@ async def test_search_properties_with_property_type(mcp_client):
 async def test_search_properties_blocked_returns_error(mcp_client):
     """Mocked 403 returns error dict."""
     with patch(
-        "loopnet_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         side_effect=LoopnetBlockedError("Blocked by Loopnet (403)"),
     ):
@@ -106,7 +106,7 @@ async def test_search_properties_blocked_returns_error(mcp_client):
 async def test_search_properties_network_error_returns_error(mcp_client):
     """Mocked timeout returns error dict."""
     with patch(
-        "loopnet_mcp.scraper.client.LoopnetClient.fetch",
+        "cre_mcp.http.fetch.FetchClient.get_text",
         new_callable=AsyncMock,
         side_effect=LoopnetClientError("Connection timed out"),
     ):

@@ -1,0 +1,42 @@
+[
+  {
+    "notice_date": "2026-06-23T00:00:00.000",
+    "job_site_name": "JPMorgan Chase & Co.",
+    "county_name": "Collin",
+    "total_layoff_number": "244",
+    "layoff_date": "2026-08-21T00:00:00.000",
+    "city_name": "Plano"
+  },
+  {
+    "notice_date": "2026-06-16T00:00:00.000",
+    "job_site_name": "KUEHNE + NAGEL (KN) 2026",
+    "county_name": "Denton",
+    "total_layoff_number": "90",
+    "layoff_date": "2026-06-29T00:00:00.000",
+    "city_name": "Lewisville"
+  },
+  {
+    "notice_date": "2026-06-12T00:00:00.000",
+    "job_site_name": "Fortrex (John Soules Foods, Inc.)",
+    "county_name": "Smith",
+    "total_layoff_number": "85",
+    "layoff_date": "2026-06-26T00:00:00.000",
+    "city_name": "Tyler"
+  },
+  {
+    "notice_date": "2026-06-12T00:00:00.000",
+    "job_site_name": "First Student (DeSoto I.S.D.)",
+    "county_name": "Dallas",
+    "total_layoff_number": "74",
+    "layoff_date": "2026-06-30T00:00:00.000",
+    "city_name": "De Soto"
+  },
+  {
+    "notice_date": "2026-06-12T00:00:00.000",
+    "job_site_name": "SAKS GLOBAL (Neiman Marcus)",
+    "county_name": "Dallas",
+    "total_layoff_number": "67",
+    "layoff_date": "2026-09-30T00:00:00.000",
+    "city_name": "Dallas"
+  }
+]

@@ -1,0 +1,1 @@
+{"displayFieldName":"ZONING_ZTYPE","fieldAliases":{"ZONING_ZTYPE":"Zoning","ZONING_BASE":"ZONING_BASE"},"fields":[{"name":"ZONING_ZTYPE","type":"esriFieldTypeString","alias":"Zoning","length":50},{"name":"ZONING_BASE","type":"esriFieldTypeString","alias":"ZONING_BASE","length":50}],"features":[{"attributes":{"ZONING_ZTYPE":"GR-V","ZONING_BASE":"GR"}}]}

@@ -1,0 +1,16 @@
+{
+  "id": "vam_dq",
+  "property_type": "multifamily",
+  "price": 2000000,
+  "size": 20000,
+  "units": 20,
+  "noi": 20000,
+  "raw": {
+    "strategy": "value_add_multifamily",
+    "rent_gap_pct": 25,
+    "supply_pipeline_pct": 2
+  },
+  "market": {
+    "treasury_10yr": 4.0
+  }
+}

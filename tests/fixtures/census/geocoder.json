@@ -1,0 +1,30 @@
+{
+  "result": {
+    "input": {
+      "address": {"address": "1100 Congress Ave, Austin, TX 78701"},
+      "vintage": {"isDefault": true, "id": "4", "vintageName": "Current_Current"},
+      "benchmark": {"isDefault": true, "id": "4", "benchmarkName": "Public_AR_Current"}
+    },
+    "addressMatches": [
+      {
+        "geographies": {
+          "States": [
+            {"GEOID": "48", "STATE": "48", "STUSAB": "TX", "NAME": "Texas"}
+          ],
+          "Incorporated Places": [
+            {"GEOID": "4805000", "STATE": "48", "PLACE": "05000", "NAME": "Austin city"}
+          ],
+          "Counties": [
+            {"GEOID": "48453", "STATE": "48", "COUNTY": "453", "NAME": "Travis County"}
+          ],
+          "Census Tracts": [
+            {"GEOID": "48453000700", "STATE": "48", "COUNTY": "453", "TRACT": "000700", "NAME": "Census Tract 7"}
+          ]
+        },
+        "coordinates": {"x": -97.739752095692, "y": 30.276444701663},
+        "addressComponents": {"zip": "78701", "city": "AUSTIN", "state": "TX"},
+        "matchedAddress": "1100 CONGRESS AVE, AUSTIN, TX, 78701"
+      }
+    ]
+  }
+}

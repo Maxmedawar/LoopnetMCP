@@ -1,0 +1,17 @@
+{
+  "id": "nnn_dq",
+  "property_type": "retail",
+  "price": 900000,
+  "size": 3000,
+  "noi": 60000,
+  "raw": {
+    "strategy": "nnn_retail",
+    "tenant_name": "Local Burger Franchise",
+    "lease_years_remaining": 4,
+    "renewal_options": false,
+    "guaranty_type": "single-unit franchisee"
+  },
+  "market": {
+    "treasury_10yr": 4.0
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "generated": 1784058119000,
+    "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=29.7355&longitude=-95.2654&maxradiuskm=50&minmagnitude=2.5",
+    "title": "USGS Earthquakes",
+    "status": 200,
+    "api": "2.7.0",
+    "count": 0
+  },
+  "features": []
+}

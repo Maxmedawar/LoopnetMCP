@@ -1,0 +1,15 @@
+{
+  "status": {"code": 0, "msg": "SuccessWithResult", "total": 1},
+  "property": [
+    {
+      "identifier": {"fips": "48453", "apn": "0123456789", "attomId": 123456789},
+      "address": {"oneLine": "100 MAIN ST, AUSTIN, TX 78701", "line1": "100 MAIN ST", "locality": "AUSTIN", "countrySubd": "TX", "postal1": "78701"},
+      "location": {"latitude": "30.2672", "longitude": "-97.7431"},
+      "summary": {"propType": "COMMERCIAL", "yearBuilt": 2008},
+      "building": {"size": {"bldgSize": 12500}, "rooms": {"unitsCount": 1}},
+      "assessment": {"market": {"mktTtlValue": 2450000, "mktLandValue": 900000}},
+      "sale": {"amount": {"saleAmt": 2100000}, "saleTransDate": "2022-05-18"},
+      "owner": {"owner1": {"fullName": "MAIN STREET HOLDINGS LLC"}, "mailingAddressOneLine": "PO BOX 100, DALLAS, TX 75201"}
+    }
+  ]
+}
