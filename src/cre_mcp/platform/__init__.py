@@ -6,6 +6,20 @@ from cre_mcp.platform.auth import (
     OAuthSessionStore,
     SessionTokens,
 )
+from cre_mcp.platform.entitlements import (
+    ACCOUNT_STATES,
+    GRANT_SOURCES,
+    GRANT_STATUSES,
+    PROVIDERS,
+    SUBSCRIPTION_STATUSES,
+    AccessGrant,
+    AccountRecord,
+    EffectiveAccess,
+    EntitlementStore,
+    EventResult,
+    ProviderEvent,
+    SubscriptionRecord,
+)
 from cre_mcp.platform.models import (
     CLIENT_STATUSES,
     CONSENT_TYPES,
@@ -32,6 +46,18 @@ from cre_mcp.platform.schema import PLATFORM_TABLES, create_schema
 
 __all__ = [
     "AuthenticatedSession",
+    "ACCOUNT_STATES",
+    "GRANT_SOURCES",
+    "GRANT_STATUSES",
+    "PROVIDERS",
+    "SUBSCRIPTION_STATUSES",
+    "AccessGrant",
+    "AccountRecord",
+    "EffectiveAccess",
+    "EntitlementStore",
+    "EventResult",
+    "ProviderEvent",
+    "SubscriptionRecord",
     "CLIENT_STATUSES",
     "CONSENT_TYPES",
     "ClientRegistration",
