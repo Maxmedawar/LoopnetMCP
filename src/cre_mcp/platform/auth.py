@@ -200,6 +200,30 @@ class OAuthSessionStore:
             tuple(json.loads(row["scopes"])), bool(row["active"]),
         )
 
+    def revoke_client(self, client_id: str) -> bool:
+        """Deactivate a client and invalidate its codes and sessions immediately."""
+        now = _iso(_utc_now())
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                """UPDATE platform_oauth_clients
+                SET active=0, updated_at=? WHERE client_id=? AND active=1""",
+                (now, client_id),
+            )
+            if cursor.rowcount == 0:
+                return False
+            connection.execute(
+                """UPDATE platform_oauth_sessions
+                SET revoked_at=COALESCE(revoked_at,?), updated_at=?
+                WHERE client_id=?""",
+                (now, now, client_id),
+            )
+            connection.execute(
+                """UPDATE platform_oauth_codes
+                SET consumed_at=COALESCE(consumed_at,?) WHERE client_id=?""",
+                (now, client_id),
+            )
+        return True
     def _require_client(self, workspace_id: str, client_id: str) -> ClientRegistration:
         client = self.get_client(client_id)
         if client is None or not client.active or client.workspace_id != workspace_id:
@@ -285,6 +309,7 @@ class OAuthSessionStore:
         code_hash = _digest(code)
         now = _utc_now()
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT * FROM platform_oauth_codes WHERE code_hash=?", (code_hash,)
             ).fetchone()
@@ -296,10 +321,12 @@ class OAuthSessionStore:
                 raise ValueError("authorization code was issued to a different client or redirect")
             if not _pkce_matches(row["code_challenge"], code_verifier):
                 raise ValueError("PKCE verification failed")
-            connection.execute(
-                "UPDATE platform_oauth_codes SET consumed_at=? WHERE code_hash=?",
+            cursor = connection.execute(
+                "UPDATE platform_oauth_codes SET consumed_at=? WHERE code_hash=? AND consumed_at IS NULL",
                 (_iso(now), code_hash),
             )
+            if cursor.rowcount != 1:
+                raise ValueError("invalid or expired authorization code")
         return self.issue_session(
             str(row["workspace_id"]), str(row["user_id"]), str(row["client_id"]),
             Profile(row["profile"]), plan=str(row["plan"]),
@@ -311,7 +338,11 @@ class OAuthSessionStore:
         now = _utc_now()
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT * FROM platform_oauth_sessions WHERE access_hash=?",
+                """SELECT session.* FROM platform_oauth_sessions AS session
+                JOIN platform_oauth_clients AS client
+                  ON client.client_id = session.client_id
+                 AND client.workspace_id = session.workspace_id
+                WHERE session.access_hash=? AND client.active=1""",
                 (_digest(access_token),),
             ).fetchone()
         if row is None or row["revoked_at"] is not None:
@@ -324,7 +355,6 @@ class OAuthSessionStore:
             tuple(json.loads(row["territories"])), tuple(json.loads(row["scopes"])),
             str(row["audience"]),
         )
-
     def context_for(self, access_token: str) -> TenantContext | None:
         session = self.validate_access(access_token)
         if session is None:
@@ -357,7 +387,7 @@ class OAuthSessionStore:
                 )
                 return None
             row = connection.execute(
-                "SELECT * FROM platform_oauth_sessions WHERE refresh_hash=?",
+                "SELECT session.* FROM platform_oauth_sessions AS session JOIN platform_oauth_clients AS client ON client.client_id=session.client_id AND client.workspace_id=session.workspace_id WHERE session.refresh_hash=? AND client.active=1",
                 (token_hash,),
             ).fetchone()
             if row is None or row["revoked_at"] is not None:

@@ -4,6 +4,8 @@ refresh rotation with replay detection, and revocation."""
 import base64
 import sqlite3
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -364,3 +366,49 @@ def test_register_client_rejects_unknown_workspace(tmp_path):
         store.register_client(
             "ws-invented", "Unknown Tenant", (REDIRECT,), ("deals:read",)
         )
+
+def test_client_deactivation_invalidates_issued_material(tmp_path):
+    store = make_store(tmp_path)
+    client = register(store)
+    tokens = store.issue_session(
+        "ws-1", "user-7", client.client_id, Profile.FULL_OPERATOR
+    )
+    assert store.revoke_client(client.client_id) is True
+    assert store.get_client(client.client_id).active is False
+    assert store.validate_access(tokens.access_token) is None
+    assert store.refresh_session(tokens.refresh_token) is None
+    assert store.revoke_client(client.client_id) is False
+
+def test_client_deactivation_invalidates_pending_code(tmp_path):
+    store = make_store(tmp_path)
+    client = register(store)
+    verifier = "pending-code-verifier"
+    code = store.create_auth_code(
+        "ws-1", "user-7", client.client_id, REDIRECT,
+        challenge_for(verifier), profile=Profile.LOCAL_SCOUT,
+    )
+    assert store.revoke_client(client.client_id) is True
+    with pytest.raises(ValueError, match="code|client"):
+        store.exchange_code(code, client.client_id, REDIRECT, verifier)
+
+def test_single_use_code_has_one_winner_under_concurrency(tmp_path):
+    store = make_store(tmp_path)
+    client = register(store)
+    verifier = "parallel-verifier"
+    code = store.create_auth_code(
+        "ws-1", "user-7", client.client_id, REDIRECT,
+        challenge_for(verifier), profile=Profile.LOCAL_SCOUT,
+    )
+    barrier = Barrier(2)
+
+    def exchange_once():
+        barrier.wait()
+        try:
+            return store.exchange_code(code, client.client_id, REDIRECT, verifier)
+        except ValueError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: exchange_once(), range(2)))
+
+    assert sum(result is not None for result in results) == 1
