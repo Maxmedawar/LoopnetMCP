@@ -77,6 +77,46 @@ def resolve_transport(
     return (config or CreConfig()).transport
 
 
+_platform_api = None
+
+
+def _platform(config: CreConfig | None = None):
+    """Lazily build (and optionally reconfigure) the shared platform API.
+
+    Construction is deferred off the import path so importing the server does
+    not touch the database; the resolved runtime config is applied here by
+    ``install_access_control`` before any request is served.
+    """
+    global _platform_api
+    from cre_mcp.platform.api import PlatformApi
+
+    if _platform_api is None:
+        _platform_api = PlatformApi(config)
+    elif config is not None:
+        _platform_api.configure(config)
+    return _platform_api
+
+
+def _register_platform_routes() -> None:
+    """Register the customer-facing platform routes on the server once.
+
+    Bound to the module server so they ride the app that ``mcp.run`` builds
+    internally, not only the one from ``create_http_app``. Each handler defers
+    to the lazily-built shared ``PlatformApi``.
+    """
+    from cre_mcp.platform.api import PLATFORM_ROUTE_SPECS
+
+    for path, methods, handler_name in PLATFORM_ROUTE_SPECS:
+
+        async def _handler(request, _name=handler_name):
+            return await getattr(_platform(), _name)(request)
+
+        mcp.custom_route(path, methods=list(methods))(_handler)
+
+
+_register_platform_routes()
+
+
 def install_access_control(config: CreConfig | None = None):
     """Install tenant-aware access control on the module server instance.
 
@@ -94,6 +134,8 @@ def install_access_control(config: CreConfig | None = None):
     for existing in [m for m in mcp.middleware if isinstance(m, AccessMiddleware)]:
         mcp.middleware.remove(existing)
     config = config or CreConfig()
+    # Point the platform routes at the same resolved config (shared cache DB).
+    _platform(config)
     access_dir = config.cache_db_path.parent / "access"
     registry = WorkspaceRegistry(config.access_registry_path or access_dir / "registry.json")
     audit_log = AuditLog(config.access_audit_path or access_dir / "audit.jsonl")
@@ -101,7 +143,15 @@ def install_access_control(config: CreConfig | None = None):
 
 
 def create_http_app(path: str = "/mcp", config: CreConfig | None = None):
-    """Construct the opt-in Streamable HTTP ASGI application without binding."""
+    """Construct the opt-in Streamable HTTP ASGI application without binding.
+
+    The FastMCP transport lives at ``path``. The authenticated customer-facing
+    platform routes (``/v1/...``) are registered on the server itself (see
+    ``_register_platform_routes``), so they are served on the same app — and
+    with the same lifespan — whether the app is built here or by ``mcp.run``.
+    Platform routes carry their own OAuth bearer-token auth and are independent
+    of the MCP access middleware.
+    """
     install_access_control(config)
     return mcp.http_app(path=path, transport="http")
 

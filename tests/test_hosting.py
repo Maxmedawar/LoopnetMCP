@@ -44,6 +44,56 @@ def test_http_app_constructs_at_mcp_path_without_binding():
     assert any(getattr(route, "path", None) == "/mcp" for route in app.routes)
 
 
+def test_http_app_serves_platform_routes_alongside_mcp():
+    app = create_http_app()
+
+    paths = {getattr(route, "path", None) for route in app.routes}
+    assert "/mcp" in paths
+    assert {"/v1/me", "/v1/deals", "/v1/deals/{deal_id:int}"} <= paths
+
+
+async def test_platform_routes_enforce_auth_through_the_composed_app(tmp_path):
+    import httpx
+
+    from cre_mcp.access.profiles import Profile
+    from cre_mcp.platform.auth import OAuthSessionStore
+    from cre_mcp.platform.repository import PlatformRepository
+
+    config = _config(cache_db_path=tmp_path / "platform.db")
+    app = create_http_app(config=config)
+
+    repo = PlatformRepository(config.cache_db_path)
+    auth = OAuthSessionStore(config.cache_db_path)
+    workspace = await repo.create_workspace("Acme CRE")
+    user = await repo.create_user("owner@example.com", "Owner")
+    assert workspace is not None and user is not None
+    assert await repo.add_membership(workspace.public_id, user.id, role="owner")
+    client = auth.register_client(
+        workspace.public_id,
+        "Claude",
+        ("https://claude.ai/api/mcp/auth_callback",),
+        ("deals:read",),
+    )
+    tokens = auth.issue_session(
+        workspace.public_id,
+        str(user.id),
+        client.client_id,
+        Profile.FULL_OPERATOR,
+        scopes=("deals:read",),
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        unauthorized = await http.get("/v1/me")
+        authorized = await http.get(
+            "/v1/me", headers={"authorization": f"Bearer {tokens.access_token}"}
+        )
+
+    assert unauthorized.status_code == 401
+    assert authorized.status_code == 200
+    assert authorized.json()["session"]["workspace_id"] == workspace.public_id
+
+
 def test_run_server_keeps_stdio_call_shape_by_default():
     with patch("cre_mcp.server.mcp.run") as run:
         run_server(_config(transport="stdio"))
