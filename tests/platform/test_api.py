@@ -38,13 +38,15 @@ async def _provision(
     auth = OAuthSessionStore(config.cache_db_path)
     entitlements = EntitlementStore(config.cache_db_path)
 
+    if not any(plan.key == "pro" for plan in await repo.list_plans()):
+        assert await repo.create_plan("pro", "Professional") is not None
     workspace = await repo.create_workspace(name)
     assert workspace is not None
     user = await repo.create_user(f"{workspace.public_id}@example.com", name)
     assert user is not None
     assert await repo.add_membership(workspace.public_id, user.id, role="owner")
 
-    client = auth.register_client(workspace.public_id, "Claude", (REDIRECT,), scopes)
+    client = auth.register_client("Claude", (REDIRECT,), scopes)
     if grant:
         entitlements.grant_access(
             workspace=workspace.public_id,
@@ -55,10 +57,8 @@ async def _provision(
         )
     tokens = auth.issue_session(
         workspace.public_id,
-        str(user.id),
+        user.id,
         client.client_id,
-        Profile.FULL_OPERATOR,
-        plan="pro",
         scopes=scopes,
     )
     return Tenant(workspace.public_id, tokens.access_token)

@@ -34,6 +34,19 @@ class CreConfig(BaseSettings):
         le=65535,
         validation_alias=_env_aliases("http_port"),
     )
+    oauth_audience: str = Field(
+        default="medawarcre-mcp",
+        validation_alias=_env_aliases("oauth_audience"),
+    )
+    oauth_resource: str = Field(
+        default="https://mcp.medawarcre.com/mcp",
+        validation_alias=_env_aliases("oauth_resource"),
+    )
+    oauth_refresh_family_max_age_days: int = Field(
+        default=90,
+        ge=1,
+        validation_alias=_env_aliases("oauth_refresh_family_max_age_days"),
+    )
     request_delay_seconds: float = Field(
         default=3.0,
         validation_alias=_env_aliases("request_delay_seconds"),

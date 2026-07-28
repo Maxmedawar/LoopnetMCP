@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from cre_mcp.platform.migrations import Migration, apply_migrations
 from cre_mcp.platform.models import (
     CLIENT_STATUSES,
     CONSENT_TYPES,
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS platform_plans (
     name TEXT NOT NULL,
     monthly_price_usd REAL,
     seat_limit INTEGER,
+    daily_quotas TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     CHECK(monthly_price_usd IS NULL OR monthly_price_usd >= 0),
@@ -219,8 +221,39 @@ SCHEMA = (
 )
 
 
+def _plan_daily_quotas_cutover(connection: sqlite3.Connection) -> None:
+    columns = {
+        str(row[1])
+        for row in connection.execute("PRAGMA table_info(platform_plans)")
+    }
+    if "daily_quotas" not in columns:
+        connection.execute(
+            "ALTER TABLE platform_plans "
+            "ADD COLUMN daily_quotas TEXT NOT NULL DEFAULT '{}'"
+        )
+
+
+PLATFORM_MIGRATIONS = (
+    Migration(
+        1,
+        "server-owned daily plan quotas",
+        _plan_daily_quotas_cutover,
+    ),
+)
+
+
 def create_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(SCHEMA)
+    apply_migrations(
+        connection,
+        "platform-core",
+        PLATFORM_MIGRATIONS,
+    )
 
 
-__all__ = ["PLATFORM_TABLES", "SCHEMA", "create_schema"]
+__all__ = [
+    "PLATFORM_MIGRATIONS",
+    "PLATFORM_TABLES",
+    "SCHEMA",
+    "create_schema",
+]

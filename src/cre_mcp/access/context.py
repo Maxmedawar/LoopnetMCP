@@ -9,7 +9,7 @@ workspace-scoped storage without threading parameters through 274 tools.
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from cre_mcp.access.profiles import Profile
 
@@ -22,6 +22,7 @@ class TenantContext(BaseModel):
     workspace_id: str
     profile: Profile
     plan: str = "standard"
+    quota_limits: dict[str, int] = Field(default_factory=dict)
     territories: tuple[str, ...] = ()
     active: bool = True
     trusted: bool = False

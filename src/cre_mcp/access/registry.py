@@ -111,6 +111,7 @@ class WorkspaceRegistry:
             workspace_id=grant["workspace_id"],
             profile=Profile(grant["profile"]),
             plan=grant["plan"],
+            quota_limits=self.plan_quotas(grant["plan"]),
             territories=tuple(grant["territories"]),
             active=grant["active"],
             trusted=False,

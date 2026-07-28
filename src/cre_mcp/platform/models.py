@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 MEMBERSHIP_ROLES = ("owner", "admin", "member", "viewer")
 CLIENT_STATUSES = ("active", "revoked")
@@ -35,6 +35,7 @@ class Plan(Record):
     name: str
     monthly_price_usd: float | None = None
     seat_limit: int | None = None
+    daily_quotas: dict[str, int] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 

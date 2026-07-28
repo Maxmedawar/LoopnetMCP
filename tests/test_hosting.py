@@ -37,15 +37,15 @@ def test_http_transport_resolves_from_environment_without_binding(monkeypatch):
     assert config.http_port == 8765
 
 
-def test_http_app_constructs_at_mcp_path_without_binding():
-    app = create_http_app()
+def test_http_app_constructs_at_mcp_path_without_binding(tmp_path):
+    app = create_http_app(config=_config(cache_db_path=tmp_path / "platform.db"))
 
     assert callable(app)
     assert any(getattr(route, "path", None) == "/mcp" for route in app.routes)
 
 
-def test_http_app_serves_platform_routes_alongside_mcp():
-    app = create_http_app()
+def test_http_app_serves_platform_routes_alongside_mcp(tmp_path):
+    app = create_http_app(config=_config(cache_db_path=tmp_path / "platform.db"))
 
     paths = {getattr(route, "path", None) for route in app.routes}
     assert "/mcp" in paths
@@ -64,21 +64,29 @@ async def test_platform_routes_enforce_auth_through_the_composed_app(tmp_path):
 
     repo = PlatformRepository(config.cache_db_path)
     auth = OAuthSessionStore(config.cache_db_path)
+    assert await repo.create_plan("pro", "Professional") is not None
     workspace = await repo.create_workspace("Acme CRE")
     user = await repo.create_user("owner@example.com", "Owner")
     assert workspace is not None and user is not None
     assert await repo.add_membership(workspace.public_id, user.id, role="owner")
     client = auth.register_client(
-        workspace.public_id,
         "Claude",
         ("https://claude.ai/api/mcp/auth_callback",),
         ("deals:read",),
     )
+    from cre_mcp.platform.entitlements import EntitlementStore
+
+    EntitlementStore(config.cache_db_path).grant_access(
+        workspace=workspace.public_id,
+        source="manual",
+        external_ref="hosting-grant",
+        profile=Profile.FULL_OPERATOR,
+        plan_key="pro",
+    )
     tokens = auth.issue_session(
         workspace.public_id,
-        str(user.id),
+        user.id,
         client.client_id,
-        Profile.FULL_OPERATOR,
         scopes=("deals:read",),
     )
 
@@ -94,21 +102,31 @@ async def test_platform_routes_enforce_auth_through_the_composed_app(tmp_path):
     assert authorized.json()["session"]["workspace_id"] == workspace.public_id
 
 
-def test_run_server_keeps_stdio_call_shape_by_default():
+def test_run_server_keeps_stdio_call_shape_by_default(tmp_path):
     with patch("cre_mcp.server.mcp.run") as run:
-        run_server(_config(transport="stdio"))
+        run_server(
+            _config(transport="stdio", cache_db_path=tmp_path / "platform.db")
+        )
 
     run.assert_called_once_with(transport="stdio")
 
 
-def test_run_server_binds_configured_http_host_and_port():
+def test_run_server_binds_configured_http_host_and_port(tmp_path):
     with patch("cre_mcp.server.mcp.run") as run:
-        run_server(_config(transport="http", http_host="127.0.0.1", http_port=9123))
+        run_server(
+            _config(
+                transport="http",
+                http_host="127.0.0.1",
+                http_port=9123,
+                cache_db_path=tmp_path / "platform.db",
+            )
+        )
 
     run.assert_called_once_with(
         transport="http",
         host="127.0.0.1",
         port=9123,
+        json_response=True,
     )
 
 

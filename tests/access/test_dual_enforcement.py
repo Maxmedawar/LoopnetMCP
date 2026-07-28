@@ -4,6 +4,8 @@ execution. Hiding a tool from the list is never the only barrier."""
 import pytest
 from fastmcp.exceptions import ToolError
 
+from cre_mcp.access.context import TenantContext
+from cre_mcp.access.profiles import Profile
 from tests.access.helpers import call_data, tool_names
 
 
@@ -38,3 +40,28 @@ async def test_quota_is_enforced_at_execution(mini_mcp, identity, ctx_tiny, audi
         await call_data(mini_mcp, "search_properties", {"location": "OH"})
     events = audit.events(workspace_id="ws-tiny")
     assert any(e.decision == "denied" and "quota" in e.reason for e in events)
+
+
+async def test_context_quota_overrides_absent_registry_plan(
+    mini_mcp,
+    identity,
+):
+    identity["ctx"] = TenantContext(
+        workspace_id="ws-live-plan",
+        profile=Profile.FULL_OPERATOR,
+        plan="pro",
+        quota_limits={"search": 1},
+    )
+
+    first = await call_data(
+        mini_mcp,
+        "search_properties",
+        {"location": "OH"},
+    )
+    assert first["ok"] is True
+    with pytest.raises(ToolError, match="quota"):
+        await call_data(
+            mini_mcp,
+            "search_properties",
+            {"location": "OH"},
+        )

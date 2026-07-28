@@ -30,3 +30,14 @@ def test_config_loads_cre_keys_from_dotenv_file(tmp_path, monkeypatch):
     assert config.bea_api_key.get_secret_value() == "cre_bea_api_key-fixture"
     assert config.attom_api_key.get_secret_value() == "cre_attom_api_key-fixture"
     assert config.regrid_api_key.get_secret_value() == "cre_regrid_api_key-fixture"
+
+
+def test_oauth_refresh_family_max_age_defaults_to_90_and_reads_environment(
+    monkeypatch,
+):
+    monkeypatch.delenv("CRE_OAUTH_REFRESH_FAMILY_MAX_AGE_DAYS", raising=False)
+    monkeypatch.delenv("LOOPNET_OAUTH_REFRESH_FAMILY_MAX_AGE_DAYS", raising=False)
+    assert CreConfig(_env_file=None).oauth_refresh_family_max_age_days == 90
+
+    monkeypatch.setenv("CRE_OAUTH_REFRESH_FAMILY_MAX_AGE_DAYS", "45")
+    assert CreConfig(_env_file=None).oauth_refresh_family_max_age_days == 45

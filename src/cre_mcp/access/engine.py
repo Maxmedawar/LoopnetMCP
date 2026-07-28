@@ -163,8 +163,7 @@ class AccessEngine:
                 ), sanitized
 
         if cap is not None and cap.quota:
-            limits = self.registry.plan_quotas(ctx.plan)
-            limit = limits.get(cap.quota)
+            limit = ctx.quota_limits.get(cap.quota)
             if limit is not None and self.registry.usage_today(
                 ctx.workspace_id, cap.quota
             ) >= limit:

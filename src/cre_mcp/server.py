@@ -41,29 +41,34 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 
-mcp = FastMCP(
-    name="loopnet",
-    instructions=(
-        "CRE deal-intelligence server for commercial real estate listings and markets. "
-        "Use search_properties to find listings by location and filters. "
-        "Use get_property_details to get full details on a specific listing. "
-        "Use get_market_overview for listing-derived market statistics. "
-        "Use market_intel for government fundamentals and compare_markets to rank locations."
-        " Use analyze_deal for deep underwriting, find_deals for scored deal discovery,"
-        " and find_distressed for REO, auction, foreclosure, and tax-sale opportunities."
-        " Use owner_lookup for public assessor parcel and owner enrichment."
-        " Use get_rent_comparables for public ZORI, ACS, and HUD rent benchmarks."
-        " Use get_comps for county-limited sale comps and labeled value estimates."
-        " Use recommend_offer for an explained negotiation range and generate_loi"
-        " for a non-binding attorney-review draft."
-        " Use find_contact for source-labeled broker, owner, and public registry contacts,"
-        " draft_outreach for deterministic first-touch coaching, and handle_counter"
-        " for guarded counteroffer parsing and response coaching."
-        " Use financing_options to screen lender types, qualify_me to test buyer cash and"
-        " sponsor gates, and size_debt for FRED-anchored LTV/DSCR proceeds."
-    ),
+_SERVER_INSTRUCTIONS = (
+    "CRE deal-intelligence server for commercial real estate listings and markets. "
+    "Use search_properties to find listings by location and filters. "
+    "Use get_property_details to get full details on a specific listing. "
+    "Use get_market_overview for listing-derived market statistics. "
+    "Use market_intel for government fundamentals and compare_markets to rank locations."
+    " Use analyze_deal for deep underwriting, find_deals for scored deal discovery,"
+    " and find_distressed for REO, auction, foreclosure, and tax-sale opportunities."
+    " Use owner_lookup for public assessor parcel and owner enrichment."
+    " Use get_rent_comparables for public ZORI, ACS, and HUD rent benchmarks."
+    " Use get_comps for county-limited sale comps and labeled value estimates."
+    " Use recommend_offer for an explained negotiation range and generate_loi"
+    " for a non-binding attorney-review draft."
+    " Use find_contact for source-labeled broker, owner, and public registry contacts,"
+    " draft_outreach for deterministic first-touch coaching, and handle_counter"
+    " for guarded counteroffer parsing and response coaching."
+    " Use financing_options to screen lender types, qualify_me to test buyer cash and"
+    " sponsor gates, and size_debt for FRED-anchored LTV/DSCR proceeds."
 )
-register_all(mcp)
+
+
+def _build_server() -> FastMCP:
+    server = FastMCP(name="loopnet", instructions=_SERVER_INSTRUCTIONS)
+    register_all(server)
+    return server
+
+
+mcp = _build_server()
 
 
 def resolve_transport(
@@ -97,7 +102,7 @@ def _platform(config: CreConfig | None = None):
     return _platform_api
 
 
-def _register_platform_routes() -> None:
+def _register_platform_routes(server: FastMCP, platform_api=None) -> None:
     """Register the customer-facing platform routes on the server once.
 
     Bound to the module server so they ride the app that ``mcp.run`` builds
@@ -109,37 +114,55 @@ def _register_platform_routes() -> None:
     for path, methods, handler_name in PLATFORM_ROUTE_SPECS:
 
         async def _handler(request, _name=handler_name):
-            return await getattr(_platform(), _name)(request)
+            api = platform_api if platform_api is not None else _platform()
+            return await getattr(api, _name)(request)
 
-        mcp.custom_route(path, methods=list(methods))(_handler)
-
-
-_register_platform_routes()
+        server.custom_route(path, methods=list(methods))(_handler)
 
 
-def install_access_control(config: CreConfig | None = None):
+_register_platform_routes(mcp)
+
+
+def install_access_control(
+    config: CreConfig | None = None,
+    *,
+    runtime_mode: Literal["stdio", "http"] | None = None,
+    server: FastMCP | None = None,
+    platform_api=None,
+):
     """Install tenant-aware access control on the module server instance.
 
-    Hosted mode authenticates API keys against the server-side workspace
-    registry; stdio mode resolves to the explicit trusted local workspace.
+    Hosted mode authenticates only through authoritative OAuth. Stdio mode
+    resolves to the explicit trusted local workspace.
     Re-invoking replaces any prior access middleware so the last config wins
     (and two apps never stack duplicate enforcement); returns the uninstaller.
     """
     from cre_mcp.access.audit import AuditLog
     from cre_mcp.access.middleware import AccessMiddleware, install_access
     from cre_mcp.access.registry import WorkspaceRegistry
+    from cre_mcp.platform.authority import AuthoritativeOAuthVerifier
 
     # Drop any existing access middleware rather than no-op, so a later call
     # with a different registry/audit config is honored instead of ignored.
-    for existing in [m for m in mcp.middleware if isinstance(m, AccessMiddleware)]:
-        mcp.middleware.remove(existing)
+    target = server or mcp
+    for existing in [m for m in target.middleware if isinstance(m, AccessMiddleware)]:
+        target.middleware.remove(existing)
     config = config or CreConfig()
     # Point the platform routes at the same resolved config (shared cache DB).
-    _platform(config)
+    platform = platform_api or _platform(config)
+    if runtime_mode == "http":
+        target.auth = AuthoritativeOAuthVerifier(platform.authority)
+    else:
+        target.auth = None
     access_dir = config.cache_db_path.parent / "access"
     registry = WorkspaceRegistry(config.access_registry_path or access_dir / "registry.json")
     audit_log = AuditLog(config.access_audit_path or access_dir / "audit.jsonl")
-    return install_access(mcp, registry=registry, audit_log=audit_log)
+    return install_access(
+        target,
+        registry=registry,
+        audit_log=audit_log,
+        runtime_mode=runtime_mode,
+    )
 
 
 def create_http_app(path: str = "/mcp", config: CreConfig | None = None):
@@ -152,8 +175,26 @@ def create_http_app(path: str = "/mcp", config: CreConfig | None = None):
     Platform routes carry their own OAuth bearer-token auth and are independent
     of the MCP access middleware.
     """
-    install_access_control(config)
-    return mcp.http_app(path=path, transport="http")
+    from cre_mcp.platform.api import PlatformApi
+
+    config = config or CreConfig()
+    platform = PlatformApi(config)
+    hosted_server = _build_server()
+    _register_platform_routes(hosted_server, platform)
+    install_access_control(
+        config,
+        runtime_mode="http",
+        server=hosted_server,
+        platform_api=platform,
+    )
+    # JSON responses avoid creating an SSE watcher and per-request stream for
+    # ordinary request/response traffic. Streamable HTTP session semantics and
+    # transport-level OAuth status codes remain unchanged.
+    return hosted_server.http_app(
+        path=path,
+        transport="http",
+        json_response=True,
+    )
 
 
 def run_server(
@@ -164,15 +205,29 @@ def run_server(
     """Run stdio by default or the configured opt-in Streamable HTTP server."""
     config = config or CreConfig()
     transport = resolve_transport(config, force_http=force_http)
-    install_access_control(config)
-    if transport == "http":
-        mcp.run(
-            transport="http",
-            host=config.http_host,
-            port=config.http_port,
+    from cre_mcp.access.middleware import AccessMiddleware
+
+    prior_access = [
+        item for item in mcp.middleware if isinstance(item, AccessMiddleware)
+    ]
+    prior_auth = mcp.auth
+    uninstall = install_access_control(config, runtime_mode=transport)
+    try:
+        if transport == "http":
+            mcp.run(
+                transport="http",
+                host=config.http_host,
+                port=config.http_port,
+                json_response=True,
+            )
+            return
+        mcp.run(transport="stdio")
+    finally:
+        uninstall()
+        mcp.middleware.extend(
+            item for item in prior_access if item not in mcp.middleware
         )
-        return
-    mcp.run(transport="stdio")
+        mcp.auth = prior_auth
 
 
 def main(argv: Sequence[str] | None = None) -> None:

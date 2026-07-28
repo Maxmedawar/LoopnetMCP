@@ -14,6 +14,8 @@ import logging
 import math
 import secrets
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Iterable, TypeVar
@@ -52,7 +54,7 @@ WorkspaceRef = int | str
 # table -> (record model, JSON-encoded columns to decode on read)
 _TABLE_MODELS: dict[str, tuple[type[BaseModel], tuple[str, ...]]] = {
     "platform_users": (User, ()),
-    "platform_plans": (Plan, ()),
+    "platform_plans": (Plan, ("daily_quotas",)),
     "platform_workspaces": (Workspace, ()),
     "platform_memberships": (Membership, ()),
     "platform_territories": (Territory, ()),
@@ -85,6 +87,20 @@ def _encode(payload: Any) -> str:
     return json.dumps(payload, separators=(",", ":"), default=str)
 
 
+def _daily_quotas(value: dict[str, int]) -> dict[str, int]:
+    if not isinstance(value, dict):
+        raise ValueError("daily quotas must be an object")
+    normalized: dict[str, int] = {}
+    for raw_bucket, raw_limit in value.items():
+        bucket = _require(raw_bucket, "quota bucket")
+        if type(raw_limit) is not int or raw_limit < 0:
+            raise ValueError(
+                f"quota limit for {bucket!r} must be a non-negative integer"
+            )
+        normalized[bucket] = raw_limit
+    return normalized
+
+
 class PlatformRepository:
     """Async façade over the ``platform_*`` tables in the shared cache DB."""
 
@@ -100,15 +116,20 @@ class PlatformRepository:
             resolved = db_path or (config or CreConfig()).cache_db_path
         self.db_path = Path(resolved).expanduser()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.db_path, timeout=10)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=10000")
-        create_schema(connection)
-        return connection
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA foreign_keys=ON")
+            connection.execute("PRAGMA busy_timeout=10000")
+            create_schema(connection)
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     @staticmethod
     def _now() -> str:
@@ -306,6 +327,7 @@ class PlatformRepository:
         *,
         monthly_price_usd: float | None = None,
         seat_limit: int | None = None,
+        daily_quotas: dict[str, int] | None = None,
     ) -> Plan | None:
         """Persist a subscription tier; a duplicate key reports None."""
         data = {
@@ -313,6 +335,9 @@ class PlatformRepository:
             "name": _require(name, "plan name"),
             "monthly_price_usd": monthly_price_usd,
             "seat_limit": seat_limit,
+            "daily_quotas": _encode(
+                _daily_quotas({} if daily_quotas is None else daily_quotas)
+            ),
             **self._timestamps(),
         }
         return await self._run("plan create", self._insert_row, "platform_plans", data)
@@ -332,6 +357,7 @@ class PlatformRepository:
         name: str | None = None,
         monthly_price_usd: float | None = None,
         seat_limit: int | None = None,
+        daily_quotas: dict[str, int] | None = None,
     ) -> Plan | None:
         """Change plan fields; None leaves a field unchanged."""
         fields: dict[str, Any] = {}
@@ -341,6 +367,8 @@ class PlatformRepository:
             fields["monthly_price_usd"] = monthly_price_usd
         if seat_limit is not None:
             fields["seat_limit"] = seat_limit
+        if daily_quotas is not None:
+            fields["daily_quotas"] = _encode(_daily_quotas(daily_quotas))
         return await self._run(
             "plan update", self._update_row, "platform_plans", plan_id, fields
         )

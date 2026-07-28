@@ -292,3 +292,93 @@ def test_invited_account_state_is_reachable_for_a_new_workspace(tmp_path):
     invited = store.set_account_state(workspace.id, "invited")
     assert invited.state == "invited"
     assert store.set_account_state(workspace.id, "active").state == "active"
+
+
+def test_stale_active_provider_event_cannot_reopen_newer_canceled_state(tmp_path):
+    path = tmp_path / "platform.db"
+    workspace = __import__("asyncio").run(_workspace(path))
+    store = EntitlementStore(path)
+    newer = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
+    older = newer - timedelta(hours=1)
+
+    store.apply_subscription_event(
+        provider="stripe",
+        event_id="evt_cancel_newer",
+        event_type="customer.subscription.deleted",
+        workspace=workspace.id,
+        external_subscription_id="sub_ordered",
+        subscription_status="canceled",
+        plan_key="operator",
+        profile=Profile.FULL_OPERATOR,
+        occurred_at=newer,
+    )
+    stale = store.apply_subscription_event(
+        provider="stripe",
+        event_id="evt_active_older",
+        event_type="customer.subscription.updated",
+        workspace=workspace.id,
+        external_subscription_id="sub_ordered",
+        subscription_status="active",
+        plan_key="operator",
+        profile=Profile.FULL_OPERATOR,
+        occurred_at=older,
+    )
+
+    assert stale.processed is False
+    assert store.get_subscription(
+        workspace.id, "stripe", "sub_ordered"
+    ).status == "canceled"
+    assert store.get_account(workspace.id).state == "canceled"
+    assert store.effective_access(workspace.id) is None
+    assert len(store.list_events(workspace.id)) == 2
+
+
+def test_distinct_events_with_equal_source_timestamp_are_both_applied(tmp_path):
+    path = tmp_path / "platform.db"
+    workspace = __import__("asyncio").run(_workspace(path))
+    store = EntitlementStore(path)
+    occurred_at = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
+
+    first = store.apply_subscription_event(
+        provider="stripe",
+        event_id="evt_equal_active",
+        event_type="customer.subscription.updated",
+        workspace=workspace.id,
+        external_subscription_id="sub_equal",
+        subscription_status="active",
+        plan_key="operator",
+        profile=Profile.FULL_OPERATOR,
+        occurred_at=occurred_at,
+    )
+    second = store.apply_subscription_event(
+        provider="stripe",
+        event_id="evt_equal_canceled",
+        event_type="customer.subscription.deleted",
+        workspace=workspace.id,
+        external_subscription_id="sub_equal",
+        subscription_status="canceled",
+        plan_key="operator",
+        profile=Profile.FULL_OPERATOR,
+        occurred_at=occurred_at,
+    )
+    duplicate = store.apply_subscription_event(
+        provider="stripe",
+        event_id="evt_equal_canceled",
+        event_type="customer.subscription.deleted",
+        workspace=workspace.id,
+        external_subscription_id="sub_equal",
+        subscription_status="active",
+        plan_key="wrong",
+        profile=Profile.LOCAL_SCOUT,
+        occurred_at=occurred_at,
+    )
+
+    assert first.processed is True
+    assert second.processed is True
+    assert duplicate.processed is False
+    assert store.get_subscription(
+        workspace.id,
+        "stripe",
+        "sub_equal",
+    ).status == "canceled"
+    assert len(store.list_events(workspace.id)) == 2

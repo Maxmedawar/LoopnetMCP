@@ -4,15 +4,14 @@
 execution, sanitizes arguments, applies the approval gate, scopes storage to
 the workspace for the duration of the call, and audits every decision.
 
-Identity resolution is server-side only. The default resolver uses the HTTP
-Authorization / X-API-Key header against the registry when a request context
-exists, and falls back to the explicit trusted local workspace when there is
-none (stdio). An injected resolver returning None models an unauthenticated
-connection: nothing is visible, everything is denied.
+Identity resolution is server-side only. Hosted HTTP accepts only the
+authoritative FastMCP access-token claim produced by the OAuth verifier.
+Trusted-local identity exists only when the caller explicitly selects the
+stdio runtime. Missing context and dependency failures always fail closed.
 """
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware, MiddlewareContext
@@ -29,24 +28,31 @@ UNAUTHENTICATED = "(unauthenticated)"
 IdentityResolver = Callable[[MiddlewareContext], TenantContext | None]
 
 
-def _default_resolver_for(registry: WorkspaceRegistry) -> IdentityResolver:
+def _default_resolver_for(
+    runtime_mode: Literal["stdio", "http"] | None,
+) -> IdentityResolver:
     def resolve(_context: MiddlewareContext) -> TenantContext | None:
-        try:
-            from fastmcp.server.dependencies import get_http_headers
-
-            headers = get_http_headers()
-        except Exception:
-            headers = {}
-        if not headers:
-            # No HTTP request: stdio / in-process — the trusted local workspace.
+        if runtime_mode == "stdio":
             return local_context()
-        authorization = headers.get("authorization", "")
-        key = ""
-        if authorization.lower().startswith("bearer "):
-            key = authorization[7:].strip()
-        if not key:
-            key = headers.get("x-api-key", "").strip()
-        return registry.resolve_key(key) if key else None
+        if runtime_mode != "http":
+            return None
+        try:
+            from fastmcp.server.dependencies import get_access_token
+
+            access_token = get_access_token()
+        except Exception:
+            return None
+        if access_token is None:
+            return None
+        claims = getattr(access_token, "claims", {})
+        raw_context = claims.get("tenant_context") if isinstance(claims, dict) else None
+        if not isinstance(raw_context, dict):
+            return None
+        try:
+            context = TenantContext.model_validate(raw_context)
+        except Exception:
+            return None
+        return context if not context.trusted else None
 
     return resolve
 
@@ -59,10 +65,11 @@ class AccessMiddleware(Middleware):
         audit_log: AuditLog,
         identity_resolver: IdentityResolver | None = None,
         capabilities: dict[str, ToolCapability] | None = None,
+        runtime_mode: Literal["stdio", "http"] | None = None,
     ) -> None:
         self.engine = AccessEngine(registry, capabilities)
         self.audit = audit_log
-        self._resolve = identity_resolver or _default_resolver_for(registry)
+        self._resolve = identity_resolver or _default_resolver_for(runtime_mode)
 
     async def on_list_tools(self, context: MiddlewareContext, call_next) -> Any:
         ctx = self._resolve(context)
@@ -131,6 +138,7 @@ def install_access(
     audit_log: AuditLog,
     identity_resolver: IdentityResolver | None = None,
     capabilities: dict[str, ToolCapability] | None = None,
+    runtime_mode: Literal["stdio", "http"] | None = None,
 ) -> Callable[[], None]:
     """Install access control on a FastMCP server; returns an uninstaller."""
     middleware = AccessMiddleware(
@@ -138,6 +146,7 @@ def install_access(
         audit_log=audit_log,
         identity_resolver=identity_resolver,
         capabilities=capabilities,
+        runtime_mode=runtime_mode,
     )
     mcp.add_middleware(middleware)
 

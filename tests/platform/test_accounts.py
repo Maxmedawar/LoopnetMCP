@@ -48,19 +48,50 @@ async def test_blank_and_duplicate_user_emails_are_rejected(tmp_path):
 async def test_create_update_and_list_plans(tmp_path):
     repository = PlatformRepository(tmp_path / "platform.db")
     plan = await repository.create_plan(
-        "pro", "Professional", monthly_price_usd=99.0, seat_limit=5
+        "pro",
+        "Professional",
+        monthly_price_usd=99.0,
+        seat_limit=5,
+        daily_quotas={"search": 10},
     )
     assert plan is not None
     assert plan.key == "pro"
+    assert plan.daily_quotas == {"search": 10}
 
-    updated = await repository.update_plan(plan.id, monthly_price_usd=149.0)
+    updated = await repository.update_plan(
+        plan.id,
+        monthly_price_usd=149.0,
+        daily_quotas={"search": 25},
+    )
 
     assert updated is not None
     assert updated.monthly_price_usd == 149.0
     assert updated.seat_limit == 5
+    assert updated.daily_quotas == {"search": 25}
     assert [item.key for item in await repository.list_plans()] == ["pro"]
     assert await repository.get_plan(plan.id) is not None
     assert await repository.create_plan("pro", "Duplicate key") is None
+
+
+@pytest.mark.parametrize(
+    "daily_quotas",
+    [
+        {"search": -1},
+        {"search": True},
+        {"search": 1.5},
+        {"": 1},
+        [],
+    ],
+)
+async def test_plan_daily_quota_validation(tmp_path, daily_quotas):
+    repository = PlatformRepository(tmp_path / "platform.db")
+
+    with pytest.raises(ValueError, match="quota"):
+        await repository.create_plan(
+            "invalid",
+            "Invalid",
+            daily_quotas=daily_quotas,
+        )
 
 
 async def test_workspace_creation_plan_assignment_and_rename(tmp_path):

@@ -142,8 +142,15 @@ def real_server(registry, audit, identity, tmp_path, monkeypatch):
     cloud workspaces must land under tmp/workspaces/<id>/cache.db."""
     monkeypatch.setenv("CRE_CACHE_DB_PATH", str(tmp_path / "cache.db"))
     monkeypatch.delenv("LOOPNET_CACHE_DB_PATH", raising=False)
+    from cre_mcp.access.middleware import AccessMiddleware
     from cre_mcp.server import mcp as production_mcp
 
+    saved_middleware = list(production_mcp.middleware)
+    production_mcp.middleware[:] = [
+        item
+        for item in production_mcp.middleware
+        if not isinstance(item, AccessMiddleware)
+    ]
     uninstall = install_access(
         production_mcp,
         registry=registry,
@@ -152,3 +159,4 @@ def real_server(registry, audit, identity, tmp_path, monkeypatch):
     )
     yield production_mcp
     uninstall()
+    production_mcp.middleware[:] = saved_middleware

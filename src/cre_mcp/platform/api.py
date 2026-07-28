@@ -1,7 +1,7 @@
 """Authenticated customer-facing HTTP routes for the cloud platform."""
 from __future__ import annotations
 from dataclasses import asdict, is_dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from cre_mcp.config import CreConfig
-from cre_mcp.platform.auth import AuthenticatedSession, OAuthSessionStore
+from cre_mcp.platform.authority import AuthorityOutcome, AuthorityResolver
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
 
@@ -29,8 +29,18 @@ def _jsonable(value: Any) -> Any:
         return [_jsonable(item) for item in value]
     return value
 
-def _error(status: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse({"error": {"code": code, "message": message}}, status_code=status)
+def _error(
+    status: int,
+    code: str,
+    message: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    return JSONResponse(
+        {"error": {"code": code, "message": message}},
+        status_code=status,
+        headers=headers,
+    )
 
 class PlatformApi:
     """Request handlers bound to one platform database."""
@@ -40,21 +50,88 @@ class PlatformApi:
 
     def configure(self, config: CreConfig) -> None:
         self.config = config
-        self.auth = OAuthSessionStore(config.cache_db_path)
+        self.authority = AuthorityResolver(
+            config.cache_db_path,
+            audience=config.oauth_audience,
+            resource=config.oauth_resource,
+            refresh_family_max_age=timedelta(
+                days=config.oauth_refresh_family_max_age_days
+            ),
+        )
         self.repository = PlatformRepository(config.cache_db_path)
         self.entitlements = EntitlementStore(config.cache_db_path)
 
-    def authorize(self, request: Request, *, scope: str | None = None):
+    def _bearer_challenge(
+        self,
+        *,
+        error: str | None = None,
+        description: str | None = None,
+        scope: str | None = None,
+    ) -> str:
+        fields = ['realm="medawarcre"']
+        if error is not None:
+            fields.append(f'error="{error}"')
+        if description is not None:
+            fields.append(f'error_description="{description}"')
+        if scope is not None:
+            fields.append(f'scope="{scope}"')
+        return "Bearer " + ", ".join(fields)
+
+    def authorize(
+        self,
+        request: Request,
+        *,
+        scope: str | None = None,
+        require_access: bool = True,
+    ) -> tuple[AuthorityOutcome | None, JSONResponse | None]:
         header = request.headers.get("authorization", "")
         scheme, _, token = header.partition(" ")
         if scheme.casefold() != "bearer" or not token.strip():
-            return None, _error(401, "unauthorized", "Bearer token required")
-        session = self.auth.validate_access(token.strip())
-        if session is None or session.audience != "medawarcre-mcp":
-            return None, _error(401, "unauthorized", "Invalid or expired token")
-        if scope is not None and scope not in session.scopes:
-            return None, _error(403, "forbidden", f"Missing required scope: {scope}")
-        return session, None
+            return None, _error(
+                401,
+                "unauthorized",
+                "Bearer token required",
+                headers={"WWW-Authenticate": self._bearer_challenge()},
+            )
+        outcome = self.authority.resolve(token.strip())
+        if outcome is None:
+            return None, _error(
+                401,
+                "unauthorized",
+                "Invalid, expired, revoked, or misdirected token",
+                headers={
+                    "WWW-Authenticate": self._bearer_challenge(
+                        error="invalid_token",
+                        description="The access token is not valid for this resource",
+                    )
+                },
+            )
+        if outcome.membership is None or outcome.workspace is None:
+            return None, _error(
+                403,
+                "access_disabled",
+                "The authenticated identity no longer has workspace membership",
+            )
+        if require_access and not outcome.access_allowed:
+            return None, _error(
+                403,
+                "access_disabled",
+                "Workspace access is not currently enabled",
+            )
+        if scope is not None and scope not in outcome.session.scopes:
+            return None, _error(
+                403,
+                "forbidden",
+                f"Missing required scope: {scope}",
+                headers={
+                    "WWW-Authenticate": self._bearer_challenge(
+                        error="insufficient_scope",
+                        description="The access token lacks the required scope",
+                        scope=scope,
+                    )
+                },
+            )
+        return outcome, None
 
     async def parse_json(self, request: Request):
         try:
@@ -66,37 +143,37 @@ class PlatformApi:
         return value, None
 
     async def me(self, request: Request) -> JSONResponse:
-        session, error = self.authorize(request)
+        authority, error = self.authorize(request, require_access=False)
         if error is not None:
             return error
-        workspace = await self.repository.get_workspace(session.workspace_id)
-        account = self.entitlements.get_account(session.workspace_id)
-        access = self.entitlements.effective_access(session.workspace_id)
         return JSONResponse(_jsonable({
-            "session": session,
-            "workspace": workspace,
-            "account": account,
-            "effective_access": access,
+            "session": authority.session,
+            "workspace": authority.workspace,
+            "membership": authority.membership,
+            "account": authority.account,
+            "effective_access": authority.effective_access,
+            "access_enabled": authority.access_allowed,
         }))
 
     async def entitlement_summary(self, request: Request) -> JSONResponse:
-        session, error = self.authorize(request)
+        authority, error = self.authorize(request, require_access=False)
         if error is not None:
             return error
         return JSONResponse(_jsonable({
-            "account": self.entitlements.get_account(session.workspace_id),
-            "effective_access": self.entitlements.effective_access(session.workspace_id),
-            "grants": self.entitlements.list_grants(session.workspace_id),
+            "account": authority.account,
+            "effective_access": authority.effective_access,
+            "access_enabled": authority.access_allowed,
+            "grants": self.entitlements.list_grants(authority.workspace.public_id),
         }))
 
     async def list_deals(self, request: Request) -> JSONResponse:
-        session, error = self.authorize(request, scope="deals:read")
+        authority, error = self.authorize(request, scope="deals:read")
         if error is not None:
             return error
         stage = request.query_params.get("stage")
         try:
             deals = await self.repository.list_saved_deals(
-                session.workspace_id,
+                authority.workspace.public_id,
                 stage=stage,
             )
         except ValueError as exc:
@@ -104,7 +181,7 @@ class PlatformApi:
         return JSONResponse({"deals": _jsonable(deals)})
 
     async def create_deal(self, request: Request) -> JSONResponse:
-        session, error = self.authorize(request, scope="deals:write")
+        authority, error = self.authorize(request, scope="deals:write")
         if error is not None:
             return error
         body, error = await self.parse_json(request)
@@ -122,7 +199,7 @@ class PlatformApi:
             return _error(422, "invalid_stage", "stage must be a string")
         try:
             deal = await self.repository.save_deal(
-                session.workspace_id,
+                authority.workspace.public_id,
                 deal_ref,
                 title,
                 payload=payload,
@@ -134,11 +211,11 @@ class PlatformApi:
             return _error(404, "workspace_not_found", "Workspace does not exist")
         return JSONResponse({"deal": _jsonable(deal)}, status_code=201)
     async def get_deal(self, request: Request) -> JSONResponse:
-        session, error = self.authorize(request, scope="deals:read")
+        authority, error = self.authorize(request, scope="deals:read")
         if error is not None:
             return error
         deal = await self.repository.get_saved_deal(
-            session.workspace_id,
+            authority.workspace.public_id,
             request.path_params["deal_id"],
         )
         if deal is None:
@@ -146,7 +223,7 @@ class PlatformApi:
         return JSONResponse({"deal": _jsonable(deal)})
 
     async def update_deal(self, request: Request) -> JSONResponse:
-        session, error = self.authorize(request, scope="deals:write")
+        authority, error = self.authorize(request, scope="deals:write")
         if error is not None:
             return error
         body, error = await self.parse_json(request)
@@ -169,7 +246,7 @@ class PlatformApi:
             return _error(422, "empty_update", "At least one updatable field is required")
         try:
             deal = await self.repository.update_saved_deal(
-                session.workspace_id,
+                authority.workspace.public_id,
                 request.path_params["deal_id"],
                 **fields,
             )

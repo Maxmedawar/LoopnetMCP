@@ -58,20 +58,55 @@ async def test_trusted_local_keeps_explicit_db_path_arguments(
     assert data["received_db_path"] == "/tmp/explicit-local.db"
 
 
-async def test_no_resolver_and_no_http_defaults_to_trusted_local(
-    registry, audit
+async def test_hosted_dependency_failure_never_defaults_to_trusted_local(
+    registry, audit, monkeypatch
 ):
-    app = FastMCP(name="stdio-test")
+    app = FastMCP(name="fail-closed-test")
 
     @app.tool
     async def generate_loi(deal_id: str) -> dict:
         return {"ok": True, "loi_for": deal_id}
 
-    uninstall = install_access(app, registry=registry, audit_log=audit)
+    def dependency_failure():
+        raise RuntimeError("request dependency unavailable")
+
+    monkeypatch.setattr(
+        "fastmcp.server.dependencies.get_access_token",
+        dependency_failure,
+    )
+    uninstall = install_access(
+        app,
+        registry=registry,
+        audit_log=audit,
+        runtime_mode="http",
+    )
     try:
         names = await tool_names(app)
-        assert "generate_loi" in names
-        data = await call_data(app, "generate_loi", {"deal_id": "d-9"})
-        assert data == {"ok": True, "loi_for": "d-9"}
+        assert names == set()
     finally:
         uninstall()
+
+
+async def test_trusted_local_exists_only_when_stdio_is_explicit(registry, audit):
+    app = FastMCP(name="explicit-stdio-test")
+
+    @app.tool
+    async def generate_loi(deal_id: str) -> dict:
+        return {"ok": True, "loi_for": deal_id}
+
+    fail_closed = install_access(app, registry=registry, audit_log=audit)
+    try:
+        assert await tool_names(app) == set()
+    finally:
+        fail_closed()
+
+    explicit_stdio = install_access(
+        app,
+        registry=registry,
+        audit_log=audit,
+        runtime_mode="stdio",
+    )
+    try:
+        assert await tool_names(app) == {"generate_loi"}
+    finally:
+        explicit_stdio()

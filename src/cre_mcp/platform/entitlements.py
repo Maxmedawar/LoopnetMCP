@@ -2,11 +2,14 @@
 from __future__ import annotations
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from cre_mcp.access.profiles import Profile
+from cre_mcp.platform.migrations import Migration, apply_migrations
 from cre_mcp.platform.schema import create_schema
 WorkspaceRef = int | str
 ACCOUNT_STATES = (
@@ -74,6 +77,7 @@ class SubscriptionRecord:
     status: str
     plan_key: str
     current_period_end: datetime | None
+    last_event_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -98,6 +102,7 @@ class ProviderEvent:
     event_id: str
     event_type: str
     payload: dict[str, Any]
+    occurred_at: datetime
     created_at: datetime
 
 @dataclass(frozen=True)
@@ -137,6 +142,7 @@ CREATE TABLE IF NOT EXISTS platform_subscriptions (
     status TEXT NOT NULL,
     plan_key TEXT NOT NULL,
     current_period_end TEXT,
+    last_event_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE(provider, external_subscription_id),
@@ -175,6 +181,7 @@ CREATE TABLE IF NOT EXISTS platform_provider_events (
     event_id TEXT NOT NULL,
     event_type TEXT NOT NULL,
     payload TEXT NOT NULL DEFAULT '{}',
+    occurred_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
     UNIQUE(provider, event_id),
     FOREIGN KEY(workspace_id) REFERENCES platform_workspaces(id) ON DELETE CASCADE,
@@ -193,23 +200,66 @@ _ENTITLEMENT_SCHEMA = (
     .replace("__GRANT_STATUSES__", _sql_choices(GRANT_STATUSES))
 )
 
+
+def _ordering_cutover(connection: sqlite3.Connection) -> None:
+    subscription_columns = {
+        str(row[1])
+        for row in connection.execute("PRAGMA table_info(platform_subscriptions)")
+    }
+    if "last_event_at" not in subscription_columns:
+        connection.execute(
+            "ALTER TABLE platform_subscriptions ADD COLUMN last_event_at TEXT"
+        )
+        connection.execute(
+            "UPDATE platform_subscriptions SET last_event_at=updated_at "
+            "WHERE last_event_at IS NULL"
+        )
+
+    event_columns = {
+        str(row[1])
+        for row in connection.execute("PRAGMA table_info(platform_provider_events)")
+    }
+    if "occurred_at" not in event_columns:
+        connection.execute(
+            "ALTER TABLE platform_provider_events ADD COLUMN occurred_at TEXT"
+        )
+        connection.execute(
+            "UPDATE platform_provider_events SET occurred_at=created_at "
+            "WHERE occurred_at IS NULL"
+        )
+
+
+ENTITLEMENT_MIGRATIONS = (
+    Migration(1, "provider event source ordering", _ordering_cutover),
+)
+
 class EntitlementStore:
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = Path(db_path).expanduser()
         self._ensure_schema()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.db_path, timeout=30)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=30000")
-        return connection
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _ensure_schema(self) -> None:
         with self._connect() as connection:
             create_schema(connection)
             connection.executescript(_ENTITLEMENT_SCHEMA)
+            apply_migrations(
+                connection,
+                "entitlements",
+                ENTITLEMENT_MIGRATIONS,
+            )
 
     def _resolve_workspace(self, workspace: WorkspaceRef) -> int:
         if isinstance(workspace, bool):
@@ -252,6 +302,7 @@ class EntitlementStore:
             status=str(row["status"]),
             plan_key=str(row["plan_key"]),
             current_period_end=_parse(row["current_period_end"]),
+            last_event_at=_parse(row["last_event_at"]),
             created_at=_parse(row["created_at"]),
             updated_at=_parse(row["updated_at"]),
         )
@@ -283,6 +334,7 @@ class EntitlementStore:
             event_id=str(row["event_id"]),
             event_type=str(row["event_type"]),
             payload=json.loads(row["payload"]),
+            occurred_at=_parse(row["occurred_at"]),
             created_at=_parse(row["created_at"]),
         )
 
@@ -480,6 +532,7 @@ class EntitlementStore:
         external_customer_id: str | None = None,
         current_period_end: datetime | None = None,
         payload: dict[str, Any] | None = None,
+        occurred_at: datetime | None = None,
     ) -> EventResult:
         workspace_id = self._resolve_workspace(workspace)
         provider = _choice(provider, PROVIDERS, "provider")
@@ -490,6 +543,11 @@ class EntitlementStore:
         plan_key = _required(plan_key, "plan_key")
         profile = Profile(profile)
         now = _now()
+        occurred_at = occurred_at or now
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=UTC)
+        else:
+            occurred_at = occurred_at.astimezone(UTC)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             prior_event = connection.execute(
@@ -516,6 +574,48 @@ class EntitlementStore:
             grant = connection.execute("SELECT * FROM platform_access_grants WHERE source=? AND external_ref=?", (provider, external_subscription_id)).fetchone()
             if grant is not None and int(grant["workspace_id"]) != workspace_id:
                 raise ValueError("grant belongs to a different workspace")
+            now_iso = _iso(now)
+            occurred_at_iso = _iso(occurred_at)
+            connection.execute(
+                """
+                INSERT INTO platform_provider_events
+                    (workspace_id,provider,event_id,event_type,payload,
+                     occurred_at,created_at)
+                VALUES (?,?,?,?,?,?,?)
+                """,
+                (
+                    workspace_id,
+                    provider,
+                    event_id,
+                    event_type,
+                    json.dumps(
+                        payload or {},
+                        separators=(",", ":"),
+                        default=str,
+                    ),
+                    occurred_at_iso,
+                    now_iso,
+                ),
+            )
+            event_row = connection.execute(
+                """
+                SELECT * FROM platform_provider_events
+                WHERE provider=? AND event_id=?
+                """,
+                (provider, event_id),
+            ).fetchone()
+            last_event_at = (
+                _parse(subscription["last_event_at"])
+                if subscription is not None
+                else None
+            )
+            if last_event_at is not None and occurred_at < last_event_at:
+                return EventResult(
+                    False,
+                    self._event(event_row),
+                    self._subscription(subscription),
+                    self._grant(grant),
+                )
             if subscription_status in {"active", "trialing"}:
                 grant_status, account_state = "active", "active"
             elif subscription_status == "past_due":
@@ -526,17 +626,16 @@ class EntitlementStore:
                 grant_status, account_state = "revoked", "suspended"
             else:  # canceled, unpaid
                 grant_status, account_state = "revoked", "canceled"
-            now_iso = _iso(now)
             period_end_iso = _iso(current_period_end)
             if subscription is None:
                 connection.execute(
-                    "INSERT INTO platform_subscriptions(workspace_id,provider,external_subscription_id,external_customer_id,status,plan_key,current_period_end,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (workspace_id, provider, external_subscription_id, external_customer_id, subscription_status, plan_key, period_end_iso, now_iso, now_iso),
+                    "INSERT INTO platform_subscriptions(workspace_id,provider,external_subscription_id,external_customer_id,status,plan_key,current_period_end,last_event_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (workspace_id, provider, external_subscription_id, external_customer_id, subscription_status, plan_key, period_end_iso, occurred_at_iso, now_iso, now_iso),
                 )
             else:
                 connection.execute(
-                    "UPDATE platform_subscriptions SET status=?,plan_key=?,external_customer_id=COALESCE(?,external_customer_id),current_period_end=?,updated_at=? WHERE id=?",
-                    (subscription_status, plan_key, external_customer_id, period_end_iso, now_iso, subscription["id"]),
+                    "UPDATE platform_subscriptions SET status=?,plan_key=?,external_customer_id=COALESCE(?,external_customer_id),current_period_end=?,last_event_at=?,updated_at=? WHERE id=?",
+                    (subscription_status, plan_key, external_customer_id, period_end_iso, occurred_at_iso, now_iso, subscription["id"]),
                 )
             if grant is None:
                 connection.execute(
@@ -553,14 +652,6 @@ class EntitlementStore:
             except ValueError as exc:
                 if str(exc) != "invalid account transition":
                     raise
-            connection.execute(
-                "INSERT INTO platform_provider_events(workspace_id,provider,event_id,event_type,payload,created_at) VALUES (?,?,?,?,?,?)",
-                (workspace_id, provider, event_id, event_type, json.dumps(payload or {}, separators=(",", ":"), default=str), now_iso),
-            )
-            event_row = connection.execute(
-                "SELECT * FROM platform_provider_events WHERE provider=? AND event_id=?",
-                (provider, event_id),
-            ).fetchone()
             subscription_row = connection.execute(
                 "SELECT * FROM platform_subscriptions WHERE provider=? AND external_subscription_id=?",
                 (provider, external_subscription_id),
