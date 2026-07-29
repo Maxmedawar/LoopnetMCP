@@ -21,6 +21,11 @@ def test_create_schema_creates_every_platform_table(tmp_path):
         create_schema(connection)
 
     assert PLATFORM_TABLES <= _table_names(path)
+    assert {
+        "platform_internal_admins",
+        "platform_external_accounts",
+        "platform_admin_audit",
+    } <= _table_names(path)
 
 
 def test_create_schema_is_idempotent(tmp_path):

@@ -75,6 +75,12 @@ class MembershipAuthority:
 
 
 @dataclass(frozen=True)
+class InternalAdminAuthority:
+    user_id: int
+    role: str
+
+
+@dataclass(frozen=True)
 class AuthorityOutcome:
     session: AuthenticatedSession
     workspace: WorkspaceAuthority | None
@@ -83,6 +89,8 @@ class AuthorityOutcome:
     effective_access: EffectiveAccess | None
     context: TenantContext | None
     reason: str | None
+    internal_admin: InternalAdminAuthority | None = None
+    jv_grant_present: bool = False
 
     @property
     def access_allowed(self) -> bool:
@@ -171,6 +179,36 @@ class AuthorityResolver:
                 id=int(identity["membership_id"]),
                 user_id=int(identity["user_id"]),
                 role=str(identity["role"]),
+            )
+            internal_admin_row = connection.execute(
+                """
+                SELECT user_id,role
+                FROM platform_internal_admins
+                WHERE user_id=?
+                  AND active=1
+                  AND role IN ('platform_admin','support')
+                """,
+                (session.user_id,),
+            ).fetchone()
+            internal_admin = (
+                InternalAdminAuthority(
+                    user_id=int(internal_admin_row["user_id"]),
+                    role=str(internal_admin_row["role"]),
+                )
+                if internal_admin_row is not None
+                else None
+            )
+            jv_grant_present = (
+                connection.execute(
+                    """
+                    SELECT 1
+                    FROM platform_access_grants
+                    WHERE workspace_id=? AND profile='jv_partner'
+                    LIMIT 1
+                    """,
+                    (workspace.id,),
+                ).fetchone()
+                is not None
             )
             account_row = connection.execute(
                 "SELECT * FROM platform_accounts WHERE workspace_id=?",
@@ -284,6 +322,8 @@ class AuthorityResolver:
             effective_access=effective_access,
             context=context,
             reason=reason,
+            internal_admin=internal_admin,
+            jv_grant_present=jv_grant_present,
         )
 
 
@@ -334,6 +374,7 @@ __all__ = [
     "AuthoritativeOAuthVerifier",
     "AuthorityOutcome",
     "AuthorityResolver",
+    "InternalAdminAuthority",
     "MembershipAuthority",
     "WorkspaceAuthority",
 ]

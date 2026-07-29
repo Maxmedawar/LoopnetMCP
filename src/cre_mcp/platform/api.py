@@ -1,5 +1,6 @@
 """Authenticated customer-facing HTTP routes for the cloud platform."""
 from __future__ import annotations
+import asyncio
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timedelta
 from enum import Enum
@@ -9,7 +10,17 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+from cre_mcp.access.profiles import Profile
 from cre_mcp.config import CreConfig
+from cre_mcp.platform.admin import (
+    ADMIN_SCOPE,
+    AdminAuditError,
+    AdminConflictError,
+    AdminControlStore,
+    AdminForbiddenError,
+    AdminNotFoundError,
+    AdminValidationError,
+)
 from cre_mcp.platform.authority import AuthorityOutcome, AuthorityResolver
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
@@ -60,6 +71,7 @@ class PlatformApi:
         )
         self.repository = PlatformRepository(config.cache_db_path)
         self.entitlements = EntitlementStore(config.cache_db_path)
+        self.admin = AdminControlStore(config.cache_db_path)
 
     def _bearer_challenge(
         self,
@@ -133,6 +145,42 @@ class PlatformApi:
             )
         return outcome, None
 
+    def authorize_admin(
+        self,
+        request: Request,
+        *,
+        mutate: bool,
+    ) -> tuple[AuthorityOutcome | None, JSONResponse | None]:
+        outcome, error = self.authorize(
+            request,
+            scope=ADMIN_SCOPE,
+            require_access=False,
+        )
+        if error is not None:
+            return None, error
+        if (
+            outcome.internal_admin is None
+            or outcome.internal_admin.role not in {"platform_admin", "support"}
+        ):
+            return None, _error(
+                403,
+                "forbidden",
+                "Active internal operator authority is required",
+            )
+        if outcome.jv_grant_present:
+            return None, _error(
+                403,
+                "forbidden",
+                "JV identities cannot use internal admin routes",
+            )
+        if mutate and outcome.internal_admin.role != "platform_admin":
+            return None, _error(
+                403,
+                "forbidden",
+                "The support role is read-only",
+            )
+        return outcome, None
+
     async def parse_json(self, request: Request):
         try:
             value = await request.json()
@@ -141,6 +189,25 @@ class PlatformApi:
         if not isinstance(value, dict):
             return None, _error(400, "invalid_body", "Request body must be a JSON object")
         return value, None
+
+    async def call_admin(self, function, /, *args, **kwargs):
+        try:
+            result = await asyncio.to_thread(function, *args, **kwargs)
+        except AdminValidationError as exc:
+            return None, _error(422, "invalid_request", str(exc))
+        except AdminForbiddenError as exc:
+            return None, _error(403, "forbidden", str(exc))
+        except AdminNotFoundError as exc:
+            return None, _error(404, "not_found", str(exc))
+        except AdminConflictError as exc:
+            return None, _error(409, "conflict", str(exc))
+        except AdminAuditError:
+            return None, _error(
+                500,
+                "admin_audit_failed",
+                "Admin mutation could not be audited",
+            )
+        return result, None
 
     async def me(self, request: Request) -> JSONResponse:
         authority, error = self.authorize(request, require_access=False)
@@ -255,6 +322,276 @@ class PlatformApi:
         if deal is None:
             return _error(404, "deal_not_found", "Deal does not exist")
         return JSONResponse({"deal": _jsonable(deal)})
+
+    async def provision_admin_workspace(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.provision_workspace,
+            actor_user_id=authority.session.user_id,
+            name=body.get("name"),
+            slug=body.get("slug"),
+            plan_id=body.get("plan_id"),
+            owner_email=body.get("owner_email"),
+            owner_name=body.get("owner_name"),
+            account_state=body.get("account_state", "active"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result), status_code=201)
+
+    async def get_admin_workspace(self, request: Request) -> JSONResponse:
+        _, error = self.authorize_admin(request, mutate=False)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.get_workspace,
+            request.path_params["workspace_id"],
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result))
+
+    async def update_admin_membership(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.update_membership_role,
+            actor_user_id=authority.session.user_id,
+            public_id=request.path_params["workspace_id"],
+            membership_id=request.path_params["membership_id"],
+            role=body.get("role"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result))
+
+    async def create_admin_grant(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.create_grant,
+            actor_user_id=authority.session.user_id,
+            public_id=request.path_params["workspace_id"],
+            source=body.get("source"),
+            external_ref=body.get("external_ref"),
+            profile=body.get("profile"),
+            plan_key=body.get("plan_key"),
+            status=body.get("status", "active"),
+            starts_at=body.get("starts_at"),
+            ends_at=body.get("ends_at"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result), status_code=201)
+
+    async def revoke_admin_grant(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.revoke_grant,
+            actor_user_id=authority.session.user_id,
+            public_id=request.path_params["workspace_id"],
+            grant_id=request.path_params["grant_id"],
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result))
+
+    async def create_admin_territory(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.create_territory,
+            actor_user_id=authority.session.user_id,
+            public_id=request.path_params["workspace_id"],
+            name=body.get("name"),
+            state=body.get("state"),
+            market=body.get("market"),
+            asset_type=body.get("asset_type"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result), status_code=201)
+
+    async def delete_admin_territory(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.delete_territory,
+            actor_user_id=authority.session.user_id,
+            public_id=request.path_params["workspace_id"],
+            territory_id=request.path_params["territory_id"],
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result))
+
+    async def create_admin_external_account(
+        self,
+        request: Request,
+    ) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.create_external_account,
+            actor_user_id=authority.session.user_id,
+            public_id=request.path_params["workspace_id"],
+            provider=body.get("provider"),
+            external_account_id=body.get("external_account_id"),
+            metadata=body.get("metadata"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result), status_code=201)
+
+    async def list_admin_external_accounts(
+        self,
+        request: Request,
+    ) -> JSONResponse:
+        _, error = self.authorize_admin(request, mutate=False)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.list_external_accounts,
+            request.path_params["workspace_id"],
+        )
+        if error is not None:
+            return error
+        return JSONResponse({"external_accounts": _jsonable(result)})
+
+    async def delete_admin_external_account(
+        self,
+        request: Request,
+    ) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.delete_external_account,
+            actor_user_id=authority.session.user_id,
+            public_id=request.path_params["workspace_id"],
+            mapping_id=request.path_params["mapping_id"],
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result))
+
+    async def update_admin_account_state(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.set_account_state,
+            actor_user_id=authority.session.user_id,
+            public_id=request.path_params["workspace_id"],
+            state=body.get("state"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result))
+
+    def authorize_jv(
+        self,
+        request: Request,
+    ) -> tuple[AuthorityOutcome | None, JSONResponse | None]:
+        authority, error = self.authorize(request)
+        if error is not None:
+            return None, error
+        if (
+            authority.effective_access is None
+            or authority.effective_access.profile is not Profile.JV_PARTNER
+        ):
+            return None, _error(
+                403,
+                "forbidden",
+                "The JV surface requires a live jv_partner profile",
+            )
+        if request.query_params:
+            return None, _error(
+                422,
+                "invalid_scope_selector",
+                "JV workspace, role, profile, and territory selectors are server-owned",
+            )
+        return authority, None
+
+    async def get_jv_workspace(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_jv(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.get_jv_workspace,
+            authority.workspace.public_id,
+        )
+        if error is not None:
+            return error
+        result["membership"] = _jsonable(authority.membership)
+        return JSONResponse(_jsonable(result))
+
+    async def list_jv_members(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_jv(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.admin.list_members,
+            authority.workspace.public_id,
+        )
+        if error is not None:
+            return error
+        return JSONResponse({"members": _jsonable(result)})
+
     def routes(self) -> list[Route]:
         """Starlette routes for this API, ready to mount under any prefix."""
         return [
@@ -272,6 +609,59 @@ PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("/v1/deals", ("POST",), "create_deal"),
     ("/v1/deals/{deal_id:int}", ("GET",), "get_deal"),
     ("/v1/deals/{deal_id:int}", ("PATCH",), "update_deal"),
+    ("/v1/admin/workspaces", ("POST",), "provision_admin_workspace"),
+    (
+        "/v1/admin/workspaces/{workspace_id}",
+        ("GET",),
+        "get_admin_workspace",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/memberships/{membership_id:int}",
+        ("PATCH",),
+        "update_admin_membership",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/grants",
+        ("POST",),
+        "create_admin_grant",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/grants/{grant_id:int}",
+        ("DELETE",),
+        "revoke_admin_grant",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/territories",
+        ("POST",),
+        "create_admin_territory",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/territories/{territory_id:int}",
+        ("DELETE",),
+        "delete_admin_territory",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/external-accounts",
+        ("POST",),
+        "create_admin_external_account",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/external-accounts",
+        ("GET",),
+        "list_admin_external_accounts",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/external-accounts/{mapping_id:int}",
+        ("DELETE",),
+        "delete_admin_external_account",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/account-state",
+        ("POST",),
+        "update_admin_account_state",
+    ),
+    ("/v1/jv/workspace", ("GET",), "get_jv_workspace"),
+    ("/v1/jv/members", ("GET",), "list_jv_members"),
 )
 
 

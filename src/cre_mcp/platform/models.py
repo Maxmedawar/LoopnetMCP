@@ -5,6 +5,16 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 MEMBERSHIP_ROLES = ("owner", "admin", "member", "viewer")
+INTERNAL_ADMIN_ROLES = ("platform_admin", "support")
+ADMIN_REASON_CODES = (
+    "initial_provisioning",
+    "customer_request",
+    "billing_correction",
+    "entitlement_correction",
+    "security_response",
+    "support_resolution",
+    "data_correction",
+)
 CLIENT_STATUSES = ("active", "revoked")
 SAVED_DEAL_STAGES = (
     "watching", "analyzing", "pursuing", "under_contract", "closed", "passed"
@@ -131,3 +141,36 @@ class PrivacyRequest(Record):
     detail: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class InternalAdmin(Record):
+    user_id: int
+    role: str
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExternalAccount(Record):
+    id: int
+    workspace_id: int
+    provider: str
+    external_account_id: str
+    metadata: dict = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminAudit(Record):
+    id: int
+    actor_user_id: int
+    actor_role: str
+    action: str
+    workspace_id: int | None = None
+    target_type: str
+    target_id: str
+    reason_code: str
+    reason: str
+    before_json: str
+    after_json: str
+    created_at: datetime

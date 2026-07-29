@@ -306,3 +306,126 @@ def test_legacy_plan_schema_gains_daily_quotas_without_data_loss(tmp_path):
         assert connection.execute(
             "SELECT COUNT(*) FROM platform_plans WHERE key='pro'"
         ).fetchone()[0] == 1
+
+
+def test_admin_controls_v1_is_fresh_additive_and_empty(tmp_path):
+    from cre_mcp.platform.migrations import current_version
+    from cre_mcp.platform.schema import create_schema
+
+    path = tmp_path / "admin-controls-fresh.db"
+    with sqlite3.connect(path) as connection:
+        create_schema(connection)
+        names = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        version = current_version(connection, "admin-controls")
+
+    assert version == 1
+    assert {
+        "platform_internal_admins",
+        "platform_external_accounts",
+        "platform_admin_audit",
+    } <= names
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM platform_internal_admins"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM platform_external_accounts"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM platform_admin_audit"
+        ).fetchone()[0] == 0
+
+
+def test_admin_controls_v1_upgrades_without_backfill_or_legacy_column_changes(
+    tmp_path,
+):
+    from cre_mcp.platform.entitlements import _ENTITLEMENT_SCHEMA
+    from cre_mcp.platform.migrations import current_version
+    from cre_mcp.platform.schema import SCHEMA, create_schema
+
+    path = tmp_path / "admin-controls-upgrade.db"
+    now = "2026-07-28T12:00:00+00:00"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(SCHEMA)
+        connection.executescript(_ENTITLEMENT_SCHEMA)
+        connection.execute(
+            """
+            INSERT INTO platform_workspaces(public_id,name,created_at,updated_at)
+            VALUES ('ws-upgrade','Upgrade',?,?)
+            """,
+            (now, now),
+        )
+        workspace_id = connection.execute(
+            "SELECT id FROM platform_workspaces WHERE public_id='ws-upgrade'"
+        ).fetchone()[0]
+        connection.execute(
+            """
+            INSERT INTO platform_subscriptions(
+                workspace_id,provider,external_subscription_id,
+                external_customer_id,status,plan_key,current_period_end,
+                last_event_at,created_at,updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                workspace_id,
+                "stripe",
+                "sub_legacy",
+                "cus_legacy",
+                "active",
+                "pro",
+                None,
+                now,
+                now,
+                now,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO platform_access_grants(
+                workspace_id,source,external_ref,profile,plan_key,status,
+                starts_at,ends_at,created_at,updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                workspace_id,
+                "manual",
+                "legacy-ref",
+                "full_operator",
+                "pro",
+                "active",
+                now,
+                None,
+                now,
+                now,
+            ),
+        )
+        create_schema(connection)
+        version = current_version(connection, "admin-controls")
+        subscription = connection.execute(
+            """
+            SELECT external_customer_id
+            FROM platform_subscriptions
+            WHERE external_subscription_id='sub_legacy'
+            """
+        ).fetchone()[0]
+        grant = connection.execute(
+            "SELECT external_ref FROM platform_access_grants WHERE source='manual'"
+        ).fetchone()[0]
+        counts = tuple(
+            connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in (
+                "platform_internal_admins",
+                "platform_external_accounts",
+                "platform_admin_audit",
+            )
+        )
+
+    assert version == 1
+    assert subscription == "cus_legacy"
+    assert grant == "legacy-ref"
+    assert counts == (0, 0, 0)

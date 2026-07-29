@@ -5,8 +5,10 @@ import sqlite3
 
 from cre_mcp.platform.migrations import Migration, apply_migrations
 from cre_mcp.platform.models import (
+    ADMIN_REASON_CODES,
     CLIENT_STATUSES,
     CONSENT_TYPES,
+    INTERNAL_ADMIN_ROLES,
     MEMBERSHIP_ROLES,
     PRIVACY_REQUEST_KINDS,
     PRIVACY_REQUEST_STATUSES,
@@ -32,6 +34,9 @@ PLATFORM_TABLES = frozenset(
         "platform_consents",
         "platform_integration_events",
         "platform_privacy_requests",
+        "platform_internal_admins",
+        "platform_external_accounts",
+        "platform_admin_audit",
     }
 )
 
@@ -242,6 +247,104 @@ PLATFORM_MIGRATIONS = (
 )
 
 
+def _admin_controls_v1(connection: sqlite3.Connection) -> None:
+    internal_roles = _sql_choices(INTERNAL_ADMIN_ROLES)
+    reason_codes = _sql_choices(ADMIN_REASON_CODES)
+    connection.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS platform_internal_admins (
+            user_id INTEGER PRIMARY KEY,
+            role TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES platform_users(id) ON DELETE CASCADE,
+            CHECK(role IN ({internal_roles})),
+            CHECK(active IN (0,1))
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_external_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            external_account_id TEXT NOT NULL,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(provider, external_account_id),
+            FOREIGN KEY(workspace_id)
+                REFERENCES platform_workspaces(id) ON DELETE CASCADE,
+            CHECK(length(trim(provider)) > 0),
+            CHECK(length(trim(external_account_id)) > 0)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_platform_external_accounts_workspace
+        ON platform_external_accounts(workspace_id, provider, id)
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS platform_admin_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_user_id INTEGER NOT NULL,
+            actor_role TEXT NOT NULL,
+            action TEXT NOT NULL,
+            workspace_id INTEGER,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            reason_code TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            before_json TEXT NOT NULL,
+            after_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(actor_user_id) REFERENCES platform_users(id),
+            CHECK(actor_role IN ({internal_roles})),
+            CHECK(reason_code IN ({reason_codes})),
+            CHECK(length(trim(reason)) > 0)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_platform_admin_audit_workspace
+        ON platform_admin_audit(workspace_id, created_at, id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS platform_admin_audit_no_update
+        BEFORE UPDATE ON platform_admin_audit
+        BEGIN
+            SELECT RAISE(ABORT, 'platform_admin_audit is append-only');
+        END
+        """
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS platform_admin_audit_no_delete
+        BEFORE DELETE ON platform_admin_audit
+        BEGIN
+            SELECT RAISE(ABORT, 'platform_admin_audit is append-only');
+        END
+        """
+    )
+
+
+ADMIN_CONTROL_MIGRATIONS = (
+    Migration(
+        1,
+        "internal admin authority, external mappings, and atomic audit",
+        _admin_controls_v1,
+    ),
+)
+
+
 def create_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(SCHEMA)
     apply_migrations(
@@ -249,9 +352,15 @@ def create_schema(connection: sqlite3.Connection) -> None:
         "platform-core",
         PLATFORM_MIGRATIONS,
     )
+    apply_migrations(
+        connection,
+        "admin-controls",
+        ADMIN_CONTROL_MIGRATIONS,
+    )
 
 
 __all__ = [
+    "ADMIN_CONTROL_MIGRATIONS",
     "PLATFORM_MIGRATIONS",
     "PLATFORM_TABLES",
     "SCHEMA",
