@@ -24,6 +24,26 @@ from cre_mcp.platform.admin import (
 from cre_mcp.platform.authority import AuthorityOutcome, AuthorityResolver
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
+from cre_mcp.platform.providers.core import (
+    ProviderSyncService,
+    ProviderValidationError,
+    ReconciliationConflictError,
+    ReconciliationNotFoundError,
+    ReconciliationValidationError,
+    WebhookSignatureError,
+    WebhookTimestampError,
+    decode_json_object,
+    salvage_leading_identity,
+    verify_hmac_signature,
+)
+from cre_mcp.platform.providers.reconciliation import (
+    ProviderReconciliationStore,
+)
+from cre_mcp.platform.providers.skool import SKOOL_EVENT_TYPES, parse_skool_event
+from cre_mcp.platform.providers.stripe import (
+    STRIPE_EVENT_TYPES,
+    parse_stripe_event,
+)
 
 def _jsonable(value: Any) -> Any:
     if isinstance(value, BaseModel):
@@ -72,6 +92,11 @@ class PlatformApi:
         self.repository = PlatformRepository(config.cache_db_path)
         self.entitlements = EntitlementStore(config.cache_db_path)
         self.admin = AdminControlStore(config.cache_db_path)
+        self.provider_sync = ProviderSyncService(config)
+        self.provider_reconciliation = ProviderReconciliationStore(
+            config.cache_db_path,
+            self.provider_sync,
+        )
 
     def _bearer_challenge(
         self,
@@ -207,7 +232,215 @@ class PlatformApi:
                 "admin_audit_failed",
                 "Admin mutation could not be audited",
             )
+        except ReconciliationValidationError as exc:
+            return None, _error(422, "invalid_request", str(exc))
+        except ReconciliationNotFoundError as exc:
+            return None, _error(404, "not_found", str(exc))
+        except ReconciliationConflictError as exc:
+            return None, _error(409, "conflict", str(exc))
         return result, None
+
+    async def _webhook(self, request: Request, provider: str) -> JSONResponse:
+        if provider == "stripe":
+            secret = self.config.stripe_webhook_secret
+            header_name = "stripe-signature"
+            parser = parse_stripe_event
+        else:
+            secret = self.config.skool_webhook_secret
+            header_name = "x-skool-signature"
+            parser = parse_skool_event
+        if secret is None:
+            return _error(
+                404,
+                "provider_not_configured",
+                "Provider webhook is not configured",
+            )
+
+        maximum = self.config.provider_webhook_max_body_bytes
+        content_lengths = request.headers.getlist("content-length")
+        if len(content_lengths) > 1:
+            return _error(
+                400,
+                "invalid_content_length",
+                "Content-Length must be supplied at most once",
+            )
+        content_length = content_lengths[0] if content_lengths else None
+        if content_length is not None:
+            if (
+                not content_length.isascii()
+                or not content_length.isdecimal()
+            ):
+                return _error(
+                    400,
+                    "invalid_content_length",
+                    "Content-Length must be a positive decimal integer",
+                )
+            declared_length = int(content_length)
+            if declared_length <= 0:
+                return _error(
+                    400,
+                    "invalid_content_length",
+                    "Content-Length must be positive",
+                )
+            if declared_length > maximum:
+                return _error(
+                    413,
+                    "webhook_body_too_large",
+                    "Webhook body exceeds configured limit",
+                )
+        body_chunks: list[bytes] = []
+        body_size = 0
+        async for chunk in request.stream():
+            next_size = body_size + len(chunk)
+            if next_size > maximum:
+                return _error(
+                    413,
+                    "webhook_body_too_large",
+                    "Webhook body exceeds configured limit",
+                )
+            if chunk:
+                body_chunks.append(chunk)
+                body_size = next_size
+        if content_length is not None and body_size != declared_length:
+            return _error(
+                400,
+                "invalid_content_length",
+                "Content-Length does not match the accepted body",
+            )
+        raw_body = b"".join(body_chunks)
+        try:
+            verify_hmac_signature(
+                raw_body,
+                request.headers.get(header_name, ""),
+                secret,
+            )
+        except WebhookTimestampError:
+            return _error(
+                400,
+                "webhook_timestamp_out_of_range",
+                "Webhook timestamp is outside the accepted window",
+            )
+        except WebhookSignatureError:
+            return _error(
+                400,
+                "invalid_webhook_signature",
+                "Webhook signature is invalid",
+            )
+
+        try:
+            envelope = decode_json_object(raw_body)
+        except ProviderValidationError:
+            identity = salvage_leading_identity(raw_body)
+            if identity is not None:
+                event_type = identity[1]
+                type_is_safe = (
+                    provider == "stripe"
+                    and event_type in STRIPE_EVENT_TYPES
+                ) or (
+                    provider == "skool"
+                    and event_type in SKOOL_EVENT_TYPES
+                )
+                if not type_is_safe:
+                    identity = None
+            if identity is not None:
+                await asyncio.to_thread(
+                    self.provider_sync.record_malformed,
+                    provider,
+                    identity,
+                )
+            return _error(
+                400,
+                "malformed_webhook",
+                "Signed webhook body is not a valid provider envelope",
+            )
+        try:
+            event = parser(envelope)
+        except ProviderValidationError as exc:
+            if (
+                exc.durable
+                and exc.event_id is not None
+                and exc.event_type is not None
+                and exc.occurred_at is not None
+            ):
+                result = await asyncio.to_thread(
+                    self.provider_sync.record_malformed,
+                    provider,
+                    (exc.event_id, exc.event_type, exc.occurred_at),
+                    exc.reason_code,
+                )
+                return JSONResponse(result.public(), status_code=202)
+            return _error(
+                400,
+                "invalid_provider_envelope",
+                "Signed webhook body is not a valid provider envelope",
+            )
+        result = await asyncio.to_thread(self.provider_sync.ingest, event)
+        status = 202 if result.outcome == "quarantined" else 200
+        return JSONResponse(result.public(), status_code=status)
+
+    async def stripe_webhook(self, request: Request) -> JSONResponse:
+        return await self._webhook(request, "stripe")
+
+    async def skool_webhook(self, request: Request) -> JSONResponse:
+        return await self._webhook(request, "skool")
+
+    async def list_provider_quarantine(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=False)
+        if error is not None:
+            return error
+        query = request.query_params
+        result, error = await self.call_admin(
+            self.provider_reconciliation.quarantine_queue,
+            actor_user_id=authority.session.user_id,
+            provider=query.get("provider"),
+            limit=query.get("limit", "100"),
+            cursor=query.get("cursor"),
+            reason_code=request.headers.get("x-admin-reason-code"),
+            reason=request.headers.get("x-admin-reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result))
+
+    async def replay_provider_event(self, request: Request) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=True)
+        if error is not None:
+            return error
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        result, error = await self.call_admin(
+            self.provider_reconciliation.replay,
+            actor_user_id=authority.session.user_id,
+            provider_event_id=request.path_params["provider_event_id"],
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result))
+
+    async def list_workspace_provider_events(
+        self,
+        request: Request,
+    ) -> JSONResponse:
+        authority, error = self.authorize_admin(request, mutate=False)
+        if error is not None:
+            return error
+        query = request.query_params
+        result, error = await self.call_admin(
+            self.provider_reconciliation.workspace_events,
+            actor_user_id=authority.session.user_id,
+            workspace_public_id=request.path_params["workspace_id"],
+            provider=query.get("provider"),
+            limit=query.get("limit", "100"),
+            cursor=query.get("cursor"),
+            reason_code=request.headers.get("x-admin-reason-code"),
+            reason=request.headers.get("x-admin-reason"),
+        )
+        if error is not None:
+            return error
+        return JSONResponse(_jsonable(result))
 
     async def me(self, request: Request) -> JSONResponse:
         authority, error = self.authorize(request, require_access=False)
@@ -226,11 +459,30 @@ class PlatformApi:
         authority, error = self.authorize(request, require_access=False)
         if error is not None:
             return error
+        grants = []
+        for grant in self.entitlements.list_grants(
+            authority.workspace.public_id
+        ):
+            if (
+                grant.source in {"stripe", "skool"}
+                and grant.subject_user_id != authority.session.user_id
+            ):
+                continue
+            grants.append(
+                {
+                    "source": grant.source,
+                    "profile": grant.profile,
+                    "plan_key": grant.plan_key,
+                    "status": grant.status,
+                    "starts_at": grant.starts_at,
+                    "ends_at": grant.ends_at,
+                }
+            )
         return JSONResponse(_jsonable({
             "account": authority.account,
             "effective_access": authority.effective_access,
             "access_enabled": authority.access_allowed,
-            "grants": self.entitlements.list_grants(authority.workspace.public_id),
+            "grants": grants,
         }))
 
     async def list_deals(self, request: Request) -> JSONResponse:
@@ -479,6 +731,7 @@ class PlatformApi:
             public_id=request.path_params["workspace_id"],
             provider=body.get("provider"),
             external_account_id=body.get("external_account_id"),
+            subject_user_id=body.get("subject_user_id"),
             metadata=body.get("metadata"),
             reason_code=body.get("reason_code"),
             reason=body.get("reason"),
@@ -603,6 +856,23 @@ class PlatformApi:
 # (path, methods, handler-name) — the single source of truth for the platform
 # HTTP surface, shared by ``PlatformApi.routes`` and the server's registration.
 PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("/v1/webhooks/stripe", ("POST",), "stripe_webhook"),
+    ("/v1/webhooks/skool", ("POST",), "skool_webhook"),
+    (
+        "/v1/admin/provider-events/quarantine",
+        ("GET",),
+        "list_provider_quarantine",
+    ),
+    (
+        "/v1/admin/provider-events/{provider_event_id:int}/replay",
+        ("POST",),
+        "replay_provider_event",
+    ),
+    (
+        "/v1/admin/workspaces/{workspace_id}/provider-events",
+        ("GET",),
+        "list_workspace_provider_events",
+    ),
     ("/v1/me", ("GET",), "me"),
     ("/v1/entitlements", ("GET",), "entitlement_summary"),
     ("/v1/deals", ("GET",), "list_deals"),

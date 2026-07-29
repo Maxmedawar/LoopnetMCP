@@ -13,6 +13,17 @@ async def _workspace(path):
     repository = PlatformRepository(path)
     workspace = await repository.create_workspace("Medawar CRE")
     assert workspace is not None
+    user = await repository.create_user(
+        f"provider-{workspace.id}@example.test",
+        "Provider Subject",
+    )
+    assert user is not None
+    membership = await repository.add_membership(
+        workspace.public_id,
+        user.id,
+        role="owner",
+    )
+    assert membership is not None
     return workspace
 
 
@@ -178,7 +189,7 @@ def test_manual_and_jv_grants_expire_and_revoke(tmp_path):
     assert store.effective_access(workspace.id) is None
 
 
-def test_past_due_grace_and_terminal_account_transition(tmp_path):
+def test_payment_failure_is_terminal_without_dunning_access(tmp_path):
     path = tmp_path / "platform.db"
     workspace = __import__("asyncio").run(_workspace(path))
     store = EntitlementStore(path)
@@ -195,9 +206,9 @@ def test_past_due_grace_and_terminal_account_transition(tmp_path):
         profile=Profile.NATIONAL_SCOUT,
         current_period_end=period_end,
     )
-    assert store.get_account(workspace.id).state == "past_due"
-    assert store.list_grants(workspace.id)[0].status == "expiring"
-    assert store.effective_access(workspace.id) is not None
+    assert store.get_account(workspace.id).state == "canceled"
+    assert store.list_grants(workspace.id)[0].status == "revoked"
+    assert store.effective_access(workspace.id) is None
 
     store.set_account_state(workspace.id, "deleted", reason="privacy deletion complete")
     with pytest.raises(ValueError, match="transition"):
@@ -382,3 +393,43 @@ def test_distinct_events_with_equal_source_timestamp_are_both_applied(tmp_path):
         "sub_equal",
     ).status == "canceled"
     assert len(store.list_events(workspace.id)) == 2
+
+
+@pytest.mark.parametrize("compatibility_path", ["grant", "event"])
+def test_provider_compatibility_path_preserves_same_state_operator_reason(
+    tmp_path,
+    compatibility_path,
+):
+    path = tmp_path / "platform.db"
+    workspace = __import__("asyncio").run(_workspace(path))
+    store = EntitlementStore(path)
+    store.set_account_state(
+        workspace.id,
+        "active",
+        reason="operator-authored note",
+    )
+
+    if compatibility_path == "grant":
+        store.grant_access(
+            workspace=workspace.id,
+            source="stripe",
+            external_ref="sub_reason",
+            profile=Profile.LOCAL_SCOUT,
+            plan_key="local",
+        )
+    else:
+        store.apply_subscription_event(
+            provider="stripe",
+            event_id="evt_reason",
+            event_type="customer.subscription.updated",
+            workspace=workspace.id,
+            external_subscription_id="sub_reason",
+            subscription_status="active",
+            plan_key="local",
+            profile=Profile.LOCAL_SCOUT,
+        )
+
+    account = store.get_account(workspace.id)
+    assert account is not None
+    assert account.state == "active"
+    assert account.reason == "operator-authored note"

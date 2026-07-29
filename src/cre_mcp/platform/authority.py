@@ -229,8 +229,12 @@ class AuthorityResolver:
                 SELECT * FROM platform_access_grants
                 WHERE workspace_id=?
                   AND status IN ('active','overridden','expiring')
+                  AND (
+                      source NOT IN ('stripe','skool')
+                      OR subject_user_id=?
+                  )
                 """,
-                (workspace.id,),
+                (workspace.id, session.user_id),
             ).fetchall()
             valid_grants = [
                 row

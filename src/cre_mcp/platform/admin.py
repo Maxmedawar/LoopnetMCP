@@ -19,8 +19,8 @@ from cre_mcp.access.profiles import Profile
 from cre_mcp.platform.entitlements import (
     ACCOUNT_STATES,
     ACCOUNT_TRANSITIONS,
-    GRANT_SOURCES,
     GRANT_STATUSES,
+    PROVIDERS,
     EntitlementStore,
 )
 from cre_mcp.platform.models import (
@@ -30,6 +30,7 @@ from cre_mcp.platform.models import (
 from cre_mcp.platform.schema import create_schema
 
 ADMIN_SCOPE = "admin:controls"
+ADMIN_GRANT_SOURCES = ("manual", "jv", "promotion")
 
 
 class AdminControlError(Exception):
@@ -97,6 +98,12 @@ def _choice(value: Any, choices: tuple[str, ...], label: str) -> str:
             f"{label} must be one of {', '.join(choices)}"
         )
     return normalized
+
+
+def _positive_int(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise AdminValidationError(f"{label} must be a positive integer")
+    return value
 
 
 def validate_reason(reason_code: Any, reason: Any) -> tuple[str, str]:
@@ -588,7 +595,11 @@ class AdminControlStore:
         starts_at: Any = None,
         ends_at: Any = None,
     ) -> dict[str, Any]:
-        normalized_source = _choice(source, GRANT_SOURCES, "source")
+        normalized_source = _choice(
+            source,
+            ADMIN_GRANT_SOURCES,
+            "source",
+        )
         normalized_external_ref = _required(external_ref, "external_ref")
         try:
             normalized_profile = Profile(_required(profile, "profile")).value
@@ -821,14 +832,19 @@ class AdminControlStore:
         public_id: str,
         provider: Any,
         external_account_id: Any,
+        subject_user_id: Any,
         reason_code: Any,
         reason: Any,
         metadata: Any = None,
     ) -> dict[str, Any]:
-        normalized_provider = _required(provider, "provider").casefold()
+        normalized_provider = _choice(provider, PROVIDERS, "provider")
         normalized_external_id = _required(
             external_account_id,
             "external_account_id",
+        )
+        normalized_subject_user_id = _positive_int(
+            subject_user_id,
+            "subject_user_id",
         )
         if metadata is None:
             normalized_metadata: dict[str, Any] = {}
@@ -840,16 +856,28 @@ class AdminControlStore:
         def operation(connection: sqlite3.Connection) -> MutationResult:
             workspace = self._workspace(connection, public_id)
             workspace_id = int(workspace["id"])
+            membership = connection.execute(
+                """
+                SELECT 1 FROM platform_memberships
+                WHERE workspace_id=? AND user_id=?
+                """,
+                (workspace_id, normalized_subject_user_id),
+            ).fetchone()
+            if membership is None:
+                raise AdminValidationError(
+                    "subject_user_id must identify a workspace member"
+                )
             now = _iso(_now())
             cursor = connection.execute(
                 """
                 INSERT INTO platform_external_accounts(
-                    workspace_id,provider,external_account_id,metadata,
-                    created_at,updated_at
-                ) VALUES (?,?,?,?,?,?)
+                    workspace_id,subject_user_id,provider,external_account_id,
+                    metadata,created_at,updated_at
+                ) VALUES (?,?,?,?,?,?,?)
                 """,
                 (
                     workspace_id,
+                    normalized_subject_user_id,
                     normalized_provider,
                     normalized_external_id,
                     canonical_json(normalized_metadata),

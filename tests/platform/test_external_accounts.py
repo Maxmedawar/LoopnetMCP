@@ -32,8 +32,9 @@ async def test_external_account_create_list_and_delete_roundtrip(tmp_path):
             f"/v1/admin/workspaces/{target.workspace_id}/external-accounts",
             headers=actor.headers,
             json={
-                "provider": "stripe-connect",
-                "external_account_id": "acct_123",
+                "provider": "stripe",
+                "external_account_id": "cus_123",
+                "subject_user_id": target.user_id,
                 "metadata": {"region": "us", "mode": "live"},
                 **VALID_REASON,
             },
@@ -56,14 +57,15 @@ async def test_external_account_create_list_and_delete_roundtrip(tmp_path):
         )
 
     assert created.status_code == 201
-    assert created.json()["external_account"]["provider"] == "stripe-connect"
+    assert created.json()["external_account"]["provider"] == "stripe"
+    assert created.json()["external_account"]["subject_user_id"] == target.user_id
     assert created.json()["external_account"]["metadata"] == {
         "mode": "live",
         "region": "us",
     }
     assert listed.status_code == 200
     assert [item["external_account_id"] for item in listed.json()["external_accounts"]] == [
-        "acct_123"
+        "cus_123"
     ]
     assert deleted.status_code == 200
     assert deleted.json()["deleted"] is True
@@ -74,8 +76,9 @@ async def test_external_account_create_list_and_delete_roundtrip(tmp_path):
 async def test_duplicate_external_mapping_is_409_and_has_no_failed_audit(tmp_path):
     config, actor, first, second = await _setup(tmp_path)
     payload = {
-        "provider": "billing-vendor",
-        "external_account_id": "customer-77",
+        "provider": "stripe",
+        "external_account_id": "cus_77",
+        "subject_user_id": first.user_id,
         **VALID_REASON,
     }
 
@@ -89,7 +92,7 @@ async def test_duplicate_external_mapping_is_409_and_has_no_failed_audit(tmp_pat
         duplicate = await client.post(
             f"/v1/admin/workspaces/{second.workspace_id}/external-accounts",
             headers=actor.headers,
-            json=payload,
+            json={**payload, "subject_user_id": second.user_id},
         )
 
     assert created.status_code == 201
@@ -113,8 +116,9 @@ async def test_external_identifier_is_trimmed_case_preserving_and_case_sensitive
             f"/v1/admin/workspaces/{target.workspace_id}/external-accounts",
             headers=actor.headers,
             json={
-                "provider": " Stripe-Connect ",
+                "provider": " Stripe ",
                 "external_account_id": " Customer-AbC ",
+                "subject_user_id": target.user_id,
                 **VALID_REASON,
             },
         )
@@ -122,16 +126,17 @@ async def test_external_identifier_is_trimmed_case_preserving_and_case_sensitive
             f"/v1/admin/workspaces/{target.workspace_id}/external-accounts",
             headers=actor.headers,
             json={
-                "provider": "STRIPE-CONNECT",
+                "provider": "STRIPE",
                 "external_account_id": "customer-abc",
+                "subject_user_id": target.user_id,
                 **VALID_REASON,
             },
         )
 
     assert upper.status_code == 201
     assert lower.status_code == 201
-    assert upper.json()["external_account"]["provider"] == "stripe-connect"
-    assert lower.json()["external_account"]["provider"] == "stripe-connect"
+    assert upper.json()["external_account"]["provider"] == "stripe"
+    assert lower.json()["external_account"]["provider"] == "stripe"
     assert upper.json()["external_account"]["external_account_id"] == "Customer-AbC"
     assert lower.json()["external_account"]["external_account_id"] == "customer-abc"
     assert len(audit_rows(config.cache_db_path)) == 2
@@ -146,6 +151,7 @@ async def test_external_mapping_delete_is_workspace_scoped(tmp_path):
             json={
                 "provider": "skool",
                 "external_account_id": "member-1",
+                "subject_user_id": first.user_id,
                 **VALID_REASON,
             },
         )
@@ -179,6 +185,7 @@ async def test_external_mapping_requires_nonblank_provider_and_identifier(tmp_pa
             json={
                 "provider": " ",
                 "external_account_id": "acct",
+                "subject_user_id": target.user_id,
                 **VALID_REASON,
             },
         )
@@ -188,6 +195,7 @@ async def test_external_mapping_requires_nonblank_provider_and_identifier(tmp_pa
             json={
                 "provider": "vendor",
                 "external_account_id": " ",
+                "subject_user_id": target.user_id,
                 **VALID_REASON,
             },
         )
