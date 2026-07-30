@@ -116,9 +116,8 @@ async def test_external_identifier_is_trimmed_case_preserving_and_case_sensitive
             f"/v1/admin/workspaces/{target.workspace_id}/external-accounts",
             headers=actor.headers,
             json={
-                "provider": " Stripe ",
+                "provider": " Stripe-Connect ",
                 "external_account_id": " Customer-AbC ",
-                "subject_user_id": target.user_id,
                 **VALID_REASON,
             },
         )
@@ -126,17 +125,18 @@ async def test_external_identifier_is_trimmed_case_preserving_and_case_sensitive
             f"/v1/admin/workspaces/{target.workspace_id}/external-accounts",
             headers=actor.headers,
             json={
-                "provider": "STRIPE",
+                "provider": "STRIPE-CONNECT",
                 "external_account_id": "customer-abc",
-                "subject_user_id": target.user_id,
                 **VALID_REASON,
             },
         )
 
     assert upper.status_code == 201
     assert lower.status_code == 201
-    assert upper.json()["external_account"]["provider"] == "stripe"
-    assert lower.json()["external_account"]["provider"] == "stripe"
+    assert upper.json()["external_account"]["provider"] == "stripe-connect"
+    assert lower.json()["external_account"]["provider"] == "stripe-connect"
+    assert upper.json()["external_account"]["subject_user_id"] is None
+    assert lower.json()["external_account"]["subject_user_id"] is None
     assert upper.json()["external_account"]["external_account_id"] == "Customer-AbC"
     assert lower.json()["external_account"]["external_account_id"] == "customer-abc"
     assert len(audit_rows(config.cache_db_path)) == 2
@@ -203,3 +203,49 @@ async def test_external_mapping_requires_nonblank_provider_and_identifier(tmp_pa
     assert blank_provider.status_code == 422
     assert blank_identifier.status_code == 422
     assert audit_rows(config.cache_db_path) == []
+
+
+async def test_generic_billing_vendor_mapping_does_not_require_subject(tmp_path):
+    config, actor, target, _ = await _setup(tmp_path)
+
+    async with api_client(config) as client:
+        response = await client.post(
+            f"/v1/admin/workspaces/{target.workspace_id}/external-accounts",
+            headers=actor.headers,
+            json={
+                "provider": "billing-vendor",
+                "external_account_id": "account-ordinary",
+                **VALID_REASON,
+            },
+        )
+
+    assert response.status_code == 201
+    assert response.json()["external_account"]["provider"] == "billing-vendor"
+    assert response.json()["external_account"]["subject_user_id"] is None
+
+
+async def test_sync_provider_mapping_without_subject_fails_closed(tmp_path):
+    config, actor, target, _ = await _setup(tmp_path)
+
+    async with api_client(config) as client:
+        stripe = await client.post(
+            f"/v1/admin/workspaces/{target.workspace_id}/external-accounts",
+            headers=actor.headers,
+            json={
+                "provider": "stripe",
+                "external_account_id": "cus_missing_subject",
+                **VALID_REASON,
+            },
+        )
+        skool = await client.post(
+            f"/v1/admin/workspaces/{target.workspace_id}/external-accounts",
+            headers=actor.headers,
+            json={
+                "provider": "skool",
+                "external_account_id": "member_missing_subject",
+                **VALID_REASON,
+            },
+        )
+
+    assert stripe.status_code == 422
+    assert skool.status_code == 422

@@ -167,6 +167,17 @@ def parse_stripe_event(value: dict[str, Any]) -> NormalizedProviderEvent:
                 "paused" if status == "paused" else "unpaid"
             ),
         )
+    if status == "trialing":
+        return NormalizedProviderEvent(
+            provider="stripe",
+            event_id=event_id,
+            event_type=event_type,
+            occurred_at=occurred_at,
+            action="trialing_not_paid",
+            external_account_id=customer.strip(),
+            external_object_id=object_id.strip(),
+            subscription_status="trialing",
+        )
     items = obj.get("items")
     data = items.get("data") if isinstance(items, dict) else None
     if not isinstance(data, list):

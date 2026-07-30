@@ -261,7 +261,7 @@ async def test_expired_provider_lease_denies_v1_and_real_mcp_without_event(
         stripe_event(
             "evt_lease_expiry",
             customer="cus_lease_expiry",
-            period_end=_future_period(),
+            period_end=None,
         ),
     )
     assert granted.status_code == 200
@@ -1054,16 +1054,18 @@ async def test_reconciliation_reason_is_not_accepted_from_query_string(tmp_path)
     assert accepted.status_code == 200
 
 
-async def test_external_account_provider_has_a_strict_allowlist(tmp_path):
+async def test_external_account_provider_accepts_safe_provider_neutral_slug(
+    tmp_path,
+):
     from .admin_helpers import VALID_REASON, provision_identity, provision_target
 
     config = provider_config(tmp_path)
     actor = await provision_identity(
         config,
-        "Provider Allowlist Admin",
+        "Provider Neutral Admin",
         internal_role="platform_admin",
     )
-    target = await provision_target(config, "Provider Allowlist Target")
+    target = await provision_target(config, "Provider Neutral Target")
 
     async with api_client(config) as client:
         response = await client.post(
@@ -1072,12 +1074,15 @@ async def test_external_account_provider_has_a_strict_allowlist(tmp_path):
             json={
                 "provider": "attacker-controlled-provider",
                 "external_account_id": "external-1",
-                "subject_user_id": target.user_id,
                 **VALID_REASON,
             },
         )
 
-    assert response.status_code == 422
+    assert response.status_code == 201
+    assert response.json()["external_account"]["provider"] == (
+        "attacker-controlled-provider"
+    )
+    assert response.json()["external_account"]["subject_user_id"] is None
 
 
 def test_reconciliation_event_exposes_replay_and_duplicate_metadata(tmp_path):
@@ -1214,12 +1219,14 @@ def test_provider_sync_v2_fails_closed_legacy_unbound_provider_grant(tmp_path):
             (workspace_id,),
         ).fetchone()
 
-    assert version == 2
+    assert version == 5
     assert "subject_user_id" in grant_columns
+    assert "scope" in grant_columns
     assert "subject_user_id" in mapping_columns
     assert grant["status"] == "revoked"
     assert grant["ends_at"] is not None
     assert grant["subject_user_id"] is None
+    assert grant["scope"] == "subject"
     assert account["state"] == "canceled"
     assert account["reason"] is None
     assert foreign_keys == []
@@ -1229,7 +1236,7 @@ def test_provider_sync_v2_fails_closed_legacy_unbound_provider_grant(tmp_path):
 @pytest.mark.parametrize(
     "starting_state,survivor_source,expected_state,expected_reason",
     [
-        ("active", "manual", "active", "retained active note"),
+        ("active", "manual", "canceled", None),
         ("active", "jv", "active", "retained active note"),
         ("suspended", None, "suspended", "operator hold"),
     ],
@@ -1438,7 +1445,7 @@ def test_provider_sync_v2_revokes_legacy_dunning_grant(tmp_path):
         connection.row_factory = sqlite3.Row
         grant = connection.execute(
             """
-            SELECT status,ends_at,subject_user_id
+            SELECT status,ends_at,subject_user_id,scope
             FROM platform_access_grants
             WHERE external_ref='sub-legacy-dunning'
             """
@@ -1446,6 +1453,7 @@ def test_provider_sync_v2_revokes_legacy_dunning_grant(tmp_path):
     assert grant["status"] == "revoked"
     assert grant["ends_at"] is not None
     assert grant["subject_user_id"] == user_id
+    assert grant["scope"] == "subject"
 
 
 def test_provider_sync_v2_migration_failure_rolls_back_schema(tmp_path):

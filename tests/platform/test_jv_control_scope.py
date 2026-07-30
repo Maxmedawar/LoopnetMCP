@@ -175,6 +175,8 @@ async def test_any_jv_grant_history_blocks_dual_seeded_admin_identity(
             external_ref=f"operator-{jv.workspace_id}",
             profile=Profile.FULL_OPERATOR,
             plan_key="pro",
+            subject_user_id=jv.user_id,
+            scope="subject",
         )
 
     async with api_client(config) as client:

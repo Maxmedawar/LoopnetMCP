@@ -1,5 +1,7 @@
 """Configuration file loading and environment precedence tests."""
 
+from pathlib import Path
+
 from cre_mcp.config import CreConfig
 
 
@@ -41,3 +43,20 @@ def test_oauth_refresh_family_max_age_defaults_to_90_and_reads_environment(
 
     monkeypatch.setenv("CRE_OAUTH_REFRESH_FAMILY_MAX_AGE_DAYS", "45")
     assert CreConfig(_env_file=None).oauth_refresh_family_max_age_days == 45
+
+
+def test_env_example_documents_every_provider_setting_without_skool_secret():
+    text = (Path(__file__).parents[1] / ".env.example").read_text()
+    expected = {
+        "CRE_STRIPE_WEBHOOK_SECRET",
+        "CRE_SKOOL_WEBHOOK_SECRET",
+        "CRE_PROVIDER_WEBHOOK_MAX_BODY_BYTES",
+        "CRE_PROVIDER_GRANT_LEASE_SECONDS",
+        "CRE_STRIPE_PRICE_MAPPINGS",
+        "CRE_SKOOL_TIER_MAPPINGS",
+    }
+
+    for name in expected:
+        assert text.count(name) == 1
+    assert "# CRE_SKOOL_WEBHOOK_SECRET=" in text
+    assert "CRE_SKOOL_WEBHOOK_SECRET=replace" not in text

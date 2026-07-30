@@ -144,6 +144,8 @@ async def _provision(
             external_ref=f"grant-{workspace.public_id}",
             profile=profile,
             plan_key=plan_key,
+            subject_user_id=user.id,
+            scope="subject",
         )
 
     issuance_parameters = inspect.signature(auth.issue_session).parameters
@@ -535,6 +537,8 @@ async def test_current_authority_disables_deal_vault_on_next_request(
                 profile=Profile.FULL_OPERATOR,
                 plan_key="pro",
                 ends_at=datetime.now(UTC) - timedelta(seconds=1),
+                subject_user_id=tenant.user_id,
+                scope="subject",
             )
         elif disabled_by == "suspension":
             EntitlementStore(config.cache_db_path).set_account_state(
@@ -576,6 +580,8 @@ async def test_disabled_customer_can_read_me_but_not_deals_or_mcp(
             profile=Profile.FULL_OPERATOR,
             plan_key="pro",
             ends_at=datetime.now(UTC) - timedelta(seconds=1),
+            subject_user_id=tenant.user_id,
+            scope="subject",
         )
     else:
         EntitlementStore(config.cache_db_path).set_account_state(

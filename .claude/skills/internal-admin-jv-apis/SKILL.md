@@ -29,7 +29,10 @@ Follow `.claude/specs/internal-admin-jv-apis.md` as the source of truth.
   the actor, mutates, snapshots, and appends exactly one audit row.
 - Audit rows are append-only and canonical.
 - Migration component `admin-controls` starts at version 1 and is additive.
-- External accounts are provider-neutral mappings.
+- External accounts accept provider-neutral safe slugs. Stripe and Skool
+  mappings require an exact current-member subject.
+- Provider, manual, and promotion grants are subject-scoped. Workspace scope is
+  valid only when explicitly requested for a subjectless JV grant.
 - Existing subscription and grant provider reference columns do not change.
 
 ## Execution phases

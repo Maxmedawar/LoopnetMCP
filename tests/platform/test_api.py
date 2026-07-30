@@ -1,6 +1,8 @@
 """Customer-facing HTTP API tests: bearer auth, scope enforcement, the deal
 resource, and cross-workspace isolation driven through the ASGI app."""
 
+from datetime import UTC, datetime, timedelta
+
 import httpx
 import pytest
 
@@ -54,6 +56,9 @@ async def _provision(
             external_ref=f"sub_{workspace.public_id}",
             profile=Profile.FULL_OPERATOR,
             plan_key="pro",
+            subject_user_id=user.id,
+            scope="subject",
+            ends_at=datetime.now(UTC) + timedelta(days=30),
         )
     tokens = auth.issue_session(
         workspace.public_id,

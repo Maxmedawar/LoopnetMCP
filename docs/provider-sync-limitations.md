@@ -19,13 +19,18 @@ email or client-supplied identity claims.
 - Payment failure has no grace period.
 - Final provider-authority loss revokes active OAuth sessions and pending
   authorization codes in the same transaction, which also prevents refresh.
-- Provider grants expire at a bounded server lease even when no later event
+- Stripe grants end at a trusted current billing-period end whose exact
+  authority input is immutably bound to the receipt. Editable replay evidence
+  cannot extend that date. When the trusted value is absent, grants use the
+  bounded fallback lease.
+- Skool grants expire at the bounded server lease when no later trusted event
   arrives.
+- Stripe trialing does not grant the paid entitlement.
 - An unpaid user in the same workspace cannot inherit another member's
   provider grant.
 
-Lease expiry is a bounded stale-authority safeguard. It is not immediate churn
-notification.
+Fallback and Skool lease expiry are bounded stale-authority safeguards. They
+are not immediate churn notification.
 
 ## Why Skool is not production-ready
 

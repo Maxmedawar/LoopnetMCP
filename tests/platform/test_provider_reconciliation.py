@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
+import threading
 from urllib.parse import urlencode
 
 import pytest
 
 from cre_mcp.access.profiles import Profile
+from cre_mcp.platform.providers import reconciliation as reconciliation_module
+from cre_mcp.platform.providers.core import ProviderSyncService
+from cre_mcp.platform.providers.reconciliation import (
+    ProviderReconciliationStore,
+)
 
 from .admin_helpers import (
     VALID_REASON,
@@ -266,6 +273,120 @@ async def test_workspace_event_list_is_scoped_and_audited(tmp_path):
     )
 
 
+@pytest.mark.parametrize("listing", ["quarantine", "workspace"])
+async def test_audited_provider_lists_serialize_with_concurrent_wal_writer(
+    tmp_path,
+    monkeypatch,
+    listing,
+):
+    config = provider_config(tmp_path)
+    admin = await provision_identity(
+        config,
+        f"Concurrent {listing} List Admin",
+        internal_role="platform_admin",
+    )
+    if listing == "quarantine":
+        await _quarantine(
+            config,
+            "evt_concurrent_queue_list",
+            "cus_concurrent_queue_list",
+        )
+        workspace = None
+    else:
+        workspace = await seed_workspace(
+            config,
+            "Concurrent Workspace List",
+            stripe_customer="cus_concurrent_workspace_list",
+        )
+        body = json_bytes(
+            stripe_event(
+                "evt_concurrent_workspace_list",
+                customer="cus_concurrent_workspace_list",
+            )
+        )
+        async with api_client(config) as client:
+            assert (
+                await client.post(
+                    "/v1/webhooks/stripe",
+                    content=body,
+                    headers=signed_headers("stripe", body),
+                )
+            ).status_code == 200
+    with sqlite3.connect(config.cache_db_path) as connection:
+        connection.execute("PRAGMA journal_mode=WAL")
+
+    store = ProviderReconciliationStore(
+        config.cache_db_path,
+        ProviderSyncService(config),
+    )
+    selected = threading.Event()
+    writer_attempted = threading.Event()
+    writer_acquired = threading.Event()
+    release_writer = threading.Event()
+    original_event = reconciliation_module._event
+
+    def gated_event(row):
+        selected.set()
+        assert writer_attempted.wait(5)
+        writer_acquired.wait(0.5)
+        return original_event(row)
+
+    monkeypatch.setattr(reconciliation_module, "_event", gated_event)
+
+    def concurrent_writer():
+        assert selected.wait(5)
+        writer_attempted.set()
+        with sqlite3.connect(config.cache_db_path, timeout=5) as connection:
+            connection.execute("PRAGMA busy_timeout=5000")
+            connection.execute("BEGIN IMMEDIATE")
+            writer_acquired.set()
+            connection.execute(
+                """
+                UPDATE platform_provider_events
+                SET updated_at=updated_at
+                WHERE id=(SELECT MIN(id) FROM platform_provider_events)
+                """
+            )
+            assert release_writer.wait(5)
+            connection.commit()
+
+    writer_task = asyncio.create_task(asyncio.to_thread(concurrent_writer))
+    try:
+        if listing == "quarantine":
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    store.quarantine_queue,
+                    actor_user_id=admin.user_id,
+                    provider="stripe",
+                    limit=10,
+                    cursor=None,
+                    reason_code=VALID_REASON["reason_code"],
+                    reason=VALID_REASON["reason"],
+                ),
+                timeout=5,
+            )
+        else:
+            assert workspace is not None
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    store.workspace_events,
+                    actor_user_id=admin.user_id,
+                    workspace_public_id=workspace.public_id,
+                    provider="stripe",
+                    limit=10,
+                    cursor=None,
+                    reason_code=VALID_REASON["reason_code"],
+                    reason=VALID_REASON["reason"],
+                ),
+                timeout=5,
+            )
+    finally:
+        release_writer.set()
+        await writer_task
+
+    assert len(result["events"]) == 1
+
+
 async def test_admin_replay_re_resolves_mapping_and_is_idempotent(tmp_path):
     config = provider_config(tmp_path)
     admin = await provision_identity(
@@ -314,7 +435,13 @@ async def test_admin_replay_re_resolves_mapping_and_is_idempotent(tmp_path):
     assert second.status_code == 200
     assert second.json()["outcome"] == "reconciled"
     assert projection(config.cache_db_path) == after_first
-    assert EntitlementStore(config.cache_db_path).effective_access(target.id) is not None
+    assert EntitlementStore(config.cache_db_path).effective_access(
+        target.id,
+        subject_user_id=_subject_user_id(
+            config.cache_db_path,
+            target.id,
+        ),
+    ) is not None
     assert [row["action"] for row in audit_rows(config.cache_db_path)] == [
         "provider_event.replay",
         "provider_event.replay",

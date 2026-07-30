@@ -176,7 +176,7 @@ class ProviderReconciliationStore:
         except ReconciliationValidationError as exc:
             raise AdminValidationError(str(exc)) from exc
         with self._connect() as connection:
-            connection.execute("BEGIN")
+            connection.execute("BEGIN IMMEDIATE")
             try:
                 actor = self._actor(
                     connection,
@@ -240,7 +240,7 @@ class ProviderReconciliationStore:
         except ReconciliationValidationError as exc:
             raise AdminValidationError(str(exc)) from exc
         with self._connect() as connection:
-            connection.execute("BEGIN")
+            connection.execute("BEGIN IMMEDIATE")
             try:
                 actor = self._actor(
                     connection,

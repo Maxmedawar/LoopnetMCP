@@ -25,6 +25,10 @@ from cre_mcp.platform.entitlements import (
     EntitlementStore,
     _iso,
     _parse,
+    provider_entitlement_input_hash,
+    provider_external_account_hash,
+    provider_object_stream_hash,
+    provider_restrictive_state_input_hash,
 )
 
 
@@ -41,6 +45,7 @@ RESTRICTIVE_ACTIONS = frozenset(
         "banned",
         "loss_of_paid_level",
         "restrict",
+        "trialing_not_paid",
     }
 )
 PROVIDER_SOURCES = frozenset({"stripe", "skool"})
@@ -233,6 +238,15 @@ class NormalizedProviderEvent:
     mapping_keys: tuple[str, ...] = ()
     current_period_end: datetime | None = None
 
+    def entitlement_input_hash(self) -> str:
+        return provider_entitlement_input_hash(
+            provider=self.provider,
+            action=self.action,
+            subscription_status=self.subscription_status,
+            mapping_keys=self.mapping_keys,
+            current_period_end=self.current_period_end,
+        )
+
     def stored_data(self) -> dict[str, Any]:
         value = asdict(self)
         value["occurred_at"] = self.occurred_at.isoformat()
@@ -336,7 +350,7 @@ class ProviderSyncService:
             """
             UPDATE platform_provider_events
             SET outcome=?,reason_code=?,
-                workspace_id=COALESCE(?,workspace_id),
+                workspace_id=COALESCE(workspace_id,?),
                 replayed_at=CASE WHEN ? THEN ? ELSE replayed_at END,
                 updated_at=?
             WHERE id=?
@@ -362,6 +376,7 @@ class ProviderSyncService:
         workspace_id: int | None = None,
         replay: bool = False,
         attempt_outcome: str | None = None,
+        record_attempt: bool = True,
     ) -> SyncResult:
         self._set_event(
             connection,
@@ -378,7 +393,8 @@ class ProviderSyncService:
                 or reason_code == "plan_not_found"
                 else "quarantined"
             )
-        self._attempt(connection, event_db_id, attempt_outcome, reason_code)
+        if record_attempt:
+            self._attempt(connection, event_db_id, attempt_outcome, reason_code)
         logger.warning(
             "provider_event_quarantined",
             extra={
@@ -394,6 +410,280 @@ class ProviderSyncService:
             "quarantined",
             reason_code,
             workspace_id,
+        )
+
+    def _quarantine_replay_binding_mismatch(
+        self,
+        connection: sqlite3.Connection,
+        receipt: sqlite3.Row,
+        *,
+        reason_code: str = "receipt_binding_mismatch",
+    ) -> SyncResult:
+        """Fail closed using only immutable receipt metadata."""
+        event_db_id = int(receipt["id"])
+        workspace_id = (
+            int(receipt["workspace_id"])
+            if receipt["workspace_id"] is not None
+            else None
+        )
+        self._set_event(
+            connection,
+            event_db_id,
+            outcome="quarantined",
+            reason_code=reason_code,
+            replayed=True,
+        )
+        self._attempt(
+            connection,
+            event_db_id,
+            "quarantined",
+            reason_code,
+        )
+        logger.warning(
+            "provider_event_quarantined",
+            extra={
+                "provider": str(receipt["provider"]),
+                "provider_event_db_id": event_db_id,
+                "reason_code": reason_code,
+                "workspace_id": workspace_id,
+            },
+        )
+        return SyncResult(
+            event_db_id,
+            str(receipt["event_id"]),
+            "quarantined",
+            reason_code,
+            workspace_id,
+        )
+
+    @staticmethod
+    def _validated_replay_event(
+        receipt: sqlite3.Row,
+    ) -> NormalizedProviderEvent | None:
+        """Bind replay data to canonical receipt identity before resolution."""
+        try:
+            data = json.loads(str(receipt["normalized_data"]))
+            if not isinstance(data, dict) or not data:
+                return None
+            event = NormalizedProviderEvent.from_stored_data(data)
+            receipt_occurred_at = _parse(str(receipt["occurred_at"]))
+            receipt_rank = int(receipt["restrictive_rank"])
+            receipt_action = (
+                str(receipt["canonical_action"])
+                if receipt["canonical_action"] is not None
+                else None
+            )
+        except (
+            AttributeError,
+            KeyError,
+            TypeError,
+            ValueError,
+            OverflowError,
+        ):
+            return None
+
+        if (
+            event.provider != str(receipt["provider"])
+            or event.event_id != str(receipt["event_id"])
+            or event.event_type != str(receipt["event_type"])
+            or event.occurred_at.tzinfo is None
+            or receipt_occurred_at is None
+            or _iso(event.occurred_at) != _iso(receipt_occurred_at)
+            or receipt_action is None
+            or event.action != receipt_action
+            or receipt_rank != int(event.action in RESTRICTIVE_ACTIONS)
+        ):
+            return None
+        if (
+            event.external_account_id is not None
+            and not isinstance(event.external_account_id, str)
+        ) or (
+            event.external_object_id is not None
+            and not isinstance(event.external_object_id, str)
+        ):
+            return None
+        if (
+            event.subscription_status is not None
+            and not isinstance(event.subscription_status, str)
+        ) or any(not isinstance(key, str) for key in event.mapping_keys):
+            return None
+        if (
+            event.current_period_end is not None
+            and event.current_period_end.tzinfo is None
+        ):
+            return None
+
+        receipt_account_hash = receipt["external_account_hash"]
+        replay_account_hash = (
+            provider_external_account_hash(
+                event.provider,
+                event.external_account_id,
+            )
+            if event.external_account_id is not None
+            else None
+        )
+        if receipt_account_hash is None or replay_account_hash is None:
+            if (
+                receipt_account_hash is not None
+                or replay_account_hash is not None
+            ):
+                return None
+        elif not hmac.compare_digest(
+            str(receipt_account_hash),
+            replay_account_hash,
+        ):
+            return None
+
+        receipt_stream_hash = receipt["object_stream_hash"]
+        replay_stream_hash = (
+            provider_object_stream_hash(
+                event.provider,
+                event.external_object_id,
+            )
+            if event.external_object_id is not None
+            else None
+        )
+        if receipt_stream_hash is None or replay_stream_hash is None:
+            if receipt_stream_hash is not None or replay_stream_hash is not None:
+                return None
+        elif not hmac.compare_digest(
+            str(receipt_stream_hash),
+            replay_stream_hash,
+        ):
+            return None
+        receipt_entitlement_hash = receipt["entitlement_input_hash"]
+        if (
+            receipt_entitlement_hash is None
+            or not isinstance(receipt_entitlement_hash, str)
+            or len(receipt_entitlement_hash) != 67
+            or not receipt_entitlement_hash.startswith("v1:")
+            or any(
+                character not in "0123456789abcdef"
+                for character in receipt_entitlement_hash[3:]
+            )
+        ):
+            return None
+        replay_entitlement_hash = event.entitlement_input_hash()
+        if not hmac.compare_digest(
+            receipt_entitlement_hash,
+            replay_entitlement_hash,
+        ):
+            legacy_restrictive_hash = (
+                provider_restrictive_state_input_hash(
+                    event.provider,
+                    event.action,
+                )
+                if (
+                    event.action in RESTRICTIVE_ACTIONS
+                    and receipt["workspace_id"] is not None
+                    and receipt["bound_subject_user_id"] is not None
+                    and str(receipt["bound_scope"]) == "subject"
+                    and receipt["bound_plan_key"] is None
+                    and receipt["bound_profile"] is None
+                )
+                else None
+            )
+            if (
+                legacy_restrictive_hash is None
+                or not hmac.compare_digest(
+                    receipt_entitlement_hash,
+                    legacy_restrictive_hash,
+                )
+            ):
+                return None
+        return event
+
+    @staticmethod
+    def _bind_resolved_receipt_tx(
+        connection: sqlite3.Connection,
+        event_db_id: int,
+        workspace_id: int,
+        subject_user_id: int,
+        scope: str,
+    ) -> bool:
+        """Bind resolved authority once and reject every conflicting value."""
+        cursor = connection.execute(
+            """
+            UPDATE platform_provider_events
+            SET workspace_id=COALESCE(workspace_id,?),
+                bound_subject_user_id=COALESCE(bound_subject_user_id,?),
+                bound_scope=COALESCE(bound_scope,?)
+            WHERE id=?
+              AND (workspace_id IS NULL OR workspace_id=?)
+              AND (
+                  bound_subject_user_id IS NULL
+                  OR bound_subject_user_id=?
+              )
+              AND (bound_scope IS NULL OR bound_scope=?)
+            """,
+            (
+                workspace_id,
+                subject_user_id,
+                scope,
+                event_db_id,
+                workspace_id,
+                subject_user_id,
+                scope,
+            ),
+        )
+        if cursor.rowcount != 1:
+            return False
+        bound = connection.execute(
+            """
+            SELECT workspace_id,bound_subject_user_id,bound_scope
+            FROM platform_provider_events
+            WHERE id=?
+            """,
+            (event_db_id,),
+        ).fetchone()
+        return (
+            bound is not None
+            and bound["workspace_id"] is not None
+            and int(bound["workspace_id"]) == workspace_id
+            and bound["bound_subject_user_id"] is not None
+            and int(bound["bound_subject_user_id"]) == subject_user_id
+            and str(bound["bound_scope"]) == scope
+        )
+
+    @staticmethod
+    def _bind_entitlement_target_tx(
+        connection: sqlite3.Connection,
+        event_db_id: int,
+        mapping: ProviderPlanMapping,
+    ) -> bool:
+        """Bind a newly configured selector once, then require an exact target."""
+        row = connection.execute(
+            """
+            SELECT bound_plan_key,bound_profile
+            FROM platform_provider_events WHERE id=?
+            """,
+            (event_db_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        bound_plan_key = row["bound_plan_key"]
+        bound_profile = row["bound_profile"]
+        if (bound_plan_key is None) != (bound_profile is None):
+            return False
+        if bound_plan_key is None:
+            cursor = connection.execute(
+                """
+                UPDATE platform_provider_events
+                SET bound_plan_key=?,bound_profile=?
+                WHERE id=?
+                  AND bound_plan_key IS NULL
+                  AND bound_profile IS NULL
+                """,
+                (
+                    mapping.plan_key,
+                    mapping.profile.value,
+                    event_db_id,
+                ),
+            )
+            return cursor.rowcount == 1
+        return (
+            str(bound_plan_key) == mapping.plan_key
+            and str(bound_profile) == mapping.profile.value
         )
 
     def _resolve_subject(
@@ -415,6 +705,75 @@ class ProviderSyncService:
             return None
         workspace_id = int(rows[0]["workspace_id"])
         subject_user_id = int(rows[0]["subject_user_id"])
+        membership = connection.execute(
+            """
+            SELECT 1 FROM platform_memberships
+            WHERE workspace_id=? AND user_id=?
+            """,
+            (workspace_id, subject_user_id),
+        ).fetchone()
+        if membership is None:
+            return None
+        return workspace_id, subject_user_id
+
+    @staticmethod
+    def _resolve_restrictive_subject_from_state(
+        connection: sqlite3.Connection,
+        event_db_id: int,
+        event: NormalizedProviderEvent,
+    ) -> tuple[int, int] | None:
+        """Resolve a restrictive replay from exact persisted provider state."""
+        if (
+            event.action not in RESTRICTIVE_ACTIONS
+            or event.external_object_id is None
+        ):
+            return None
+        receipt = connection.execute(
+            """
+            SELECT workspace_id,provider
+            FROM platform_provider_events
+            WHERE id=?
+            """,
+            (event_db_id,),
+        ).fetchone()
+        if (
+            receipt is None
+            or receipt["workspace_id"] is None
+            or str(receipt["provider"]) != event.provider
+        ):
+            return None
+        workspace_id = int(receipt["workspace_id"])
+        grants = connection.execute(
+            """
+            SELECT workspace_id,subject_user_id,scope
+            FROM platform_access_grants
+            WHERE source=? AND external_ref=?
+            """,
+            (event.provider, event.external_object_id),
+        ).fetchall()
+        if len(grants) != 1:
+            return None
+        grant = grants[0]
+        if (
+            int(grant["workspace_id"]) != workspace_id
+            or str(grant["scope"]) != "subject"
+            or grant["subject_user_id"] is None
+        ):
+            return None
+        subscription = connection.execute(
+            """
+            SELECT workspace_id
+            FROM platform_subscriptions
+            WHERE provider=? AND external_subscription_id=?
+            """,
+            (event.provider, event.external_object_id),
+        ).fetchone()
+        if (
+            subscription is not None
+            and int(subscription["workspace_id"]) != workspace_id
+        ):
+            return None
+        subject_user_id = int(grant["subject_user_id"])
         membership = connection.execute(
             """
             SELECT 1 FROM platform_memberships
@@ -462,32 +821,34 @@ class ProviderSyncService:
         return str(row["state"]) if row is not None else None
 
     @staticmethod
-    def _last_journal_event_at(
+    def _last_journal_event_order(
         connection: sqlite3.Connection,
         event_db_id: int,
         event: NormalizedProviderEvent,
-    ) -> datetime | None:
+    ) -> tuple[datetime, int] | None:
         """Return the latest canonical receipt for this provider object stream."""
         if event.external_object_id is None:
             return None
-        rows = connection.execute(
+        row = connection.execute(
             """
-            SELECT normalized_data,occurred_at
+            SELECT occurred_at,restrictive_rank
             FROM platform_provider_events
-            WHERE provider=? AND id<>?
+            WHERE provider=? AND object_stream_hash=? AND id<>?
+            ORDER BY occurred_at DESC,restrictive_rank DESC,id DESC
+            LIMIT 1
             """,
-            (event.provider, event_db_id),
-        ).fetchall()
-        matching: list[datetime] = []
-        for row in rows:
-            normalized = json.loads(str(row["normalized_data"]))
-            if (
-                normalized
-                and normalized.get("external_object_id")
-                == event.external_object_id
-            ):
-                matching.append(_parse(row["occurred_at"]))
-        return max(matching) if matching else None
+            (
+                event.provider,
+                provider_object_stream_hash(
+                    event.provider,
+                    event.external_object_id,
+                ),
+                event_db_id,
+            ),
+        ).fetchone()
+        if row is None:
+            return None
+        return (_parse(row["occurred_at"]), int(row["restrictive_rank"]))
 
     @staticmethod
     def _live_grant_exists(
@@ -523,12 +884,12 @@ class ProviderSyncService:
     ) -> bool:
         rows = connection.execute(
             """
-            SELECT source,subject_user_id,status,starts_at,ends_at
+            SELECT scope,subject_user_id,status,starts_at,ends_at
             FROM platform_access_grants
             WHERE workspace_id=?
               AND (
-                  source NOT IN ('stripe','skool')
-                  OR subject_user_id=?
+                  scope='workspace'
+                  OR (scope='subject' AND subject_user_id=?)
               )
             """,
             (workspace_id, subject_user_id),
@@ -660,16 +1021,23 @@ class ProviderSyncService:
             if subscription is not None
             else None
         )
-        journal_event_at = self._last_journal_event_at(
+        journal_order = self._last_journal_event_order(
             connection,
             event_db_id,
             event,
         )
-        if journal_event_at is not None and (
-            last_event_at is None or journal_event_at > last_event_at
+        last_order = (
+            (last_event_at, 0) if last_event_at is not None else None
+        )
+        if journal_order is not None and (
+            last_order is None or journal_order > last_order
         ):
-            last_event_at = journal_event_at
-        if last_event_at is not None and event.occurred_at < last_event_at:
+            last_order = journal_order
+        event_order = (
+            event.occurred_at,
+            int(event.action in RESTRICTIVE_ACTIONS),
+        )
+        if last_order is not None and event_order < last_order:
             return "stale"
 
         removal = event.action in RESTRICTIVE_ACTIONS
@@ -698,7 +1066,9 @@ class ProviderSyncService:
                 if grant is not None
                 else Profile.LOCAL_SCOUT
             )
-            subscription_status = "canceled"
+            subscription_status = (
+                "trialing" if event.action == "trialing_not_paid" else "canceled"
+            )
             grant_status = "revoked"
             period_end = (
                 _parse(subscription["current_period_end"])
@@ -722,7 +1092,7 @@ class ProviderSyncService:
             seconds=self.config.provider_grant_lease_seconds
         )
         grant_end = (
-            min(lease_end, period_end)
+            period_end
             if event.provider == "stripe" and period_end is not None
             else lease_end
         )
@@ -782,14 +1152,15 @@ class ProviderSyncService:
                 connection.execute(
                     """
                     INSERT INTO platform_access_grants(
-                        workspace_id,subject_user_id,source,external_ref,
+                        workspace_id,subject_user_id,scope,source,external_ref,
                         profile,plan_key,status,starts_at,ends_at,
                         created_at,updated_at
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         workspace_id,
                         subject_user_id,
+                        "subject",
                         event.provider,
                         external_ref,
                         profile.value,
@@ -813,7 +1184,8 @@ class ProviderSyncService:
             connection.execute(
                 """
                 UPDATE platform_access_grants
-                SET subject_user_id=?,profile=?,plan_key=?,status=?,
+                SET subject_user_id=?,scope='subject',
+                    profile=?,plan_key=?,status=?,
                     ends_at=?,updated_at=?
                 WHERE id=? AND workspace_id=? AND source=?
                 """,
@@ -893,6 +1265,12 @@ class ProviderSyncService:
 
         subject = self._resolve_subject(connection, event)
         if subject is None:
+            subject = self._resolve_restrictive_subject_from_state(
+                connection,
+                event_db_id,
+                event,
+            )
+        if subject is None:
             return self._quarantine(
                 connection,
                 event_db_id,
@@ -901,6 +1279,30 @@ class ProviderSyncService:
                 replay=replay,
             )
         workspace_id, subject_user_id = subject
+        if not self._bind_resolved_receipt_tx(
+            connection,
+            event_db_id,
+            workspace_id,
+            subject_user_id,
+            "subject",
+        ):
+            receipt = connection.execute(
+                "SELECT * FROM platform_provider_events WHERE id=?",
+                (event_db_id,),
+            ).fetchone()
+            assert receipt is not None
+            return self._quarantine(
+                connection,
+                event_db_id,
+                event,
+                "receipt_binding_mismatch",
+                workspace_id=(
+                    int(receipt["workspace_id"])
+                    if receipt["workspace_id"] is not None
+                    else None
+                ),
+                replay=replay,
+            )
         current_state = self._account_state(connection, workspace_id)
         if (
             current_state in OPERATOR_ONLY_ACCOUNT_STATES
@@ -944,6 +1346,19 @@ class ProviderSyncService:
                     )
         if event.action not in RESTRICTIVE_ACTIONS:
             assert mapping is not None
+            if not self._bind_entitlement_target_tx(
+                connection,
+                event_db_id,
+                mapping,
+            ):
+                return self._quarantine(
+                    connection,
+                    event_db_id,
+                    event,
+                    "receipt_binding_mismatch",
+                    workspace_id=workspace_id,
+                    replay=replay,
+                )
             plan = connection.execute(
                 "SELECT id FROM platform_plans WHERE key=?",
                 (mapping.plan_key,),
@@ -1005,52 +1420,74 @@ class ProviderSyncService:
                     replay=replay,
                 )
 
-        connection.execute("SAVEPOINT provider_projection")
-        try:
-            projection_outcome = self._projection_tx(
-                connection,
-                event,
-                event_db_id,
-                workspace_id,
-                subject_user_id,
-                mapping,
-            )
-        except ReconciliationValidationError as exc:
-            connection.execute("ROLLBACK TO provider_projection")
-            connection.execute("RELEASE provider_projection")
-            return self._quarantine(
-                connection,
-                event_db_id,
-                event,
-                str(exc),
-                workspace_id=workspace_id,
-                replay=replay,
-            )
-        except ValueError:
-            connection.execute("ROLLBACK TO provider_projection")
-            connection.execute("RELEASE provider_projection")
-            return self._quarantine(
-                connection,
-                event_db_id,
-                event,
-                "invalid_transition",
-                workspace_id=workspace_id,
-                replay=replay,
-            )
-        except sqlite3.Error:
-            connection.execute("ROLLBACK TO provider_projection")
-            connection.execute("RELEASE provider_projection")
-            return self._quarantine(
-                connection,
-                event_db_id,
-                event,
-                "projection_failure",
-                workspace_id=workspace_id,
-                replay=replay,
-                attempt_outcome="failure",
-            )
-        else:
-            connection.execute("RELEASE provider_projection")
+        attempt_limit = 3 if event.action in RESTRICTIVE_ACTIONS else 1
+        for attempt_number in range(1, attempt_limit + 1):
+            savepoint = f"provider_projection_{attempt_number}"
+            connection.execute(f"SAVEPOINT {savepoint}")
+            try:
+                projection_outcome = self._projection_tx(
+                    connection,
+                    event,
+                    event_db_id,
+                    workspace_id,
+                    subject_user_id,
+                    mapping,
+                )
+            except ReconciliationValidationError as exc:
+                connection.execute(f"ROLLBACK TO {savepoint}")
+                connection.execute(f"RELEASE {savepoint}")
+                return self._quarantine(
+                    connection,
+                    event_db_id,
+                    event,
+                    str(exc),
+                    workspace_id=workspace_id,
+                    replay=replay,
+                )
+            except ValueError:
+                connection.execute(f"ROLLBACK TO {savepoint}")
+                connection.execute(f"RELEASE {savepoint}")
+                return self._quarantine(
+                    connection,
+                    event_db_id,
+                    event,
+                    "invalid_transition",
+                    workspace_id=workspace_id,
+                    replay=replay,
+                )
+            except sqlite3.Error:
+                connection.execute(f"ROLLBACK TO {savepoint}")
+                connection.execute(f"RELEASE {savepoint}")
+                self._attempt(
+                    connection,
+                    event_db_id,
+                    "failure",
+                    "projection_failure",
+                )
+                if attempt_number < attempt_limit:
+                    continue
+                if event.action in RESTRICTIVE_ACTIONS:
+                    logger.error(
+                        "provider_restrictive_retry_exhausted",
+                        extra={
+                            "provider": event.provider,
+                            "provider_event_db_id": event_db_id,
+                            "workspace_id": workspace_id,
+                            "attempt_count": attempt_limit,
+                        },
+                    )
+                return self._quarantine(
+                    connection,
+                    event_db_id,
+                    event,
+                    "projection_failure",
+                    workspace_id=workspace_id,
+                    replay=replay,
+                    record_attempt=False,
+                )
+            else:
+                connection.execute(f"RELEASE {savepoint}")
+                break
 
         if projection_outcome == "stale":
             self._set_event(
@@ -1097,11 +1534,16 @@ class ProviderSyncService:
                 workspace_id,
             )
         if projection_outcome == "no_provider_state":
+            reason_code = (
+                "trialing_not_paid"
+                if event.action == "trialing_not_paid"
+                else "no_provider_state"
+            )
             self._set_event(
                 connection,
                 event_db_id,
                 outcome="rejected",
-                reason_code="no_provider_state",
+                reason_code=reason_code,
                 workspace_id=workspace_id,
                 replayed=replay,
             )
@@ -1109,13 +1551,13 @@ class ProviderSyncService:
                 connection,
                 event_db_id,
                 "rejected",
-                "no_provider_state",
+                reason_code,
             )
             return SyncResult(
                 event_db_id,
                 event.event_id,
                 "rejected",
-                "no_provider_state",
+                reason_code,
                 workspace_id,
             )
 
@@ -1123,6 +1565,8 @@ class ProviderSyncService:
         applied_reason = (
             "loss_of_paid_level"
             if event.action == "loss_of_paid_level"
+            else "trialing_not_paid"
+            if event.action == "trialing_not_paid"
             else "admin_replay"
             if replay
             else None
@@ -1188,13 +1632,27 @@ class ProviderSyncService:
                     ),
                 )
             now = _iso(_now())
+            initial_mapping: ProviderPlanMapping | None = None
+            if (
+                event.action not in RESTRICTIVE_ACTIONS
+                and event.action not in {"payment_succeeded", "reject"}
+            ):
+                initial_mapping, _mapping_error = self._mapping(event)
+            entitlement_input_hash = event.entitlement_input_hash()
             cursor = connection.execute(
                 """
                 INSERT INTO platform_provider_events(
                     workspace_id,provider,event_id,event_type,payload,
                     normalized_data,occurred_at,outcome,reason_code,
-                    duplicate_count,replayed_at,created_at,updated_at
-                ) VALUES (NULL,?,?,?,?,?,?,'received',NULL,0,NULL,?,?)
+                    duplicate_count,replayed_at,object_stream_hash,
+                    restrictive_rank,canonical_action,
+                    external_account_hash,bound_subject_user_id,bound_scope,
+                    entitlement_input_hash,bound_plan_key,bound_profile,
+                    created_at,updated_at
+                ) VALUES (
+                    NULL,?,?,?,?,?,?,'received',NULL,0,NULL,?,?,?,?,
+                    NULL,NULL,?,?,?,?,?
+                )
                 """,
                 (
                     event.provider,
@@ -1207,6 +1665,35 @@ class ProviderSyncService:
                         separators=(",", ":"),
                     ),
                     _iso(event.occurred_at),
+                    (
+                        provider_object_stream_hash(
+                            event.provider,
+                            event.external_object_id,
+                        )
+                        if event.external_object_id is not None
+                        else None
+                    ),
+                    int(event.action in RESTRICTIVE_ACTIONS),
+                    event.action,
+                    (
+                        provider_external_account_hash(
+                            event.provider,
+                            event.external_account_id,
+                        )
+                        if event.external_account_id is not None
+                        else None
+                    ),
+                    entitlement_input_hash,
+                    (
+                        initial_mapping.plan_key
+                        if initial_mapping is not None
+                        else None
+                    ),
+                    (
+                        initial_mapping.profile.value
+                        if initial_mapping is not None
+                        else None
+                    ),
                     now,
                     now,
                 ),
@@ -1271,9 +1758,14 @@ class ProviderSyncService:
                 INSERT INTO platform_provider_events(
                     workspace_id,provider,event_id,event_type,payload,
                     normalized_data,occurred_at,outcome,reason_code,
-                    duplicate_count,replayed_at,created_at,updated_at
+                    duplicate_count,replayed_at,object_stream_hash,
+                    restrictive_rank,canonical_action,
+                    external_account_hash,bound_subject_user_id,bound_scope,
+                    entitlement_input_hash,bound_plan_key,bound_profile,
+                    created_at,updated_at
                 ) VALUES (NULL,?,?,?,?,?,?,'quarantined',?,
-                          0,NULL,?,?)
+                          0,NULL,NULL,0,'malformed',NULL,NULL,NULL,?,
+                          NULL,NULL,?,?)
                 """,
                 (
                     provider,
@@ -1283,6 +1775,7 @@ class ProviderSyncService:
                     "{}",
                     _iso(event.occurred_at),
                     reason_code,
+                    event.entitlement_input_hash(),
                     now,
                     now,
                 ),
@@ -1345,12 +1838,15 @@ class ProviderSyncService:
             raise ReconciliationConflictError(
                 "Provider event is not eligible for replay"
             )
-        data = json.loads(str(row["normalized_data"]))
-        if not data:
-            raise ReconciliationConflictError(
-                "Provider event has no replayable normalized data"
+        if str(row["reason_code"]) == "legacy_receipt_binding_untrusted":
+            return self._quarantine_replay_binding_mismatch(
+                connection,
+                row,
+                reason_code="legacy_receipt_binding_untrusted",
             )
-        event = NormalizedProviderEvent.from_stored_data(data)
+        event = self._validated_replay_event(row)
+        if event is None:
+            return self._quarantine_replay_binding_mismatch(connection, row)
         return self._process_existing_tx(
             connection,
             int(row["id"]),

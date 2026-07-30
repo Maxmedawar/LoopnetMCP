@@ -138,6 +138,12 @@ async def provision_identity(
             external_ref=f"profile-{workspace.public_id}",
             profile=profile,
             plan_key=plan_key,
+            subject_user_id=(
+                None if profile is Profile.JV_PARTNER else user.id
+            ),
+            scope=(
+                "workspace" if profile is Profile.JV_PARTNER else "subject"
+            ),
         )
 
     if internal_role is not None:

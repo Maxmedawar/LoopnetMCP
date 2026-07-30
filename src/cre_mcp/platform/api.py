@@ -463,10 +463,14 @@ class PlatformApi:
         for grant in self.entitlements.list_grants(
             authority.workspace.public_id
         ):
-            if (
-                grant.source in {"stripe", "skool"}
-                and grant.subject_user_id != authority.session.user_id
+            if grant.scope == "workspace":
+                pass
+            elif (
+                grant.scope == "subject"
+                and grant.subject_user_id == authority.session.user_id
             ):
+                pass
+            else:
                 continue
             grants.append(
                 {
@@ -648,6 +652,8 @@ class PlatformApi:
             status=body.get("status", "active"),
             starts_at=body.get("starts_at"),
             ends_at=body.get("ends_at"),
+            subject_user_id=body.get("subject_user_id"),
+            scope=body.get("scope"),
             reason_code=body.get("reason_code"),
             reason=body.get("reason"),
         )

@@ -159,6 +159,7 @@ class ExternalAccount(Record):
     metadata: dict = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+    subject_user_id: int | None = None
 
 
 class AdminAudit(Record):

@@ -1,5 +1,6 @@
 """Commercial account, subscription, and entitlement synchronization tests."""
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -25,6 +26,22 @@ async def _workspace(path):
     )
     assert membership is not None
     return workspace
+
+
+def _subject_id(path, workspace_id: int) -> int:
+    with sqlite3.connect(path) as connection:
+        row = connection.execute(
+            """
+            SELECT user_id
+            FROM platform_memberships
+            WHERE workspace_id=?
+            ORDER BY id
+            LIMIT 1
+            """,
+            (workspace_id,),
+        ).fetchone()
+    assert row is not None
+    return int(row[0])
 
 
 def test_stripe_activation_is_idempotent_and_grants_access(tmp_path):
@@ -59,7 +76,10 @@ def test_stripe_activation_is_idempotent_and_grants_access(tmp_path):
     assert replay.processed is False
     assert store.get_account(workspace.public_id).state == "active"
     assert store.get_subscription(workspace.public_id, "stripe", "sub_001").status == "active"
-    effective = store.effective_access(workspace.public_id)
+    effective = store.effective_access(
+        workspace.public_id,
+        subject_user_id=_subject_id(path, workspace.id),
+    )
     assert effective is not None
     assert effective.profile is Profile.FULL_OPERATOR
     assert effective.plan_key == "operator"
@@ -92,7 +112,10 @@ def test_subscription_upgrade_downgrade_and_cancel(tmp_path):
         plan_key="national",
         profile=Profile.NATIONAL_SCOUT,
     )
-    assert store.effective_access(workspace.id).profile is Profile.NATIONAL_SCOUT
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=_subject_id(path, workspace.id),
+    ).profile is Profile.NATIONAL_SCOUT
 
     store.apply_subscription_event(
         provider="stripe",
@@ -105,7 +128,10 @@ def test_subscription_upgrade_downgrade_and_cancel(tmp_path):
         profile=Profile.NATIONAL_SCOUT,
     )
     assert store.get_account(workspace.id).state == "canceled"
-    assert store.effective_access(workspace.id) is None
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=_subject_id(path, workspace.id),
+    ) is None
     assert store.list_grants(workspace.id)[0].status == "revoked"
 
 
@@ -148,7 +174,10 @@ def test_skool_join_leave_and_duplicate_event(tmp_path):
     assert joined.processed is True
     assert duplicate.processed is False
     assert left.processed is True
-    assert store.effective_access(workspace.public_id) is None
+    assert store.effective_access(
+        workspace.public_id,
+        subject_user_id=_subject_id(path, workspace.id),
+    ) is None
 
 
 def test_manual_and_jv_grants_expire_and_revoke(tmp_path):
@@ -156,6 +185,7 @@ def test_manual_and_jv_grants_expire_and_revoke(tmp_path):
     workspace = __import__("asyncio").run(_workspace(path))
     store = EntitlementStore(path)
     now = datetime.now(UTC)
+    subject_id = _subject_id(path, workspace.id)
 
     expired = store.grant_access(
         workspace=workspace.id,
@@ -164,6 +194,8 @@ def test_manual_and_jv_grants_expire_and_revoke(tmp_path):
         profile=Profile.FULL_OPERATOR,
         plan_key="operator",
         ends_at=now - timedelta(seconds=1),
+        subject_user_id=subject_id,
+        scope="subject",
     )
     jv = store.grant_access(
         workspace=workspace.id,
@@ -171,9 +203,13 @@ def test_manual_and_jv_grants_expire_and_revoke(tmp_path):
         external_ref="jv-7",
         profile=Profile.JV_PARTNER,
         plan_key="jv",
+        scope="workspace",
     )
     assert expired.status == "active"
-    assert store.effective_access(workspace.id).profile is Profile.JV_PARTNER
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=subject_id,
+    ).profile is Profile.JV_PARTNER
 
     manual = store.grant_access(
         workspace=workspace.id,
@@ -181,12 +217,23 @@ def test_manual_and_jv_grants_expire_and_revoke(tmp_path):
         external_ref="manual-1",
         profile=Profile.FULL_OPERATOR,
         plan_key="operator",
+        subject_user_id=subject_id,
+        scope="subject",
     )
-    assert store.effective_access(workspace.id).profile is Profile.FULL_OPERATOR
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=subject_id,
+    ).profile is Profile.FULL_OPERATOR
     assert store.revoke_grant(workspace.id, manual.id).status == "revoked"
-    assert store.effective_access(workspace.id).profile is Profile.JV_PARTNER
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=subject_id,
+    ).profile is Profile.JV_PARTNER
     assert store.revoke_grant(workspace.id, jv.id).status == "revoked"
-    assert store.effective_access(workspace.id) is None
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=subject_id,
+    ) is None
 
 
 def test_payment_failure_is_terminal_without_dunning_access(tmp_path):
@@ -208,7 +255,10 @@ def test_payment_failure_is_terminal_without_dunning_access(tmp_path):
     )
     assert store.get_account(workspace.id).state == "canceled"
     assert store.list_grants(workspace.id)[0].status == "revoked"
-    assert store.effective_access(workspace.id) is None
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=_subject_id(path, workspace.id),
+    ) is None
 
     store.set_account_state(workspace.id, "deleted", reason="privacy deletion complete")
     with pytest.raises(ValueError, match="transition"):
@@ -222,6 +272,7 @@ def test_unknown_workspace_and_cross_tenant_grant_access_are_denied(tmp_path):
     second = __import__("asyncio").run(repository.create_workspace("Other CRE"))
     assert second is not None
     store = EntitlementStore(path)
+    subject_id = _subject_id(path, first.id)
 
     grant = store.grant_access(
         workspace=first.id,
@@ -229,6 +280,8 @@ def test_unknown_workspace_and_cross_tenant_grant_access_are_denied(tmp_path):
         external_ref="manual-cross",
         profile=Profile.LOCAL_SCOUT,
         plan_key="local",
+        subject_user_id=subject_id,
+        scope="subject",
     )
     assert store.get_grant(second.id, grant.id) is None
     assert store.revoke_grant(second.id, grant.id) is None
@@ -239,6 +292,8 @@ def test_unknown_workspace_and_cross_tenant_grant_access_are_denied(tmp_path):
             external_ref="missing",
             profile=Profile.LOCAL_SCOUT,
             plan_key="local",
+            subject_user_id=subject_id,
+            scope="subject",
         )
 
 
@@ -292,7 +347,10 @@ def test_late_provider_event_is_journaled_without_reopening_canceled_account(tmp
     assert replay.processed is False
     assert store.get_account(workspace.id).state == "canceled"
     assert len(store.list_events(workspace.id)) == 3
-    assert store.effective_access(workspace.id) is None
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=_subject_id(path, workspace.id),
+    ) is None
 
 
 def test_invited_account_state_is_reachable_for_a_new_workspace(tmp_path):
@@ -340,7 +398,10 @@ def test_stale_active_provider_event_cannot_reopen_newer_canceled_state(tmp_path
         workspace.id, "stripe", "sub_ordered"
     ).status == "canceled"
     assert store.get_account(workspace.id).state == "canceled"
-    assert store.effective_access(workspace.id) is None
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=_subject_id(path, workspace.id),
+    ) is None
     assert len(store.list_events(workspace.id)) == 2
 
 
@@ -410,12 +471,16 @@ def test_provider_compatibility_path_preserves_same_state_operator_reason(
     )
 
     if compatibility_path == "grant":
+        subject_id = _subject_id(path, workspace.id)
         store.grant_access(
             workspace=workspace.id,
             source="stripe",
             external_ref="sub_reason",
             profile=Profile.LOCAL_SCOUT,
             plan_key="local",
+            ends_at=datetime.now(UTC) + timedelta(days=30),
+            subject_user_id=subject_id,
+            scope="subject",
         )
     else:
         store.apply_subscription_event(

@@ -80,6 +80,8 @@ async def test_admin_controls_cover_membership_grant_territory_and_account_state
                 "external_ref": "manual-managed-workspace",
                 "profile": "full_operator",
                 "plan_key": "pro",
+                "scope": "subject",
+                "subject_user_id": target.user_id,
                 **VALID_REASON,
             },
         )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import sqlite3
 from collections.abc import Callable, Iterator
@@ -19,6 +20,7 @@ from cre_mcp.access.profiles import Profile
 from cre_mcp.platform.entitlements import (
     ACCOUNT_STATES,
     ACCOUNT_TRANSITIONS,
+    GRANT_SCOPES,
     GRANT_STATUSES,
     PROVIDERS,
     EntitlementStore,
@@ -104,6 +106,16 @@ def _positive_int(value: Any, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise AdminValidationError(f"{label} must be a positive integer")
     return value
+
+
+def _provider_slug(value: Any) -> str:
+    normalized = _required(value, "provider").casefold()
+    if (
+        len(normalized) > 64
+        or re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", normalized) is None
+    ):
+        raise AdminValidationError("provider must be a safe normalized slug")
+    return normalized
 
 
 def validate_reason(reason_code: Any, reason: Any) -> tuple[str, str]:
@@ -594,6 +606,8 @@ class AdminControlStore:
         status: Any = "active",
         starts_at: Any = None,
         ends_at: Any = None,
+        subject_user_id: Any = None,
+        scope: Any = None,
     ) -> dict[str, Any]:
         normalized_source = _choice(
             source,
@@ -607,6 +621,22 @@ class AdminControlStore:
             raise AdminValidationError("profile is not recognized") from exc
         normalized_plan = _required(plan_key, "plan_key")
         normalized_status = _choice(status, GRANT_STATUSES, "status")
+        normalized_scope = _choice(scope, GRANT_SCOPES, "scope")
+        if normalized_scope == "workspace":
+            if normalized_source != "jv":
+                raise AdminValidationError(
+                    "workspace scope is only valid for jv grants"
+                )
+            if subject_user_id is not None:
+                raise AdminValidationError(
+                    "workspace grant cannot identify a subject"
+                )
+            normalized_subject_user_id = None
+        else:
+            normalized_subject_user_id = _positive_int(
+                subject_user_id,
+                "subject_user_id",
+            )
         start = _datetime(starts_at, "starts_at") or _now()
         end = _datetime(ends_at, "ends_at")
         if end is not None and end <= start:
@@ -615,16 +645,30 @@ class AdminControlStore:
         def operation(connection: sqlite3.Connection) -> MutationResult:
             workspace = self._workspace(connection, public_id)
             workspace_id = int(workspace["id"])
+            if normalized_subject_user_id is not None:
+                membership = connection.execute(
+                    """
+                    SELECT 1 FROM platform_memberships
+                    WHERE workspace_id=? AND user_id=?
+                    """,
+                    (workspace_id, normalized_subject_user_id),
+                ).fetchone()
+                if membership is None:
+                    raise AdminValidationError(
+                        "subject_user_id must identify a workspace member"
+                    )
             now = _iso(_now())
             cursor = connection.execute(
                 """
                 INSERT INTO platform_access_grants(
-                    workspace_id,source,external_ref,profile,plan_key,status,
-                    starts_at,ends_at,created_at,updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?)
+                    workspace_id,subject_user_id,scope,source,external_ref,
+                    profile,plan_key,status,starts_at,ends_at,created_at,updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     workspace_id,
+                    normalized_subject_user_id,
+                    normalized_scope,
                     normalized_source,
                     normalized_external_ref,
                     normalized_profile,
@@ -837,15 +881,23 @@ class AdminControlStore:
         reason: Any,
         metadata: Any = None,
     ) -> dict[str, Any]:
-        normalized_provider = _choice(provider, PROVIDERS, "provider")
+        normalized_provider = _provider_slug(provider)
         normalized_external_id = _required(
             external_account_id,
             "external_account_id",
         )
-        normalized_subject_user_id = _positive_int(
-            subject_user_id,
-            "subject_user_id",
-        )
+        if normalized_provider in PROVIDERS:
+            normalized_subject_user_id = _positive_int(
+                subject_user_id,
+                "subject_user_id",
+            )
+        elif subject_user_id is None:
+            normalized_subject_user_id = None
+        else:
+            normalized_subject_user_id = _positive_int(
+                subject_user_id,
+                "subject_user_id",
+            )
         if metadata is None:
             normalized_metadata: dict[str, Any] = {}
         elif isinstance(metadata, dict):
@@ -856,17 +908,18 @@ class AdminControlStore:
         def operation(connection: sqlite3.Connection) -> MutationResult:
             workspace = self._workspace(connection, public_id)
             workspace_id = int(workspace["id"])
-            membership = connection.execute(
-                """
-                SELECT 1 FROM platform_memberships
-                WHERE workspace_id=? AND user_id=?
-                """,
-                (workspace_id, normalized_subject_user_id),
-            ).fetchone()
-            if membership is None:
-                raise AdminValidationError(
-                    "subject_user_id must identify a workspace member"
-                )
+            if normalized_subject_user_id is not None:
+                membership = connection.execute(
+                    """
+                    SELECT 1 FROM platform_memberships
+                    WHERE workspace_id=? AND user_id=?
+                    """,
+                    (workspace_id, normalized_subject_user_id),
+                ).fetchone()
+                if membership is None:
+                    raise AdminValidationError(
+                        "subject_user_id must identify a workspace member"
+                    )
             now = _iso(_now())
             cursor = connection.execute(
                 """

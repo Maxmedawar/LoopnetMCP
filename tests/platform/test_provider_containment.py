@@ -35,6 +35,22 @@ async def _post(config, provider, event):
         )
 
 
+def _subject_id(path, workspace_id: int) -> int:
+    with sqlite3.connect(path) as connection:
+        row = connection.execute(
+            """
+            SELECT user_id
+            FROM platform_memberships
+            WHERE workspace_id=?
+            ORDER BY id
+            LIMIT 1
+            """,
+            (workspace_id,),
+        ).fetchone()
+    assert row is not None
+    return int(row[0])
+
+
 @pytest.mark.parametrize(
     "provider,survivor_source",
     [
@@ -61,6 +77,19 @@ async def test_provider_revocation_preserves_every_other_source(
         skool_member="shared_ref",
     )
     store = EntitlementStore(config.cache_db_path)
+    grant_scope = (
+        {"scope": "workspace"}
+        if survivor_source == "jv"
+        else {
+            "subject_user_id": _subject_id(
+                config.cache_db_path,
+                workspace.id,
+            ),
+            "scope": "subject",
+        }
+    )
+    if survivor_source in {"stripe", "skool"}:
+        grant_scope["ends_at"] = datetime.now(UTC) + timedelta(days=30)
     store.grant_access(
         workspace=workspace.id,
         source=survivor_source,
@@ -69,6 +98,7 @@ async def test_provider_revocation_preserves_every_other_source(
         if survivor_source == "jv"
         else Profile.NATIONAL_SCOUT,
         plan_key="jv" if survivor_source == "jv" else "national",
+        **grant_scope,
     )
 
     if provider == "stripe":
@@ -121,7 +151,10 @@ async def test_provider_revocation_preserves_every_other_source(
     assert grants[provider].status == "revoked"
     assert grants[survivor_source].status == "active"
     assert store.get_account(workspace.id).state == "active"
-    effective = store.effective_access(workspace.id)
+    effective = store.effective_access(
+        workspace.id,
+        subject_user_id=_subject_id(config.cache_db_path, workspace.id),
+    )
     assert effective is not None
     assert survivor_source in effective.sources
 
@@ -335,6 +368,8 @@ async def test_expired_survivor_does_not_prevent_derived_cancellation(tmp_path):
         profile=Profile.FULL_OPERATOR,
         plan_key="operator",
         ends_at=datetime.now(UTC) - timedelta(seconds=1),
+        subject_user_id=_subject_id(config.cache_db_path, workspace.id),
+        scope="subject",
     )
     await _post(
         config,
@@ -355,7 +390,10 @@ async def test_expired_survivor_does_not_prevent_derived_cancellation(tmp_path):
     )
 
     assert store.get_account(workspace.id).state == "canceled"
-    assert store.effective_access(workspace.id) is None
+    assert store.effective_access(
+        workspace.id,
+        subject_user_id=_subject_id(config.cache_db_path, workspace.id),
+    ) is None
 
 
 async def test_projection_trigger_failure_records_payload_free_failure_only(tmp_path):

@@ -1,6 +1,8 @@
 """Commercial account and entitlement persistence."""
 from __future__ import annotations
+import hashlib
 import json
+import logging
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -12,6 +14,7 @@ from cre_mcp.access.profiles import Profile
 from cre_mcp.platform.migrations import Migration, apply_migrations
 from cre_mcp.platform.schema import create_schema
 WorkspaceRef = int | str
+logger = logging.getLogger(__name__)
 ACCOUNT_STATES = (
     "invited", "registered", "verified", "active", "past_due",
     "grace_period", "suspended", "under_review", "canceled",
@@ -24,7 +27,12 @@ SUBSCRIPTION_STATUSES = (
     "paused", "canceled", "unpaid",
 )
 PROVIDERS = ("stripe", "skool")
+GRANT_SCOPES = ("subject", "workspace")
 DEFAULT_PROVIDER_GRANT_LEASE = timedelta(days=1)
+PROVIDER_ENTITLEMENT_INPUT_HASH_VERSION = "v1"
+PROVIDER_ENTITLEMENT_INPUT_HASH_DOMAIN = (
+    b"cre-provider-entitlement-input:v1\0"
+)
 ACCOUNT_TRANSITIONS = {
     "invited": frozenset({"registered", "verified", "active", "suspended", "canceled", "deleted"}),
     "registered": frozenset({"verified", "active", "past_due", "suspended", "canceled", "deletion_pending", "deleted"}),
@@ -61,6 +69,89 @@ def _choice(value: str, values: tuple[str, ...], label: str) -> str:
     if normalized not in values:
         raise ValueError(f"{label} must be one of {', '.join(values)}")
     return normalized
+
+
+def provider_entitlement_input_canonical_json(
+    *,
+    provider: str,
+    action: str,
+    subscription_status: str | None,
+    mapping_keys: tuple[str, ...],
+    current_period_end: datetime | None,
+) -> str:
+    """Canonicalize every replay field that can alter entitlement authority."""
+    if not isinstance(provider, str) or not provider:
+        raise ValueError("provider entitlement input is invalid")
+    if not isinstance(action, str) or not action:
+        raise ValueError("provider entitlement action is invalid")
+    if (
+        subscription_status is not None
+        and not isinstance(subscription_status, str)
+    ):
+        raise ValueError("provider entitlement status is invalid")
+    if not isinstance(mapping_keys, tuple) or any(
+        not isinstance(key, str) for key in mapping_keys
+    ):
+        raise ValueError("provider entitlement selectors are invalid")
+    if (
+        current_period_end is not None
+        and current_period_end.tzinfo is None
+    ):
+        raise ValueError("provider entitlement paid-through is invalid")
+    return json.dumps(
+        {
+            "action": action,
+            "current_period_end": _iso(current_period_end),
+            "mapping_keys": list(mapping_keys),
+            "provider": provider,
+            "subscription_status": subscription_status,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def provider_entitlement_input_hash(
+    *,
+    provider: str,
+    action: str,
+    subscription_status: str | None,
+    mapping_keys: tuple[str, ...],
+    current_period_end: datetime | None,
+) -> str:
+    canonical = provider_entitlement_input_canonical_json(
+        provider=provider,
+        action=action,
+        subscription_status=subscription_status,
+        mapping_keys=mapping_keys,
+        current_period_end=current_period_end,
+    )
+    digest = hashlib.sha256(
+        PROVIDER_ENTITLEMENT_INPUT_HASH_DOMAIN
+        + canonical.encode("utf-8")
+    ).hexdigest()
+    return f"{PROVIDER_ENTITLEMENT_INPUT_HASH_VERSION}:{digest}"
+
+
+def provider_restrictive_state_input_hash(
+    provider: str,
+    action: str,
+) -> str:
+    """Bind a legacy restrictive replay to state-derived, non-extending inputs."""
+    return provider_entitlement_input_hash(
+        provider=provider,
+        action=action,
+        subscription_status=None,
+        mapping_keys=(),
+        current_period_end=None,
+    )
+
+
+def provider_entitlement_target(
+    plan_key: str,
+    profile: Profile,
+) -> tuple[str, str]:
+    return (_required(plan_key, "plan_key"), Profile(profile).value)
 @dataclass(frozen=True)
 class AccountRecord:
     workspace_id: int
@@ -87,6 +178,7 @@ class AccessGrant:
     id: int
     workspace_id: int
     subject_user_id: int | None
+    scope: str
     source: str
     external_ref: str
     profile: Profile
@@ -730,6 +822,1018 @@ def _provider_sync_v2(connection: sqlite3.Connection) -> None:
         connection.execute(statement)
 
 
+_RESTRICTIVE_PROVIDER_ACTIONS = frozenset(
+    {
+        "cancel",
+        "pause",
+        "restrict",
+        "payment_failed",
+        "membership_remove",
+        "loss_of_paid_level",
+        "trialing_not_paid",
+        "remove",
+        "banned",
+    }
+)
+
+
+def provider_object_stream_hash(
+    provider: str,
+    external_object_id: str,
+) -> str:
+    """Return a domain-separated, irreversible provider object stream key."""
+    return hashlib.sha256(
+        f"{provider}\0{external_object_id}".encode("utf-8")
+    ).hexdigest()
+
+
+def provider_external_account_hash(
+    provider: str,
+    external_account_id: str,
+) -> str:
+    """Return a domain-separated, irreversible provider account key."""
+    return hashlib.sha256(
+        f"{provider}\0{external_account_id}".encode("utf-8")
+    ).hexdigest()
+
+
+def _provider_sync_v3(connection: sqlite3.Connection) -> None:
+    """Make grant scope and provider stream ordering explicit and durable."""
+    grant_columns = {
+        str(row[1])
+        for row in connection.execute(
+            "PRAGMA table_info(platform_access_grants)"
+        )
+    }
+    if "scope" not in grant_columns:
+        connection.execute(
+            "ALTER TABLE platform_access_grants ADD COLUMN scope TEXT"
+        )
+
+    event_columns = {
+        str(row[1])
+        for row in connection.execute(
+            "PRAGMA table_info(platform_provider_events)"
+        )
+    }
+    if "object_stream_hash" not in event_columns:
+        connection.execute(
+            """
+            ALTER TABLE platform_provider_events
+            ADD COLUMN object_stream_hash TEXT
+            """
+        )
+    if "restrictive_rank" not in event_columns:
+        connection.execute(
+            """
+            ALTER TABLE platform_provider_events
+            ADD COLUMN restrictive_rank INTEGER NOT NULL DEFAULT 0
+            """
+        )
+
+    now_iso = _iso(_now())
+    affected: dict[int, set[int]] = {}
+
+    def mark_workspace_subjects(workspace_id: int) -> None:
+        subjects = connection.execute(
+            """
+            SELECT user_id FROM platform_memberships
+            WHERE workspace_id=?
+            """,
+            (workspace_id,),
+        ).fetchall()
+        affected.setdefault(workspace_id, set()).update(
+            int(row["user_id"]) for row in subjects
+        )
+
+    ambiguous_rows = connection.execute(
+        """
+        SELECT DISTINCT workspace_id
+        FROM platform_access_grants
+        WHERE source IN ('manual','promotion')
+          AND subject_user_id IS NULL
+          AND status IN ('pending','active','overridden','expiring')
+        """
+    ).fetchall()
+    for row in ambiguous_rows:
+        mark_workspace_subjects(int(row["workspace_id"]))
+
+    trialing_rows = connection.execute(
+        """
+        SELECT DISTINCT grant.workspace_id,grant.subject_user_id
+        FROM platform_access_grants AS grant
+        JOIN platform_subscriptions AS subscription
+          ON subscription.workspace_id=grant.workspace_id
+         AND subscription.provider='stripe'
+         AND subscription.external_subscription_id=grant.external_ref
+        WHERE grant.source='stripe'
+          AND subscription.status='trialing'
+          AND grant.status IN ('pending','active','overridden','expiring')
+        """
+    ).fetchall()
+    for row in trialing_rows:
+        workspace_id = int(row["workspace_id"])
+        if row["subject_user_id"] is None:
+            mark_workspace_subjects(workspace_id)
+        else:
+            affected.setdefault(workspace_id, set()).add(
+                int(row["subject_user_id"])
+            )
+
+    authoritative_period_rows = connection.execute(
+        """
+        SELECT DISTINCT grant.workspace_id,grant.subject_user_id
+        FROM platform_access_grants AS grant
+        JOIN platform_subscriptions AS subscription
+          ON subscription.workspace_id=grant.workspace_id
+         AND subscription.provider='stripe'
+         AND subscription.external_subscription_id=grant.external_ref
+        WHERE grant.source='stripe'
+          AND grant.status IN ('pending','active','overridden','expiring')
+          AND subscription.status='active'
+          AND subscription.current_period_end IS NOT NULL
+        """
+    ).fetchall()
+    for row in authoritative_period_rows:
+        workspace_id = int(row["workspace_id"])
+        if row["subject_user_id"] is None:
+            mark_workspace_subjects(workspace_id)
+        else:
+            affected.setdefault(workspace_id, set()).add(
+                int(row["subject_user_id"])
+            )
+
+    connection.execute(
+        """
+        UPDATE platform_access_grants
+        SET scope='subject'
+        WHERE source IN ('stripe','skool')
+        """
+    )
+    connection.execute(
+        """
+        UPDATE platform_access_grants
+        SET scope='workspace',subject_user_id=NULL
+        WHERE source='jv'
+        """
+    )
+    connection.execute(
+        """
+        UPDATE platform_access_grants
+        SET subject_user_id=(
+            SELECT MIN(m.user_id)
+            FROM platform_memberships AS m
+            WHERE m.workspace_id=platform_access_grants.workspace_id
+            HAVING COUNT(*)=1
+        )
+        WHERE source IN ('manual','promotion')
+          AND subject_user_id IS NULL
+        """
+    )
+    connection.execute(
+        """
+        UPDATE platform_access_grants
+        SET scope='subject'
+        WHERE source IN ('manual','promotion')
+        """
+    )
+    connection.execute(
+        """
+        UPDATE platform_access_grants
+        SET status='revoked',ends_at=COALESCE(ends_at,?),updated_at=?
+        WHERE source IN ('manual','promotion')
+          AND subject_user_id IS NULL
+          AND status IN ('pending','active','overridden','expiring')
+        """,
+        (now_iso, now_iso),
+    )
+    connection.execute(
+        """
+        UPDATE platform_access_grants
+        SET status='revoked',ends_at=COALESCE(ends_at,?),updated_at=?
+        WHERE source='stripe'
+          AND status IN ('pending','active','overridden','expiring')
+          AND EXISTS (
+              SELECT 1 FROM platform_subscriptions AS subscription
+              WHERE subscription.workspace_id=
+                    platform_access_grants.workspace_id
+                AND subscription.provider='stripe'
+                AND subscription.external_subscription_id=
+                    platform_access_grants.external_ref
+                AND subscription.status='trialing'
+          )
+        """,
+        (now_iso, now_iso),
+    )
+    connection.execute(
+        """
+        UPDATE platform_access_grants
+        SET ends_at=(
+                SELECT subscription.current_period_end
+                FROM platform_subscriptions AS subscription
+                WHERE subscription.workspace_id=
+                      platform_access_grants.workspace_id
+                  AND subscription.provider='stripe'
+                  AND subscription.external_subscription_id=
+                      platform_access_grants.external_ref
+            ),
+            updated_at=?
+        WHERE source='stripe'
+          AND status IN ('active','overridden','expiring')
+          AND EXISTS (
+              SELECT 1 FROM platform_subscriptions AS subscription
+              WHERE subscription.workspace_id=
+                    platform_access_grants.workspace_id
+                AND subscription.provider='stripe'
+                AND subscription.external_subscription_id=
+                    platform_access_grants.external_ref
+                AND subscription.current_period_end IS NOT NULL
+                AND subscription.status='active'
+          )
+        """,
+        (now_iso,),
+    )
+
+    for row in connection.execute(
+        """
+        SELECT id,provider,normalized_data
+        FROM platform_provider_events
+        """
+    ).fetchall():
+        try:
+            normalized = json.loads(str(row["normalized_data"]))
+        except (TypeError, ValueError):
+            normalized = {}
+        external_object_id = normalized.get("external_object_id")
+        object_hash = (
+            provider_object_stream_hash(
+                str(row["provider"]),
+                external_object_id.strip(),
+            )
+            if isinstance(external_object_id, str)
+            and external_object_id.strip()
+            else None
+        )
+        action = normalized.get("action")
+        restrictive_rank = int(action in _RESTRICTIVE_PROVIDER_ACTIONS)
+        connection.execute(
+            """
+            UPDATE platform_provider_events
+            SET object_stream_hash=?,restrictive_rank=?
+            WHERE id=?
+            """,
+            (object_hash, restrictive_rank, int(row["id"])),
+        )
+
+    oauth_tables = {
+        str(row[0])
+        for row in connection.execute(
+            """
+            SELECT name FROM sqlite_master
+            WHERE type='table'
+              AND name IN ('platform_oauth_sessions','platform_oauth_codes')
+            """
+        )
+    }
+    for workspace_id, subject_ids in affected.items():
+        workspace = connection.execute(
+            "SELECT public_id FROM platform_workspaces WHERE id=?",
+            (workspace_id,),
+        ).fetchone()
+        if workspace is None:
+            continue
+        workspace_public_id = str(workspace["public_id"])
+        for subject_id in subject_ids:
+            survivor = connection.execute(
+                """
+                SELECT 1 FROM platform_access_grants
+                WHERE workspace_id=?
+                  AND status IN ('active','overridden','expiring')
+                  AND julianday(starts_at) <= julianday(?)
+                  AND (
+                      ends_at IS NULL
+                      OR julianday(ends_at) > julianday(?)
+                  )
+                  AND (
+                      scope='workspace'
+                      OR (scope='subject' AND subject_user_id=?)
+                  )
+                LIMIT 1
+                """,
+                (workspace_id, now_iso, now_iso, subject_id),
+            ).fetchone()
+            if survivor is not None:
+                continue
+            if "platform_oauth_sessions" in oauth_tables:
+                connection.execute(
+                    """
+                    UPDATE platform_oauth_sessions
+                    SET revoked_at=COALESCE(revoked_at,?),updated_at=?
+                    WHERE workspace_id=? AND user_id=?
+                    """,
+                    (
+                        now_iso,
+                        now_iso,
+                        workspace_public_id,
+                        subject_id,
+                    ),
+                )
+            if "platform_oauth_codes" in oauth_tables:
+                connection.execute(
+                    """
+                    UPDATE platform_oauth_codes
+                    SET consumed_at=COALESCE(consumed_at,?)
+                    WHERE workspace_id=? AND user_id=?
+                    """,
+                    (now_iso, workspace_public_id, subject_id),
+                )
+
+    for workspace_id in affected:
+        account = connection.execute(
+            """
+            SELECT state FROM platform_accounts WHERE workspace_id=?
+            """,
+            (workspace_id,),
+        ).fetchone()
+        if account is not None and str(account["state"]) in {
+            "suspended",
+            "under_review",
+            "deletion_pending",
+            "deleted",
+        }:
+            continue
+        survivor = connection.execute(
+            """
+            SELECT 1 FROM platform_access_grants
+            WHERE workspace_id=?
+              AND status IN ('active','overridden','expiring')
+              AND julianday(starts_at) <= julianday(?)
+              AND (
+                  ends_at IS NULL
+                  OR julianday(ends_at) > julianday(?)
+              )
+            LIMIT 1
+            """,
+            (workspace_id, now_iso, now_iso),
+        ).fetchone()
+        desired = "active" if survivor is not None else "canceled"
+        if account is None:
+            connection.execute(
+                """
+                INSERT INTO platform_accounts(
+                    workspace_id,state,reason,updated_at
+                ) VALUES (?,?,NULL,?)
+                """,
+                (workspace_id, desired, now_iso),
+            )
+        elif str(account["state"]) != desired:
+            connection.execute(
+                """
+                UPDATE platform_accounts
+                SET state=?,reason=NULL,updated_at=?
+                WHERE workspace_id=?
+                """,
+                (desired, now_iso, workspace_id),
+            )
+
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_platform_provider_event_stream_order
+        ON platform_provider_events(
+            provider,object_stream_hash,occurred_at DESC,
+            restrictive_rank DESC,id DESC
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_platform_grants_scope_subject
+        ON platform_access_grants(
+            workspace_id,scope,subject_user_id,status,ends_at
+        )
+        """
+    )
+
+    for trigger in (
+        "platform_provider_grant_subject_insert",
+        "platform_provider_grant_subject_update",
+        "platform_grant_scope_insert",
+        "platform_grant_scope_update",
+        "platform_subject_grants_membership_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+
+    grant_validation = """
+        SELECT CASE
+            WHEN NEW.scope IS NULL
+              OR NEW.scope NOT IN ('subject','workspace')
+            THEN RAISE(ABORT, 'grant scope is invalid')
+        END;
+        SELECT CASE
+            WHEN NEW.source IN ('stripe','skool','manual','promotion')
+             AND (NEW.scope IS NULL OR NEW.scope<>'subject')
+            THEN RAISE(ABORT, 'grant source requires subject scope')
+        END;
+        SELECT CASE
+            WHEN NEW.scope='workspace'
+             AND (NEW.source<>'jv' OR NEW.subject_user_id IS NOT NULL)
+            THEN RAISE(ABORT, 'workspace scope requires subjectless jv grant')
+        END;
+        SELECT CASE
+            WHEN NEW.scope='subject' AND NEW.subject_user_id IS NULL
+            THEN RAISE(ABORT, 'subject scope requires subject')
+        END;
+        SELECT CASE
+            WHEN NEW.scope='subject'
+             AND NOT EXISTS (
+                 SELECT 1 FROM platform_memberships
+                 WHERE workspace_id=NEW.workspace_id
+                   AND user_id=NEW.subject_user_id
+             )
+            THEN RAISE(ABORT, 'grant subject is not a workspace member')
+        END;
+        SELECT CASE
+            WHEN NEW.source IN ('stripe','skool') AND NEW.ends_at IS NULL
+            THEN RAISE(ABORT, 'provider grant requires lease')
+        END;
+    """
+    connection.execute(
+        f"""
+        CREATE TRIGGER platform_grant_scope_insert
+        BEFORE INSERT ON platform_access_grants
+        BEGIN
+            {grant_validation}
+        END
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE TRIGGER platform_grant_scope_update
+        BEFORE UPDATE ON platform_access_grants
+        BEGIN
+            {grant_validation}
+        END
+        """
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER platform_subject_grants_membership_delete
+        BEFORE DELETE ON platform_memberships
+        BEGIN
+            UPDATE platform_access_grants
+            SET status='revoked',
+                ends_at=COALESCE(ends_at,datetime('now')),
+                updated_at=datetime('now')
+            WHERE workspace_id=OLD.workspace_id
+              AND subject_user_id=OLD.user_id
+              AND scope='subject'
+              AND status IN ('pending','active','overridden','expiring');
+        END
+        """
+    )
+
+
+def _provider_sync_v4(connection: sqlite3.Connection) -> None:
+    """Bind replay material and resolved authority to write-once receipts."""
+    event_columns = {
+        str(row[1])
+        for row in connection.execute(
+            "PRAGMA table_info(platform_provider_events)"
+        )
+    }
+    if "canonical_action" not in event_columns:
+        connection.execute(
+            """
+            ALTER TABLE platform_provider_events
+            ADD COLUMN canonical_action TEXT
+            """
+        )
+    if "external_account_hash" not in event_columns:
+        connection.execute(
+            """
+            ALTER TABLE platform_provider_events
+            ADD COLUMN external_account_hash TEXT
+            """
+        )
+    if "bound_subject_user_id" not in event_columns:
+        connection.execute(
+            """
+            ALTER TABLE platform_provider_events
+            ADD COLUMN bound_subject_user_id INTEGER
+                REFERENCES platform_users(id)
+            """
+        )
+    if "bound_scope" not in event_columns:
+        connection.execute(
+            """
+            ALTER TABLE platform_provider_events
+            ADD COLUMN bound_scope TEXT
+            """
+        )
+
+    deterministic_actions = {
+        ("stripe", "customer.subscription.deleted"): "cancel",
+        ("stripe", "customer.subscription.paused"): "pause",
+        ("stripe", "invoice.payment_failed"): "payment_failed",
+        ("stripe", "invoice.payment_succeeded"): "payment_succeeded",
+        ("stripe", "unsupported"): "reject",
+        ("skool", "member.added"): "subscription",
+        ("skool", "member.updated"): "membership_update",
+        ("skool", "member.removed"): "remove",
+        ("skool", "member.canceled"): "cancel",
+        ("skool", "member.payment_failed"): "payment_failed",
+        ("skool", "member.banned"): "banned",
+        ("skool", "unsupported"): "reject",
+        ("stripe", "subscription.deleted"): "cancel",
+        ("skool", "membership.left"): "remove",
+    }
+    # Stripe update and pending-update actions depend on payload status.
+    # Version 3 rank and normalized JSON are not independent migration evidence.
+    now_iso = _iso(_now())
+    legacy_reason = "legacy_receipt_binding_untrusted"
+
+    for receipt in connection.execute(
+        """
+        SELECT id,workspace_id,provider,event_type,object_stream_hash,
+               restrictive_rank
+        FROM platform_provider_events
+        ORDER BY id
+        """
+    ).fetchall():
+        event_db_id = int(receipt["id"])
+        provider = str(receipt["provider"])
+        event_type = str(receipt["event_type"])
+        restrictive_rank = int(receipt["restrictive_rank"])
+        action = deterministic_actions.get((provider, event_type))
+
+        trusted_binding: tuple[str, str, int] | None = None
+        if receipt["workspace_id"] is not None:
+            workspace_id = int(receipt["workspace_id"])
+            subscriptions = connection.execute(
+                """
+                SELECT external_subscription_id,external_customer_id
+                FROM platform_subscriptions
+                WHERE workspace_id=? AND provider=?
+                """,
+                (workspace_id, provider),
+            ).fetchall()
+            grants = connection.execute(
+                """
+                SELECT external_ref,subject_user_id,scope
+                FROM platform_access_grants
+                WHERE workspace_id=? AND source=?
+                """,
+                (workspace_id, provider),
+            ).fetchall()
+            subscriptions_by_object: dict[str, list[sqlite3.Row]] = {}
+            grants_by_object: dict[str, list[sqlite3.Row]] = {}
+            for subscription in subscriptions:
+                object_id = str(subscription["external_subscription_id"])
+                subscriptions_by_object.setdefault(object_id, []).append(
+                    subscription
+                )
+            for grant in grants:
+                object_id = str(grant["external_ref"])
+                grants_by_object.setdefault(object_id, []).append(grant)
+
+            candidates: list[tuple[str, str, int]] = []
+            for object_id in (
+                subscriptions_by_object.keys() & grants_by_object.keys()
+            ):
+                object_subscriptions = subscriptions_by_object[object_id]
+                object_grants = grants_by_object[object_id]
+                if (
+                    len(object_subscriptions) != 1
+                    or len(object_grants) != 1
+                ):
+                    continue
+                subscription = object_subscriptions[0]
+                grant = object_grants[0]
+                if (
+                    grant["subject_user_id"] is None
+                    or str(grant["scope"]) != "subject"
+                    or subscription["external_customer_id"] is None
+                ):
+                    continue
+                subject_user_id = int(grant["subject_user_id"])
+                external_account_id = str(
+                    subscription["external_customer_id"]
+                )
+                mappings = connection.execute(
+                    """
+                    SELECT workspace_id,subject_user_id
+                    FROM platform_external_accounts
+                    WHERE provider=? AND external_account_id=?
+                    """,
+                    (provider, external_account_id),
+                ).fetchall()
+                if (
+                    len(mappings) != 1
+                    or int(mappings[0]["workspace_id"]) != workspace_id
+                    or mappings[0]["subject_user_id"] is None
+                    or int(mappings[0]["subject_user_id"])
+                    != subject_user_id
+                ):
+                    continue
+                membership = connection.execute(
+                    """
+                    SELECT 1 FROM platform_memberships
+                    WHERE workspace_id=? AND user_id=?
+                    """,
+                    (workspace_id, subject_user_id),
+                ).fetchone()
+                if membership is None:
+                    continue
+                candidates.append(
+                    (object_id, external_account_id, subject_user_id)
+                )
+            if len(candidates) == 1:
+                candidate = candidates[0]
+                candidate_hash = provider_object_stream_hash(
+                    provider,
+                    candidate[0],
+                )
+                if (
+                    receipt["object_stream_hash"] is None
+                    or str(receipt["object_stream_hash"]) == candidate_hash
+                ):
+                    trusted_binding = candidate
+
+        if action is not None and trusted_binding is not None:
+            object_id, external_account_id, subject_user_id = trusted_binding
+            connection.execute(
+                """
+                UPDATE platform_provider_events
+                SET canonical_action=?,external_account_hash=?,
+                    object_stream_hash=?,restrictive_rank=?,
+                    bound_subject_user_id=?,bound_scope='subject'
+                WHERE id=?
+                """,
+                (
+                    action,
+                    provider_external_account_hash(
+                        provider,
+                        external_account_id,
+                    ),
+                    provider_object_stream_hash(provider, object_id),
+                    int(action in _RESTRICTIVE_PROVIDER_ACTIONS),
+                    subject_user_id,
+                    event_db_id,
+                ),
+            )
+            continue
+
+        connection.execute(
+            """
+            UPDATE platform_provider_events
+            SET canonical_action=?,external_account_hash=NULL,
+                object_stream_hash=NULL,
+                restrictive_rank=?,
+                bound_subject_user_id=NULL,bound_scope=NULL,
+                outcome='quarantined',reason_code=?,updated_at=?
+            WHERE id=?
+            """,
+            (
+                action,
+                int(action in _RESTRICTIVE_PROVIDER_ACTIONS),
+                legacy_reason,
+                now_iso,
+                event_db_id,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO platform_provider_event_attempts(
+                provider_event_id,outcome,reason_code,created_at
+            ) VALUES (?,'quarantined',?,?)
+            """,
+            (event_db_id, legacy_reason, now_iso),
+        )
+
+    for trigger in (
+        "platform_provider_event_binding_insert",
+        "platform_provider_event_binding_update",
+        "platform_provider_event_binding_immutable",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+
+    binding_validation = """
+        SELECT CASE
+            WHEN NEW.canonical_action IS NOT NULL
+             AND trim(NEW.canonical_action)=''
+            THEN RAISE(ABORT, 'provider receipt action is invalid')
+        END;
+        SELECT CASE
+            WHEN NEW.external_account_hash IS NOT NULL
+             AND (
+                 length(NEW.external_account_hash)<>64
+                 OR NEW.external_account_hash GLOB '*[^0-9a-f]*'
+             )
+            THEN RAISE(ABORT, 'provider receipt account hash is invalid')
+        END;
+        SELECT CASE
+            WHEN NEW.object_stream_hash IS NOT NULL
+             AND (
+                 length(NEW.object_stream_hash)<>64
+                 OR NEW.object_stream_hash GLOB '*[^0-9a-f]*'
+             )
+            THEN RAISE(ABORT, 'provider receipt object hash is invalid')
+        END;
+        SELECT CASE
+            WHEN (NEW.bound_subject_user_id IS NULL)
+                 <> (NEW.bound_scope IS NULL)
+            THEN RAISE(ABORT, 'provider receipt authority is incomplete')
+        END;
+        SELECT CASE
+            WHEN NEW.bound_scope IS NOT NULL
+             AND NEW.bound_scope NOT IN ('subject','workspace')
+            THEN RAISE(ABORT, 'provider receipt scope is invalid')
+        END;
+    """
+    binding_insert_membership_validation = """
+        SELECT CASE
+            WHEN NEW.bound_subject_user_id IS NOT NULL
+             AND (
+                 NEW.workspace_id IS NULL
+                 OR NOT EXISTS (
+                     SELECT 1 FROM platform_memberships
+                     WHERE workspace_id=NEW.workspace_id
+                       AND user_id=NEW.bound_subject_user_id
+                 )
+             )
+            THEN RAISE(ABORT, 'provider receipt subject is not a member')
+        END;
+    """
+    binding_update_membership_validation = """
+        SELECT CASE
+            WHEN NEW.bound_subject_user_id IS NOT NULL
+             AND (
+                 OLD.workspace_id IS NULL
+                 OR OLD.bound_subject_user_id IS NULL
+                 OR OLD.bound_scope IS NULL
+                 OR NEW.workspace_id IS NOT OLD.workspace_id
+                 OR NEW.bound_subject_user_id
+                    IS NOT OLD.bound_subject_user_id
+                 OR NEW.bound_scope IS NOT OLD.bound_scope
+             )
+             AND (
+                 NEW.workspace_id IS NULL
+                 OR NOT EXISTS (
+                     SELECT 1 FROM platform_memberships
+                     WHERE workspace_id=NEW.workspace_id
+                       AND user_id=NEW.bound_subject_user_id
+                 )
+             )
+            THEN RAISE(ABORT, 'provider receipt subject is not a member')
+        END;
+    """
+    connection.execute(
+        f"""
+        CREATE TRIGGER platform_provider_event_binding_insert
+        BEFORE INSERT ON platform_provider_events
+        BEGIN
+            {binding_validation}
+            {binding_insert_membership_validation}
+        END
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE TRIGGER platform_provider_event_binding_update
+        BEFORE UPDATE ON platform_provider_events
+        BEGIN
+            {binding_validation}
+            {binding_update_membership_validation}
+        END
+        """
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER platform_provider_event_binding_immutable
+        BEFORE UPDATE ON platform_provider_events
+        WHEN
+            (OLD.workspace_id IS NOT NULL
+             AND NEW.workspace_id IS NOT OLD.workspace_id)
+         OR NEW.provider IS NOT OLD.provider
+         OR NEW.event_id IS NOT OLD.event_id
+         OR NEW.event_type IS NOT OLD.event_type
+         OR NEW.occurred_at IS NOT OLD.occurred_at
+         OR (OLD.canonical_action IS NOT NULL
+             AND NEW.canonical_action IS NOT OLD.canonical_action)
+         OR (OLD.external_account_hash IS NOT NULL
+             AND NEW.external_account_hash IS NOT OLD.external_account_hash)
+         OR (OLD.object_stream_hash IS NOT NULL
+             AND NEW.object_stream_hash IS NOT OLD.object_stream_hash)
+         OR (OLD.restrictive_rank IS NOT NULL
+             AND NEW.restrictive_rank IS NOT OLD.restrictive_rank)
+         OR (OLD.bound_subject_user_id IS NOT NULL
+             AND NEW.bound_subject_user_id IS NOT OLD.bound_subject_user_id)
+         OR (OLD.bound_scope IS NOT NULL
+             AND NEW.bound_scope IS NOT OLD.bound_scope)
+        BEGIN
+            SELECT RAISE(ABORT, 'provider receipt binding is immutable');
+        END
+        """
+    )
+
+
+def _provider_sync_v5(connection: sqlite3.Connection) -> None:
+    """Bind every replay input that can select or extend entitlement authority."""
+    event_columns = {
+        str(row[1])
+        for row in connection.execute(
+            "PRAGMA table_info(platform_provider_events)"
+        )
+    }
+    if "entitlement_input_hash" not in event_columns:
+        connection.execute(
+            """
+            ALTER TABLE platform_provider_events
+            ADD COLUMN entitlement_input_hash TEXT
+            """
+        )
+    if "bound_plan_key" not in event_columns:
+        connection.execute(
+            """
+            ALTER TABLE platform_provider_events
+            ADD COLUMN bound_plan_key TEXT
+            """
+        )
+    if "bound_profile" not in event_columns:
+        connection.execute(
+            """
+            ALTER TABLE platform_provider_events
+            ADD COLUMN bound_profile TEXT
+            """
+        )
+
+    legacy_reason = "legacy_receipt_binding_untrusted"
+    now_iso = _iso(_now())
+    receipts = connection.execute(
+        """
+        SELECT id,workspace_id,provider,canonical_action,
+               external_account_hash,object_stream_hash,
+               bound_subject_user_id,bound_scope,outcome,reason_code
+        FROM platform_provider_events
+        ORDER BY id
+        """
+    ).fetchall()
+    for receipt in receipts:
+        (
+            event_db_id,
+            workspace_id,
+            provider,
+            canonical_action,
+            external_account_hash,
+            object_stream_hash,
+            bound_subject_user_id,
+            bound_scope,
+            _outcome,
+            reason_code,
+        ) = receipt
+        action = (
+            str(canonical_action)
+            if canonical_action is not None
+            else None
+        )
+        fully_bound = (
+            workspace_id is not None
+            and external_account_hash is not None
+            and object_stream_hash is not None
+            and bound_subject_user_id is not None
+            and str(bound_scope) == "subject"
+        )
+        if action in _RESTRICTIVE_PROVIDER_ACTIONS and fully_bound:
+            connection.execute(
+                """
+                UPDATE platform_provider_events
+                SET entitlement_input_hash=?
+                WHERE id=?
+                """,
+                (
+                    provider_restrictive_state_input_hash(
+                        str(provider),
+                        action,
+                    ),
+                    int(event_db_id),
+                ),
+            )
+            continue
+        if (
+            action is not None
+            and action not in _RESTRICTIVE_PROVIDER_ACTIONS
+            and action not in {"malformed", "payment_succeeded", "reject"}
+            and str(reason_code) != legacy_reason
+        ):
+            connection.execute(
+                """
+                UPDATE platform_provider_events
+                SET outcome='quarantined',reason_code=?,updated_at=?
+                WHERE id=?
+                """,
+                (legacy_reason, now_iso, int(event_db_id)),
+            )
+            connection.execute(
+                """
+                INSERT INTO platform_provider_event_attempts(
+                    provider_event_id,outcome,reason_code,created_at
+                ) VALUES (?,'quarantined',?,?)
+                """,
+                (int(event_db_id), legacy_reason, now_iso),
+            )
+
+    profile_choices = _sql_choices(
+        tuple(profile.value for profile in Profile)
+    )
+    entitlement_validation = f"""
+        SELECT CASE
+            WHEN NEW.entitlement_input_hash IS NOT NULL
+             AND (
+                 length(NEW.entitlement_input_hash)<>67
+                 OR substr(NEW.entitlement_input_hash,1,3)<>'v1:'
+                 OR substr(NEW.entitlement_input_hash,4)
+                    GLOB '*[^0-9a-f]*'
+             )
+            THEN RAISE(
+                ABORT,
+                'provider receipt entitlement hash is invalid'
+            )
+        END;
+        SELECT CASE
+            WHEN (NEW.bound_plan_key IS NULL)
+                 <> (NEW.bound_profile IS NULL)
+            THEN RAISE(
+                ABORT,
+                'provider receipt entitlement target is incomplete'
+            )
+        END;
+        SELECT CASE
+            WHEN NEW.bound_plan_key IS NOT NULL
+             AND trim(NEW.bound_plan_key)=''
+            THEN RAISE(
+                ABORT,
+                'provider receipt plan binding is invalid'
+            )
+        END;
+        SELECT CASE
+            WHEN NEW.bound_profile IS NOT NULL
+             AND NEW.bound_profile NOT IN ({profile_choices})
+            THEN RAISE(
+                ABORT,
+                'provider receipt profile binding is invalid'
+            )
+        END;
+    """
+    for trigger in (
+        "platform_provider_event_entitlement_binding_insert",
+        "platform_provider_event_entitlement_binding_update",
+        "platform_provider_event_entitlement_binding_immutable",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    connection.execute(
+        f"""
+        CREATE TRIGGER platform_provider_event_entitlement_binding_insert
+        BEFORE INSERT ON platform_provider_events
+        BEGIN
+            {entitlement_validation}
+        END
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE TRIGGER platform_provider_event_entitlement_binding_update
+        BEFORE UPDATE ON platform_provider_events
+        BEGIN
+            {entitlement_validation}
+        END
+        """
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER platform_provider_event_entitlement_binding_immutable
+        BEFORE UPDATE ON platform_provider_events
+        WHEN
+            NEW.entitlement_input_hash IS NOT OLD.entitlement_input_hash
+         OR (
+                (
+                    OLD.bound_plan_key IS NOT NULL
+                    OR OLD.bound_profile IS NOT NULL
+                )
+                AND (
+                    NEW.bound_plan_key IS NOT OLD.bound_plan_key
+                    OR NEW.bound_profile IS NOT OLD.bound_profile
+                )
+            )
+        BEGIN
+            SELECT RAISE(
+                ABORT,
+                'provider receipt entitlement binding is immutable'
+            );
+        END
+        """
+    )
+
+
 PROVIDER_SYNC_MIGRATIONS = (
     Migration(
         1,
@@ -740,6 +1844,21 @@ PROVIDER_SYNC_MIGRATIONS = (
         2,
         "individual provider subjects and bounded provider leases",
         _provider_sync_v2,
+    ),
+    Migration(
+        3,
+        "authoritative grant scopes and private provider stream ordering",
+        _provider_sync_v3,
+    ),
+    Migration(
+        4,
+        "write-once provider receipt replay bindings",
+        _provider_sync_v4,
+    ),
+    Migration(
+        5,
+        "write-once entitlement input and target replay bindings",
+        _provider_sync_v5,
     ),
 )
 
@@ -835,6 +1954,7 @@ class EntitlementStore:
                 and row["subject_user_id"] is not None
                 else None
             ),
+            scope=str(row["scope"]),
             source=str(row["source"]),
             external_ref=str(row["external_ref"]),
             profile=Profile(str(row["profile"])),
@@ -944,6 +2064,7 @@ class EntitlementStore:
         starts_at: datetime | None = None,
         ends_at: datetime | None = None,
         subject_user_id: int | None = None,
+        scope: str | None = None,
     ) -> AccessGrant:
         workspace_id = self._resolve_workspace(workspace)
         source = _choice(source, GRANT_SOURCES, "grant source")
@@ -952,22 +2073,25 @@ class EntitlementStore:
         plan_key = _required(plan_key, "plan_key")
         starts_at = starts_at or _now()
         now = _now()
+        if scope is None:
+            if source == "jv" and subject_user_id is None:
+                raise ValueError(
+                    "workspace jv grant requires explicit workspace scope"
+                )
+            scope = "subject"
+        scope = _choice(scope, GRANT_SCOPES, "grant scope")
+        if source in {"stripe", "skool", "manual", "promotion"}:
+            if scope != "subject":
+                raise ValueError("grant source requires subject scope")
+        elif scope == "workspace" and source != "jv":
+            raise ValueError("workspace scope is only valid for jv grants")
+        if scope == "workspace" and subject_user_id is not None:
+            raise ValueError("workspace grant cannot identify a subject")
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            if source in PROVIDERS:
+            if scope == "subject":
                 if subject_user_id is None:
-                    subjects = connection.execute(
-                        """
-                        SELECT user_id FROM platform_memberships
-                        WHERE workspace_id=? ORDER BY user_id
-                        """,
-                        (workspace_id,),
-                    ).fetchall()
-                    if len(subjects) != 1:
-                        raise ValueError(
-                            "provider grant requires an individual subject"
-                        )
-                    subject_user_id = int(subjects[0]["user_id"])
+                    raise ValueError("subject grant requires an individual subject")
                 membership = connection.execute(
                     """
                     SELECT 1 FROM platform_memberships
@@ -976,11 +2100,9 @@ class EntitlementStore:
                     (workspace_id, subject_user_id),
                 ).fetchone()
                 if membership is None:
-                    raise ValueError(
-                        "provider subject is not a workspace member"
-                    )
-                if ends_at is None:
-                    ends_at = now + DEFAULT_PROVIDER_GRANT_LEASE
+                    raise ValueError("grant subject is not a workspace member")
+            if source in PROVIDERS and ends_at is None:
+                ends_at = now + DEFAULT_PROVIDER_GRANT_LEASE
             existing = connection.execute(
                 "SELECT * FROM platform_access_grants WHERE source=? AND external_ref=?",
                 (source, external_ref),
@@ -989,13 +2111,13 @@ class EntitlementStore:
                 raise ValueError("grant belongs to a different workspace")
             if existing is None:
                 connection.execute(
-                    "INSERT INTO platform_access_grants(workspace_id,subject_user_id,source,external_ref,profile,plan_key,status,starts_at,ends_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (workspace_id, subject_user_id, source, external_ref, profile.value, plan_key, "active", _iso(starts_at), _iso(ends_at), _iso(now), _iso(now)),
+                    "INSERT INTO platform_access_grants(workspace_id,subject_user_id,scope,source,external_ref,profile,plan_key,status,starts_at,ends_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (workspace_id, subject_user_id, scope, source, external_ref, profile.value, plan_key, "active", _iso(starts_at), _iso(ends_at), _iso(now), _iso(now)),
                 )
             else:
                 connection.execute(
-                    "UPDATE platform_access_grants SET subject_user_id=?,profile=?,plan_key=?,status=?,starts_at=?,ends_at=?,updated_at=? WHERE id=? AND workspace_id=?",
-                    (subject_user_id, profile.value, plan_key, "active", _iso(starts_at), _iso(ends_at), _iso(now), existing["id"], workspace_id),
+                    "UPDATE platform_access_grants SET subject_user_id=?,scope=?,profile=?,plan_key=?,status=?,starts_at=?,ends_at=?,updated_at=? WHERE id=? AND workspace_id=?",
+                    (subject_user_id, scope, profile.value, plan_key, "active", _iso(starts_at), _iso(ends_at), _iso(now), existing["id"], workspace_id),
                 )
             self._set_derived_account_tx(connection, workspace_id, "active")
             row = connection.execute(
@@ -1041,7 +2163,11 @@ class EntitlementStore:
         return self._grant(row)
 
     def effective_access(
-        self, workspace: WorkspaceRef, *, at: datetime | None = None
+        self,
+        workspace: WorkspaceRef,
+        *,
+        subject_user_id: int,
+        at: datetime | None = None,
     ) -> EffectiveAccess | None:
         workspace_id = self._resolve_workspace(workspace)
         at = at or _now()
@@ -1052,7 +2178,14 @@ class EntitlementStore:
             return None
         grants = [
             grant for grant in self.list_grants(workspace_id)
-            if grant.status in {"active", "overridden", "expiring"}
+            if (
+                grant.scope == "workspace"
+                or (
+                    grant.scope == "subject"
+                    and grant.subject_user_id == subject_user_id
+                )
+            )
+            and grant.status in {"active", "overridden", "expiring"}
             and grant.starts_at <= at
             and (grant.ends_at is None or grant.ends_at > at)
         ]
@@ -1074,6 +2207,170 @@ class EntitlementStore:
             sources=tuple(dict.fromkeys(item.source for item in grants)),
             expires_at=min(expiries) if expiries else None,
         )
+
+    def _project_legacy_subscription_tx(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        subscription: sqlite3.Row | None,
+        grant: sqlite3.Row | None,
+        account: sqlite3.Row | None,
+        workspace_id: int,
+        subject_user_id: int,
+        provider: str,
+        external_subscription_id: str,
+        external_customer_id: str | None,
+        subscription_status: str,
+        plan_key: str,
+        profile: Profile,
+        current_period_end: datetime | None,
+        occurred_at_iso: str,
+        now: datetime,
+        now_iso: str,
+    ) -> None:
+        grant_status = (
+            "active" if subscription_status == "active" else "revoked"
+        )
+        period_end_iso = _iso(current_period_end)
+        lease_end = now + DEFAULT_PROVIDER_GRANT_LEASE
+        grant_end = (
+            current_period_end
+            if provider == "stripe" and current_period_end is not None
+            else lease_end
+        )
+        if grant_status == "revoked":
+            grant_end = now
+        grant_end_iso = _iso(grant_end)
+        if subscription is None:
+            connection.execute(
+                "INSERT INTO platform_subscriptions(workspace_id,provider,external_subscription_id,external_customer_id,status,plan_key,current_period_end,last_event_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (workspace_id, provider, external_subscription_id, external_customer_id, subscription_status, plan_key, period_end_iso, occurred_at_iso, now_iso, now_iso),
+            )
+        else:
+            connection.execute(
+                "UPDATE platform_subscriptions SET status=?,plan_key=?,external_customer_id=COALESCE(?,external_customer_id),current_period_end=?,last_event_at=?,updated_at=? WHERE id=?",
+                (subscription_status, plan_key, external_customer_id, period_end_iso, occurred_at_iso, now_iso, subscription["id"]),
+            )
+        if grant is None:
+            connection.execute(
+                "INSERT INTO platform_access_grants(workspace_id,subject_user_id,scope,source,external_ref,profile,plan_key,status,starts_at,ends_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (workspace_id, subject_user_id, "subject", provider, external_subscription_id, profile.value, plan_key, grant_status, now_iso, grant_end_iso, now_iso, now_iso),
+            )
+        else:
+            connection.execute(
+                "UPDATE platform_access_grants SET subject_user_id=?,scope='subject',profile=?,plan_key=?,status=?,ends_at=?,updated_at=? WHERE id=? AND workspace_id=? AND source=?",
+                (subject_user_id, profile.value, plan_key, grant_status, grant_end_iso, now_iso, grant["id"], workspace_id, provider),
+            )
+        if grant_status == "revoked":
+            live_grants = connection.execute(
+                """
+                SELECT status,starts_at,ends_at
+                FROM platform_access_grants
+                WHERE workspace_id=?
+                """,
+                (workspace_id,),
+            ).fetchall()
+            has_live_grant = any(
+                str(item["status"]) in {"active", "overridden", "expiring"}
+                and _parse(item["starts_at"]) <= now
+                and (
+                    item["ends_at"] is None
+                    or _parse(item["ends_at"]) > now
+                )
+                for item in live_grants
+            )
+            account_state = "active" if has_live_grant else "canceled"
+        else:
+            account_state = "active"
+        if grant_status == "revoked":
+            subject_rows = connection.execute(
+                """
+                SELECT status,starts_at,ends_at
+                FROM platform_access_grants
+                WHERE workspace_id=?
+                  AND (
+                      scope='workspace'
+                      OR (scope='subject' AND subject_user_id=?)
+                  )
+                """,
+                (workspace_id, subject_user_id),
+            ).fetchall()
+            subject_has_live_grant = any(
+                str(item["status"])
+                in {"active", "overridden", "expiring"}
+                and _parse(item["starts_at"]) <= now
+                and (
+                    item["ends_at"] is None
+                    or _parse(item["ends_at"]) > now
+                )
+                for item in subject_rows
+            )
+            if not subject_has_live_grant:
+                oauth_tables = {
+                    str(item[0])
+                    for item in connection.execute(
+                        """
+                        SELECT name FROM sqlite_master
+                        WHERE type='table'
+                          AND name IN (
+                              'platform_oauth_sessions',
+                              'platform_oauth_codes'
+                          )
+                        """
+                    )
+                }
+                workspace_row = connection.execute(
+                    """
+                    SELECT public_id FROM platform_workspaces
+                    WHERE id=?
+                    """,
+                    (workspace_id,),
+                ).fetchone()
+                assert workspace_row is not None
+                workspace_public_id = str(workspace_row["public_id"])
+                if "platform_oauth_sessions" in oauth_tables:
+                    connection.execute(
+                        """
+                        UPDATE platform_oauth_sessions
+                        SET revoked_at=COALESCE(revoked_at,?),
+                            updated_at=?
+                        WHERE workspace_id=? AND user_id=?
+                        """,
+                        (
+                            now_iso,
+                            now_iso,
+                            workspace_public_id,
+                            subject_user_id,
+                        ),
+                    )
+                if "platform_oauth_codes" in oauth_tables:
+                    connection.execute(
+                        """
+                        UPDATE platform_oauth_codes
+                        SET consumed_at=COALESCE(consumed_at,?)
+                        WHERE workspace_id=? AND user_id=?
+                        """,
+                        (
+                            now_iso,
+                            workspace_public_id,
+                            subject_user_id,
+                        ),
+                    )
+        if (
+            account is None
+            or str(account["state"])
+            not in {
+                "suspended",
+                "under_review",
+                "deletion_pending",
+                "deleted",
+            }
+        ):
+            self._set_derived_account_tx(
+                connection,
+                workspace_id,
+                account_state,
+            )
 
     def get_subscription(
         self, workspace: WorkspaceRef, provider: str, external_subscription_id: str
@@ -1124,14 +2421,22 @@ class EntitlementStore:
         event_type = _required(event_type, "event_type")
         external_subscription_id = _required(external_subscription_id, "external_subscription_id")
         subscription_status = _choice(subscription_status, SUBSCRIPTION_STATUSES, "subscription status")
-        plan_key = _required(plan_key, "plan_key")
-        profile = Profile(profile)
+        plan_key, bound_profile = provider_entitlement_target(
+            plan_key,
+            profile,
+        )
+        profile = Profile(bound_profile)
         now = _now()
         occurred_at = occurred_at or now
         if occurred_at.tzinfo is None:
             occurred_at = occurred_at.replace(tzinfo=UTC)
         else:
             occurred_at = occurred_at.astimezone(UTC)
+        if current_period_end is not None:
+            if current_period_end.tzinfo is None:
+                current_period_end = current_period_end.replace(tzinfo=UTC)
+            else:
+                current_period_end = current_period_end.astimezone(UTC)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             if subject_user_id is None:
@@ -1211,20 +2516,86 @@ class EntitlementStore:
                 raise ValueError("grant belongs to a different subject")
             now_iso = _iso(now)
             occurred_at_iso = _iso(occurred_at)
+            object_stream_hash = provider_object_stream_hash(
+                provider,
+                external_subscription_id,
+            )
+            restrictive_rank = int(subscription_status != "active")
+            action = "subscription"
+            if restrictive_rank:
+                if (
+                    subscription_status == "unpaid"
+                    or "payment_failed" in event_type
+                ):
+                    action = "payment_failed"
+                elif subscription_status == "paused":
+                    action = "pause"
+                elif subscription_status == "trialing":
+                    action = "trialing_not_paid"
+                else:
+                    action = "cancel"
+                normalized_data = json.dumps(
+                    {
+                        "provider": provider,
+                        "event_id": event_id,
+                        "event_type": event_type,
+                        "occurred_at": occurred_at_iso,
+                        "action": action,
+                        "external_account_id": external_customer_id,
+                        "external_object_id": external_subscription_id,
+                        "subscription_status": subscription_status,
+                        "mapping_keys": [],
+                        "current_period_end": _iso(current_period_end),
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            else:
+                normalized_data = "{}"
+            entitlement_input_hash = provider_entitlement_input_hash(
+                provider=provider,
+                action=action,
+                subscription_status=subscription_status,
+                mapping_keys=(),
+                current_period_end=current_period_end,
+            )
             connection.execute(
                 """
                 INSERT INTO platform_provider_events
                     (workspace_id,provider,event_id,event_type,payload,
                      normalized_data,occurred_at,outcome,reason_code,
-                     duplicate_count,replayed_at,created_at,updated_at)
-                VALUES (?,?,?,?,'{}','{}',?,'received',NULL,0,NULL,?,?)
+                     duplicate_count,replayed_at,object_stream_hash,
+                     restrictive_rank,canonical_action,
+                     external_account_hash,bound_subject_user_id,bound_scope,
+                     entitlement_input_hash,bound_plan_key,bound_profile,
+                     created_at,updated_at)
+                VALUES (
+                    ?,?,?,?,'{}',?,?,'received',NULL,0,NULL,?,?,?,?,?,
+                    'subject',?,?,?,?,?
+                )
                 """,
                 (
                     workspace_id,
                     provider,
                     event_id,
                     event_type,
+                    normalized_data,
                     occurred_at_iso,
+                    object_stream_hash,
+                    restrictive_rank,
+                    action,
+                    (
+                        provider_external_account_hash(
+                            provider,
+                            external_customer_id,
+                        )
+                        if external_customer_id is not None
+                        else None
+                    ),
+                    subject_user_id,
+                    entitlement_input_hash,
+                    plan_key,
+                    bound_profile,
                     now_iso,
                     now_iso,
                 ),
@@ -1241,7 +2612,30 @@ class EntitlementStore:
                 if subscription is not None
                 else None
             )
-            if last_event_at is not None and occurred_at < last_event_at:
+            prior_order_row = connection.execute(
+                """
+                SELECT occurred_at,restrictive_rank
+                FROM platform_provider_events
+                WHERE provider=? AND object_stream_hash=? AND id<>?
+                ORDER BY occurred_at DESC,restrictive_rank DESC,id DESC
+                LIMIT 1
+                """,
+                (provider, object_stream_hash, event_row["id"]),
+            ).fetchone()
+            last_order = (
+                (last_event_at, 0)
+                if last_event_at is not None
+                else None
+            )
+            if prior_order_row is not None:
+                prior_order = (
+                    _parse(prior_order_row["occurred_at"]),
+                    int(prior_order_row["restrictive_rank"]),
+                )
+                if last_order is None or prior_order > last_order:
+                    last_order = prior_order
+            event_order = (occurred_at, restrictive_rank)
+            if last_order is not None and event_order < last_order:
                 connection.execute(
                     """
                     UPDATE platform_provider_events
@@ -1275,7 +2669,7 @@ class EntitlementStore:
                 "SELECT state FROM platform_accounts WHERE workspace_id=?",
                 (workspace_id,),
             ).fetchone()
-            restrictive = subscription_status not in {"active", "trialing"}
+            restrictive = subscription_status != "active"
             if (
                 not restrictive
                 and account is not None
@@ -1315,195 +2709,93 @@ class EntitlementStore:
                     "quarantined",
                     "operator_state",
                 )
-            if subscription_status in {"active", "trialing"}:
-                grant_status = "active"
-            else:
-                grant_status = "revoked"
-            period_end_iso = _iso(current_period_end)
-            lease_end = now + DEFAULT_PROVIDER_GRANT_LEASE
-            grant_end = (
-                min(lease_end, current_period_end)
-                if provider == "stripe" and current_period_end is not None
-                else lease_end
-            )
-            if grant_status == "revoked":
-                grant_end = now
-            grant_end_iso = _iso(grant_end)
-            connection.execute("SAVEPOINT provider_projection")
-            try:
-                if subscription is None:
-                    connection.execute(
-                        "INSERT INTO platform_subscriptions(workspace_id,provider,external_subscription_id,external_customer_id,status,plan_key,current_period_end,last_event_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        (workspace_id, provider, external_subscription_id, external_customer_id, subscription_status, plan_key, period_end_iso, occurred_at_iso, now_iso, now_iso),
-                    )
-                else:
-                    connection.execute(
-                        "UPDATE platform_subscriptions SET status=?,plan_key=?,external_customer_id=COALESCE(?,external_customer_id),current_period_end=?,last_event_at=?,updated_at=? WHERE id=?",
-                        (subscription_status, plan_key, external_customer_id, period_end_iso, occurred_at_iso, now_iso, subscription["id"]),
-                    )
-                if grant is None:
-                    connection.execute(
-                        "INSERT INTO platform_access_grants(workspace_id,subject_user_id,source,external_ref,profile,plan_key,status,starts_at,ends_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                        (workspace_id, subject_user_id, provider, external_subscription_id, profile.value, plan_key, grant_status, now_iso, grant_end_iso, now_iso, now_iso),
-                    )
-                else:
-                    connection.execute(
-                        "UPDATE platform_access_grants SET subject_user_id=?,profile=?,plan_key=?,status=?,ends_at=?,updated_at=? WHERE id=? AND workspace_id=? AND source=?",
-                        (subject_user_id, profile.value, plan_key, grant_status, grant_end_iso, now_iso, grant["id"], workspace_id, provider),
-                    )
-                if grant_status == "revoked":
-                    live_grants = connection.execute(
-                        """
-                        SELECT status,starts_at,ends_at
-                        FROM platform_access_grants
-                        WHERE workspace_id=?
-                        """,
-                        (workspace_id,),
-                    ).fetchall()
-                    has_live_grant = any(
-                        str(item["status"]) in {"active", "overridden", "expiring"}
-                        and _parse(item["starts_at"]) <= now
-                        and (
-                            item["ends_at"] is None
-                            or _parse(item["ends_at"]) > now
-                        )
-                        for item in live_grants
-                    )
-                    account_state = "active" if has_live_grant else "canceled"
-                else:
-                    account_state = "active"
-                if grant_status == "revoked":
-                    subject_rows = connection.execute(
-                        """
-                        SELECT status,starts_at,ends_at
-                        FROM platform_access_grants
-                        WHERE workspace_id=?
-                          AND (
-                              source NOT IN ('stripe','skool')
-                              OR subject_user_id=?
-                          )
-                        """,
-                        (workspace_id, subject_user_id),
-                    ).fetchall()
-                    subject_has_live_grant = any(
-                        str(item["status"])
-                        in {"active", "overridden", "expiring"}
-                        and _parse(item["starts_at"]) <= now
-                        and (
-                            item["ends_at"] is None
-                            or _parse(item["ends_at"]) > now
-                        )
-                        for item in subject_rows
-                    )
-                    if not subject_has_live_grant:
-                        oauth_tables = {
-                            str(item[0])
-                            for item in connection.execute(
-                                """
-                                SELECT name FROM sqlite_master
-                                WHERE type='table'
-                                  AND name IN (
-                                      'platform_oauth_sessions',
-                                      'platform_oauth_codes'
-                                  )
-                                """
-                            )
-                        }
-                        workspace_row = connection.execute(
-                            """
-                            SELECT public_id FROM platform_workspaces
-                            WHERE id=?
-                            """,
-                            (workspace_id,),
-                        ).fetchone()
-                        assert workspace_row is not None
-                        workspace_public_id = str(workspace_row["public_id"])
-                        if "platform_oauth_sessions" in oauth_tables:
-                            connection.execute(
-                                """
-                                UPDATE platform_oauth_sessions
-                                SET revoked_at=COALESCE(revoked_at,?),
-                                    updated_at=?
-                                WHERE workspace_id=? AND user_id=?
-                                """,
-                                (
-                                    now_iso,
-                                    now_iso,
-                                    workspace_public_id,
-                                    subject_user_id,
-                                ),
-                            )
-                        if "platform_oauth_codes" in oauth_tables:
-                            connection.execute(
-                                """
-                                UPDATE platform_oauth_codes
-                                SET consumed_at=COALESCE(consumed_at,?)
-                                WHERE workspace_id=? AND user_id=?
-                                """,
-                                (
-                                    now_iso,
-                                    workspace_public_id,
-                                    subject_user_id,
-                                ),
-                            )
-                if (
-                    account is None
-                    or str(account["state"])
-                    not in {
-                        "suspended",
-                        "under_review",
-                        "deletion_pending",
-                        "deleted",
-                    }
-                ):
-                    self._set_derived_account_tx(
+            attempt_limit = 3 if restrictive else 1
+            for attempt_number in range(1, attempt_limit + 1):
+                savepoint = f"provider_projection_{attempt_number}"
+                connection.execute(f"SAVEPOINT {savepoint}")
+                try:
+                    self._project_legacy_subscription_tx(
                         connection,
-                        workspace_id,
-                        account_state,
+                        subscription=subscription,
+                        grant=grant,
+                        account=account,
+                        workspace_id=workspace_id,
+                        subject_user_id=subject_user_id,
+                        provider=provider,
+                        external_subscription_id=external_subscription_id,
+                        external_customer_id=external_customer_id,
+                        subscription_status=subscription_status,
+                        plan_key=plan_key,
+                        profile=profile,
+                        current_period_end=current_period_end,
+                        occurred_at_iso=occurred_at_iso,
+                        now=now,
+                        now_iso=now_iso,
                     )
-            except (ValueError, sqlite3.Error) as exc:
-                connection.execute("ROLLBACK TO provider_projection")
-                connection.execute("RELEASE provider_projection")
-                reason_code = (
-                    "invalid_transition"
-                    if isinstance(exc, ValueError)
-                    else "projection_failure"
-                )
-                attempt_outcome = (
-                    "quarantined"
-                    if isinstance(exc, ValueError)
-                    else "failure"
-                )
-                connection.execute(
-                    """
-                    UPDATE platform_provider_events
-                    SET outcome='quarantined',reason_code=?,updated_at=?
-                    WHERE id=?
-                    """,
-                    (reason_code, now_iso, event_row["id"]),
-                )
-                connection.execute(
-                    """
-                    INSERT INTO platform_provider_event_attempts(
-                        provider_event_id,outcome,reason_code,created_at
-                    ) VALUES (?,?,?,?)
-                    """,
-                    (event_row["id"], attempt_outcome, reason_code, now_iso),
-                )
-                event_row = connection.execute(
-                    "SELECT * FROM platform_provider_events WHERE id=?",
-                    (event_row["id"],),
-                ).fetchone()
-                return EventResult(
-                    False,
-                    self._event(event_row),
-                    self._subscription(subscription),
-                    self._grant(grant),
-                    "quarantined",
-                    reason_code,
-                )
-            else:
-                connection.execute("RELEASE provider_projection")
+                except (ValueError, sqlite3.Error) as exc:
+                    connection.execute(f"ROLLBACK TO {savepoint}")
+                    connection.execute(f"RELEASE {savepoint}")
+                    reason_code = (
+                        "invalid_transition"
+                        if isinstance(exc, ValueError)
+                        else "projection_failure"
+                    )
+                    attempt_outcome = (
+                        "quarantined"
+                        if isinstance(exc, ValueError)
+                        else "failure"
+                    )
+                    connection.execute(
+                        """
+                        INSERT INTO platform_provider_event_attempts(
+                            provider_event_id,outcome,reason_code,created_at
+                        ) VALUES (?,?,?,?)
+                        """,
+                        (
+                            event_row["id"],
+                            attempt_outcome,
+                            reason_code,
+                            now_iso,
+                        ),
+                    )
+                    if (
+                        isinstance(exc, sqlite3.Error)
+                        and attempt_number < attempt_limit
+                    ):
+                        continue
+                    if isinstance(exc, sqlite3.Error) and restrictive:
+                        logger.error(
+                            "provider_restrictive_retry_exhausted",
+                            extra={
+                                "provider": provider,
+                                "provider_event_db_id": event_row["id"],
+                                "workspace_id": workspace_id,
+                                "attempt_count": attempt_limit,
+                            },
+                        )
+                    connection.execute(
+                        """
+                        UPDATE platform_provider_events
+                        SET outcome='quarantined',reason_code=?,updated_at=?
+                        WHERE id=?
+                        """,
+                        (reason_code, now_iso, event_row["id"]),
+                    )
+                    event_row = connection.execute(
+                        "SELECT * FROM platform_provider_events WHERE id=?",
+                        (event_row["id"],),
+                    ).fetchone()
+                    return EventResult(
+                        False,
+                        self._event(event_row),
+                        self._subscription(subscription),
+                        self._grant(grant),
+                        "quarantined",
+                        reason_code,
+                    )
+                else:
+                    connection.execute(f"RELEASE {savepoint}")
+                    break
             connection.execute(
                 """
                 UPDATE platform_provider_events

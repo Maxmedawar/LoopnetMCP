@@ -246,12 +246,11 @@ async def test_no_state_restriction_orders_older_activation_without_rows(tmp_pat
     )
 
     equal = await _post(config, "stripe", equal_active)
-    assert equal.json()["outcome"] == "applied"
+    assert equal.json()["outcome"] == "stale"
     assert (
         EntitlementStore(config.cache_db_path)
         .get_subscription(workspace.id, "stripe", "sub_1")
-        .status
-        == "active"
+        is None
     )
 
 
@@ -302,12 +301,11 @@ async def test_unmapped_restriction_orders_activation_after_mapping(tmp_path):
     )
 
     equal = await _post(config, "stripe", equal_active)
-    assert equal.json()["outcome"] == "applied"
+    assert equal.json()["outcome"] == "stale"
     assert (
         EntitlementStore(config.cache_db_path)
         .get_subscription(workspace.id, "stripe", "sub_unmapped_order")
-        .status
-        == "active"
+        is None
     )
 
 

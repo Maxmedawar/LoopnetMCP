@@ -204,9 +204,13 @@ class AuthorityResolver:
                     SELECT 1
                     FROM platform_access_grants
                     WHERE workspace_id=? AND profile='jv_partner'
+                      AND (
+                          scope='workspace'
+                          OR (scope='subject' AND subject_user_id=?)
+                      )
                     LIMIT 1
                     """,
-                    (workspace.id,),
+                    (workspace.id, session.user_id),
                 ).fetchone()
                 is not None
             )
@@ -230,8 +234,8 @@ class AuthorityResolver:
                 WHERE workspace_id=?
                   AND status IN ('active','overridden','expiring')
                   AND (
-                      source NOT IN ('stripe','skool')
-                      OR subject_user_id=?
+                      scope='workspace'
+                      OR (scope='subject' AND subject_user_id=?)
                   )
                 """,
                 (workspace.id, session.user_id),

@@ -112,13 +112,17 @@ last-active-platform-admin protection is not exposed in this API.
 
 - `id`
 - `workspace_id`
-- normalized nonblank `provider`
+- optional `subject_user_id`
+- normalized safe provider slug
 - trimmed, nonblank, case-preserving `external_account_id`
 - canonical JSON `metadata`
 - timestamps
 - global uniqueness on `(provider, external_account_id)`
 
-This is a provider-neutral mapping only. Existing
+This is provider-neutral CRUD. Generic records accept any safe normalized
+provider slug and may be subjectless. The `stripe` and `skool` synchronization
+providers require an exact current workspace-member `subject_user_id`; missing
+or cross-workspace subjects fail closed. Existing
 `platform_subscriptions.external_customer_id` and
 `platform_access_grants.external_ref` remain unchanged.
 Provider matching is case-normalized. External account identifiers remain
@@ -225,8 +229,10 @@ next request over an existing OAuth session.
 ### Grants
 
 Create accepts the current entitlement fields: source, external reference,
-profile, plan key, optional status and effective dates. Delete is scoped by
-both path workspace and grant id. Existing grant schema and columns are reused.
+profile, plan key, `scope`, optional `subject_user_id`, status, and effective
+dates. Provider, manual, and promotion sources require an exact current member
+with `scope=subject`. `scope=workspace` is valid only for an explicitly
+subjectless JV grant. Delete is scoped by both path workspace and grant id.
 
 ### Territories
 
@@ -235,9 +241,11 @@ path workspace and territory id. Territories remain workspace-level.
 
 ### External accounts
 
-Create accepts provider, external account id, and optional JSON metadata. List
-and delete are path-workspace scoped. A provider/external id already mapped
-anywhere returns 409.
+Create accepts provider, external account id, optional `subject_user_id`, and
+optional JSON metadata. Generic safe provider slugs are provider-neutral.
+`stripe` and `skool` require an exact current member subject. List and delete
+are path-workspace scoped. A provider/external id already mapped anywhere
+returns 409.
 
 ### Account state
 

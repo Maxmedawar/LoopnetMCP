@@ -69,6 +69,8 @@ async def test_repeated_authority_and_entitlement_resolves_do_not_grow_fds(
         external_ref="fd-grant",
         profile=Profile.FULL_OPERATOR,
         plan_key="pro",
+        subject_user_id=user.id,
+        scope="subject",
     )
     resolver = AuthorityResolver(path)
 

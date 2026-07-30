@@ -82,6 +82,8 @@ async def test_platform_routes_enforce_auth_through_the_composed_app(tmp_path):
         external_ref="hosting-grant",
         profile=Profile.FULL_OPERATOR,
         plan_key="pro",
+        subject_user_id=user.id,
+        scope="subject",
     )
     tokens = auth.issue_session(
         workspace.public_id,
