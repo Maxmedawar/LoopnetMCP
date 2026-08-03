@@ -1,0 +1,336 @@
+"""Shared least-privilege preflights for dedicated PostgreSQL login roles."""
+
+from __future__ import annotations
+
+import psycopg
+
+ADMISSION_ROLE = "medawarcre_admission"
+
+
+class UnsafeDatabaseRoleError(RuntimeError):
+    """A login has more authority than its one documented group role."""
+
+
+def assert_exact_group_session(
+    connection: psycopg.Connection,
+    group_role: str,
+    *,
+    login_inherits: bool = False,
+    group_inherits: bool = False,
+    group_bypasses_rls: bool = False,
+    allow_database_owner_membership: bool = False,
+    allow_effective_ownership: bool = False,
+) -> None:
+    """Reject privileged logins, extra memberships, and unsafe group drift."""
+    row = connection.execute(
+        """
+        SELECT role.rolcanlogin,
+               current_user=session_user,
+               role.rolinherit,
+               role.rolsuper,
+               role.rolbypassrls,
+               role.rolcreatedb,
+               role.rolcreaterole,
+               role.rolreplication,
+               ARRAY(
+                   SELECT inherited_role.rolname
+                   FROM pg_catalog.pg_roles inherited_role
+                   WHERE inherited_role.rolname NOT IN (session_user, %s)
+                     AND (NOT %s OR inherited_role.rolname <> 'pg_database_owner')
+                     AND pg_has_role(session_user, inherited_role.oid, 'member')
+                   ORDER BY inherited_role.rolname
+               ),
+               ARRAY(
+                   SELECT parent.rolname || '|' ||
+                          membership.admin_option::text || '|' ||
+                          membership.inherit_option::text || '|' ||
+                          membership.set_option::text
+                   FROM pg_catalog.pg_auth_members membership
+                   JOIN pg_catalog.pg_roles parent ON parent.oid=membership.roleid
+                   WHERE membership.member=role.oid
+                   ORDER BY parent.rolname
+               ),
+               EXISTS (
+                   SELECT 1 FROM pg_catalog.pg_database database
+                   WHERE database.datname=current_database()
+                     AND database.datdba=role.oid
+               ),
+               EXISTS (
+                   SELECT 1 FROM pg_catalog.pg_namespace namespace
+                   WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
+                     AND namespace.nspname NOT LIKE 'pg_toast%%'
+                     AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                     AND namespace.nspowner=role.oid
+               ),
+               EXISTS (
+                   SELECT 1
+                   FROM pg_catalog.pg_class relation
+                   JOIN pg_catalog.pg_namespace namespace
+                     ON namespace.oid=relation.relnamespace
+                   WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
+                     AND namespace.nspname NOT LIKE 'pg_toast%%'
+                     AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                     AND relation.relkind IN ('r','p','S','v','m','f')
+                     AND relation.relowner=role.oid
+               ),
+               EXISTS (
+                   SELECT 1
+                   FROM pg_catalog.pg_proc procedure
+                   JOIN pg_catalog.pg_namespace namespace
+                     ON namespace.oid=procedure.pronamespace
+                   WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
+                     AND namespace.nspname NOT LIKE 'pg_toast%%'
+                     AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                     AND procedure.proowner=role.oid
+               ),
+               EXISTS (
+                   SELECT 1
+                   FROM pg_catalog.pg_type type_record
+                   JOIN pg_catalog.pg_namespace namespace
+                     ON namespace.oid=type_record.typnamespace
+                   WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
+                     AND namespace.nspname NOT LIKE 'pg_toast%%'
+                     AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                     AND type_record.typowner=role.oid
+               ),
+               EXISTS (
+                   SELECT 1 FROM pg_catalog.pg_database database
+                   WHERE database.datname=current_database()
+                     AND pg_has_role(session_user, database.datdba, 'member')
+               ),
+               EXISTS (
+                   SELECT 1 FROM pg_catalog.pg_namespace namespace
+                   WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
+                     AND namespace.nspname NOT LIKE 'pg_toast%%'
+                     AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                     AND pg_has_role(session_user, namespace.nspowner, 'member')
+               ),
+               EXISTS (
+                   SELECT 1
+                   FROM pg_catalog.pg_class relation
+                   JOIN pg_catalog.pg_namespace namespace
+                     ON namespace.oid=relation.relnamespace
+                   WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
+                     AND namespace.nspname NOT LIKE 'pg_toast%%'
+                     AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                     AND relation.relkind IN ('r','p','S','v','m','f')
+                     AND pg_has_role(session_user, relation.relowner, 'member')
+               ),
+               EXISTS (
+                   SELECT 1
+                   FROM pg_catalog.pg_proc procedure
+                   JOIN pg_catalog.pg_namespace namespace
+                     ON namespace.oid=procedure.pronamespace
+                   WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
+                     AND namespace.nspname NOT LIKE 'pg_toast%%'
+                     AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                     AND pg_has_role(session_user, procedure.proowner, 'member')
+               ),
+               EXISTS (
+                   SELECT 1
+                   FROM pg_catalog.pg_type type_record
+                   JOIN pg_catalog.pg_namespace namespace
+                     ON namespace.oid=type_record.typnamespace
+                   WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
+                     AND namespace.nspname NOT LIKE 'pg_toast%%'
+                     AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                     AND pg_has_role(session_user, type_record.typowner, 'member')
+               ),
+               has_database_privilege(session_user, current_database(), 'CREATE'),
+               EXISTS (
+                   SELECT 1
+                   FROM pg_catalog.pg_namespace namespace
+                   WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
+                     AND namespace.nspname NOT LIKE 'pg_toast%%'
+                     AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                     AND has_schema_privilege(session_user, namespace.oid, 'CREATE')
+               ),
+               EXISTS (
+                   SELECT 1
+                   FROM (
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_database database
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(database.datacl) acl
+                       WHERE database.datname=current_database()
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_namespace namespace
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(namespace.nspacl) acl
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_class relation
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(relation.relacl) acl
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_attribute attribute
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) acl
+                       WHERE attribute.attnum > 0 AND NOT attribute.attisdropped
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_proc procedure
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(procedure.proacl) acl
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_type type_record
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(type_record.typacl) acl
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_default_acl default_acl
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(default_acl.defaclacl) acl
+                   ) direct_acl
+                   WHERE direct_acl.grantee=role.oid
+               ),
+               EXISTS (
+                   SELECT 1
+                   FROM (
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_database database
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(database.datacl) acl
+                       WHERE database.datname=current_database()
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_namespace namespace
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(namespace.nspacl) acl
+                       WHERE namespace.nspname='medawarcre'
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_class relation
+                       JOIN pg_catalog.pg_namespace namespace
+                         ON namespace.oid=relation.relnamespace
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(relation.relacl) acl
+                       WHERE namespace.nspname='medawarcre'
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_attribute attribute
+                       JOIN pg_catalog.pg_class relation
+                         ON relation.oid=attribute.attrelid
+                       JOIN pg_catalog.pg_namespace namespace
+                         ON namespace.oid=relation.relnamespace
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) acl
+                       WHERE namespace.nspname='medawarcre'
+                         AND attribute.attnum > 0 AND NOT attribute.attisdropped
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_proc procedure
+                       JOIN pg_catalog.pg_namespace namespace
+                         ON namespace.oid=procedure.pronamespace
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(procedure.proacl) acl
+                       WHERE namespace.nspname='medawarcre'
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_type type_record
+                       JOIN pg_catalog.pg_namespace namespace
+                         ON namespace.oid=type_record.typnamespace
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(type_record.typacl) acl
+                       WHERE namespace.nspname='medawarcre'
+                       UNION ALL
+                       SELECT acl.grantee
+                       FROM pg_catalog.pg_default_acl default_acl
+                       CROSS JOIN LATERAL pg_catalog.aclexplode(default_acl.defaclacl) acl
+                   ) public_acl
+                   WHERE public_acl.grantee=0
+               ),
+               EXISTS (
+                   SELECT 1
+                   FROM pg_catalog.pg_default_acl default_acl
+                   WHERE default_acl.defaclrole=role.oid
+               )
+        FROM pg_catalog.pg_roles role
+        WHERE role.rolname=session_user
+        """,
+        (group_role, allow_database_owner_membership),
+    ).fetchone()
+    group = connection.execute(
+        "SELECT rolcanlogin,rolinherit,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,"
+        "rolreplication FROM pg_catalog.pg_roles WHERE rolname=%s",
+        (group_role,),
+    ).fetchone()
+    if row is None:
+        raise UnsafeDatabaseRoleError("database authority is unavailable")
+    (
+        can_login,
+        uses_session_authority,
+        inherits_privileges,
+        is_superuser,
+        bypasses_rls,
+        can_create_database,
+        can_create_role,
+        can_replicate,
+        extra_memberships,
+        memberships,
+        directly_owns_database,
+        directly_owns_schema,
+        directly_owns_relation,
+        directly_owns_function,
+        directly_owns_type,
+        owns_database,
+        owns_schema,
+        owns_relation,
+        owns_function,
+        owns_type,
+        can_create_in_database,
+        can_create_in_schema,
+        has_direct_acl,
+        has_explicit_public_acl,
+        owns_default_acl,
+    ) = row
+    expected_membership = (
+        f"{group_role}|false|{str(login_inherits).lower()}|true",
+    )
+    if (
+        not can_login
+        or not uses_session_authority
+        or inherits_privileges != login_inherits
+        or is_superuser
+        or bypasses_rls
+        or can_create_database
+        or can_create_role
+        or can_replicate
+        or tuple(extra_memberships)
+        or tuple(memberships) != expected_membership
+        or directly_owns_database
+        or directly_owns_schema
+        or directly_owns_relation
+        or directly_owns_function
+        or directly_owns_type
+        or can_create_in_database
+        or can_create_in_schema
+        or has_direct_acl
+        or has_explicit_public_acl
+        or owns_default_acl
+        or (
+            not allow_effective_ownership
+            and (
+                owns_database
+                or owns_schema
+                or owns_relation
+                or owns_function
+                or owns_type
+            )
+        )
+        or group
+        != (
+            False,
+            group_inherits,
+            False,
+            group_bypasses_rls,
+            False,
+            False,
+            False,
+        )
+    ):
+        raise UnsafeDatabaseRoleError(
+            "database login violates the dedicated authority contract"
+        )
+
+
+def assert_admission_session(connection: psycopg.Connection) -> None:
+    assert_exact_group_session(connection, ADMISSION_ROLE)
+
+
+__all__ = [
+    "ADMISSION_ROLE",
+    "UnsafeDatabaseRoleError",
+    "assert_admission_session",
+    "assert_exact_group_session",
+]

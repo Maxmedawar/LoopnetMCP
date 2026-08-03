@@ -2,7 +2,7 @@
 name = "cre-mcp"
 version = "0.1.0"
 description = "MCP server for searching Loopnet commercial real estate listings"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.0,<3",
     "curl_cffi>=0.7,<1",
@@ -10,8 +10,12 @@ dependencies = [
     "lxml>=5.0,<6",
     "pydantic>=2.0,<3",
     "pydantic-settings>=2.0,<3",
+    "psycopg[binary,pool]>=3.2,<4",
     "nodriver>=0.48,<1",
 ]
+
+[project.scripts]
+medawarcre-postgres = "cre_mcp.postgres.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -35,6 +39,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "cre_mcp.access" = ["data/*.gz", "data/*.md"]
+"cre_mcp.postgres" = ["sql/*.sql"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

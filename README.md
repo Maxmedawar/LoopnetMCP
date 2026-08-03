@@ -38,7 +38,7 @@ The server fetches live data from Loopnet, parses the HTML, and returns structur
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - [Claude Code CLI](https://claude.ai/code) installed
 
 ### Installation
