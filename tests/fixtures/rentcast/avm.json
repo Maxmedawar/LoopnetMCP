@@ -1,0 +1,22 @@
+{
+  "__note": "# VERIFY against live response; paid API key was not available",
+  "rent": 2100,
+  "rentRangeLow": 1950,
+  "rentRangeHigh": 2250,
+  "comparables": [
+    {
+      "formattedAddress": "200 Congress Ave, Austin, TX 78701",
+      "propertyType": "Apartment",
+      "bedrooms": 2,
+      "price": 2050,
+      "lastSeenDate": "2026-06-30T00:00:00.000Z"
+    },
+    {
+      "formattedAddress": "300 Congress Ave, Austin, TX 78701",
+      "propertyType": "Apartment",
+      "bedrooms": 2,
+      "price": 2150,
+      "lastSeenDate": "2026-07-01T00:00:00.000Z"
+    }
+  ]
+}

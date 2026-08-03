@@ -1,0 +1,19 @@
+{
+  "id": "vam_partial",
+  "property_type": "multifamily",
+  "price": 3000000,
+  "size": 25000,
+  "units": 30,
+  "noi": 210000,
+  "raw": {
+    "strategy": "value_add_multifamily",
+    "rent_gap_pct": 10,
+    "supply_pipeline_pct": 3
+  },
+  "market": {
+    "population": 700000,
+    "job_growth_5yr": 1.2,
+    "pop_growth_5yr": 0.8,
+    "treasury_10yr": 4.5
+  }
+}

@@ -1,0 +1,41 @@
+[
+  {
+    "REID": "172834",
+    "SITUS_ADDRESS": "811 VAIL AVE",
+    "PACKAGE_SALE_PRICE": 154000.0,
+    "PACKAGE_SALE_DATE": 1782933623000,
+    "HEATED_AREA": 856,
+    "TOTAL_UNITS": 1.0,
+    "BUILDING_DESCRIPTION": "01-SFR",
+    "SALE_PRICE_SOURCE": "REV",
+    "CentroidXCoordinate": -80.01342389,
+    "CentroidYCoordinat": 35.94420267,
+    "_geometry": {"x": -80.01342388799998, "y": 35.94420266700007}
+  },
+  {
+    "REID": "241147",
+    "SITUS_ADDRESS": "1207 YARROW ST",
+    "PACKAGE_SALE_PRICE": 402000.0,
+    "PACKAGE_SALE_DATE": 1782933427000,
+    "HEATED_AREA": 2242,
+    "TOTAL_UNITS": 1.0,
+    "BUILDING_DESCRIPTION": "01-SFR",
+    "SALE_PRICE_SOURCE": "REV",
+    "CentroidXCoordinate": -79.98967269,
+    "CentroidYCoordinat": 36.11006914,
+    "_geometry": {"x": -79.98967268599995, "y": 36.11006914400008}
+  },
+  {
+    "REID": "136511",
+    "SITUS_ADDRESS": "6405 LAKE BRANDT RD",
+    "PACKAGE_SALE_PRICE": 272500.0,
+    "PACKAGE_SALE_DATE": 1782930916000,
+    "HEATED_AREA": 1272,
+    "TOTAL_UNITS": 1.0,
+    "BUILDING_DESCRIPTION": "01-SFR",
+    "SALE_PRICE_SOURCE": "REV",
+    "CentroidXCoordinate": -79.85932698,
+    "CentroidYCoordinat": 36.22219591,
+    "_geometry": {"x": -79.85932697499999, "y": 36.22219591000004}
+  }
+]

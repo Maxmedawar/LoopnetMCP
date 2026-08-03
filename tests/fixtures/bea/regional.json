@@ -1,0 +1,14 @@
+{
+  "BEAAPI": {
+    "Request": {"RequestParam": []},
+    "Results": {
+      "Data": [
+        {"Code": "CAGDP1-1", "GeoFips": "48453", "GeoName": "Travis", "TimePeriod": "2021", "DataValue": "141349244", "UNIT_MULT": "3", "CL_UNIT": "Thousands of chained 2017 dollars"},
+        {"Code": "CAGDP1-1", "GeoFips": "48453", "GeoName": "Travis", "TimePeriod": "2020", "DataValue": "126415552", "UNIT_MULT": "3", "CL_UNIT": "Thousands of chained 2017 dollars"},
+        {"Code": "CAGDP1-1", "GeoFips": "48453", "GeoName": "Travis", "TimePeriod": "2024", "DataValue": "165671955", "UNIT_MULT": "3", "CL_UNIT": "Thousands of chained 2017 dollars"},
+        {"Code": "CAGDP1-1", "GeoFips": "48453", "GeoName": "Travis", "TimePeriod": "2023", "DataValue": "160912722", "UNIT_MULT": "3", "CL_UNIT": "Thousands of chained 2017 dollars"},
+        {"Code": "CAGDP1-1", "GeoFips": "48453", "GeoName": "Travis", "TimePeriod": "2022", "DataValue": "154338801", "UNIT_MULT": "3", "CL_UNIT": "Thousands of chained 2017 dollars"}
+      ]
+    }
+  }
+}

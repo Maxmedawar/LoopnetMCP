@@ -1,0 +1,19 @@
+{
+  "Results": {
+    "FRSFacility": [
+      {
+        "RegistryId": "110022431206",
+        "FacilityName": "SAN JACINTO RIVER WASTE PITS",
+        "LocationAddress": "W BANK OF SAN JACINTO RIVER, N OF HWY 10",
+        "SupplementalLocation": null,
+        "CityName": "CHANNELVIEW",
+        "CountyName": "HARRIS",
+        "StateAbbr": "TX",
+        "ZipCode": "77530",
+        "FIPSCode": "48201",
+        "Latitude83": "29.7944",
+        "Longitude83": "-95.0625"
+      }
+    ]
+  }
+}

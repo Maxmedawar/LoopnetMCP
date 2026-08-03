@@ -1,0 +1,16 @@
+{
+  "id": "nnn_partial",
+  "property_type": "retail",
+  "price": 1200000,
+  "size": 4000,
+  "noi": 72000,
+  "raw": {
+    "strategy": "nnn_retail",
+    "tenant_name": "CVS Pharmacy",
+    "tenant_credit_rating": "BBB",
+    "lease_years_remaining": 10
+  },
+  "market": {
+    "population": 500000
+  }
+}

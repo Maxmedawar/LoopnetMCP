@@ -2,9 +2,9 @@
 
 import pytest
 
-from loopnet_mcp.scraper.parsers.search import parse_search_results, parse_pagination
-from loopnet_mcp.scraper.parsers.detail import parse_property_detail
-from loopnet_mcp.scraper.parsers.utils import parse_address
+from cre_mcp.sources.loopnet.parsers.search import parse_search_results, parse_pagination
+from cre_mcp.sources.loopnet.parsers.detail import parse_property_detail
+from cre_mcp.sources.loopnet.parsers.utils import parse_address
 from tests.conftest import load_fixture
 
 

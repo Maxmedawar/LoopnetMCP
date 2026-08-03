@@ -1,0 +1,35 @@
+[
+  {
+    "lastname": "Du",
+    "firstname": "Steven",
+    "middlename": "Phan",
+    "city": "San Diego",
+    "state": "CA",
+    "zipcode": "92122",
+    "licenseprefix": "MLO",
+    "licensenumber": "100536270",
+    "licensetype": "Mortgage Loan Originator",
+    "licensefirstissuedate": "03/28/2023",
+    "licenselastreneweddate": "12/17/2025",
+    "licenseexpirationdate": "12/31/2026",
+    "licensestatus": "Active",
+    "casenumber": "None",
+    "verifylicense": "https://apps.colorado.gov/dre/licensing/Lookup/PrintLicenseDetails.aspx?cred=313429&contact=542473"
+  },
+  {
+    "lastname": "Godinez-Salas",
+    "firstname": "Jessica",
+    "city": "Detroit",
+    "state": "MI",
+    "zipcode": "48226",
+    "licenseprefix": "MLO",
+    "licensenumber": "100530846",
+    "licensetype": "Mortgage Loan Originator",
+    "licensefirstissuedate": "02/22/2022",
+    "licenselastreneweddate": "12/28/2025",
+    "licenseexpirationdate": "12/31/2026",
+    "licensestatus": "Active",
+    "casenumber": "None",
+    "verifylicense": "https://apps.colorado.gov/dre/licensing/Lookup/PrintLicenseDetails.aspx?cred=293829&contact=519636"
+  }
+]

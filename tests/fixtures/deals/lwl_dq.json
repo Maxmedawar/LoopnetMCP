@@ -1,0 +1,17 @@
+{
+  "id": "lwl_dq",
+  "property_type": "retail",
+  "price": 600000,
+  "size": 2000,
+  "noi": 42000,
+  "raw": {
+    "strategy": "location_retail",
+    "street_level": false,
+    "ground_floor_entrance": false,
+    "frontage_type": "upstairs",
+    "pedestrian_percentile": 0.8
+  },
+  "market": {
+    "population": 500000
+  }
+}

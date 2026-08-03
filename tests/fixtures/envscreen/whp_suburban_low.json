@@ -1,0 +1,31 @@
+{
+  "objectId": 0,
+  "name": "Pixel",
+  "value": "2",
+  "location": {
+    "x": -10631011.370757626,
+    "y": 3542170.6276430199,
+    "spatialReference": {
+      "wkid": 102100,
+      "latestWkid": 3857
+    }
+  },
+  "properties": {
+    "Values": ["2"]
+  },
+  "catalogItems": {
+    "objectIdFieldName": "objectid",
+    "features": [
+      {
+        "attributes": {
+          "objectid": 3,
+          "name": "whp2023_cls_conus",
+          "lowps": 270,
+          "category": 1,
+          "tag": "Dataset"
+        }
+      }
+    ]
+  },
+  "catalogItemVisibilities": [1]
+}

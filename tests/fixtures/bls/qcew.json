@@ -1,0 +1,18 @@
+{
+  "status": "REQUEST_SUCCEEDED",
+  "responseTime": 116,
+  "message": [],
+  "Results": {
+    "series": [
+      {
+        "seriesID": "ENU4845310010",
+        "data": [
+          {"year": "2025", "period": "M12", "periodName": "December", "value": "939358", "footnotes": [{"code": "P", "text": "Preliminary."}]},
+          {"year": "2024", "period": "M12", "periodName": "December", "value": "914757", "footnotes": [{}]},
+          {"year": "2020", "period": "M12", "periodName": "December", "value": "771513", "footnotes": [{}]},
+          {"year": "2019", "period": "M01", "periodName": "January", "value": "757902", "footnotes": [{}]}
+        ]
+      }
+    ]
+  }
+}

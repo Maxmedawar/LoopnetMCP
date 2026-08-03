@@ -1,0 +1,18 @@
+{
+  "data": {
+    "county_name": "",
+    "counties_msa": "Bastrop County, TX; Caldwell County, TX; Hays County, TX; Travis County, TX; and Williamson County, TX",
+    "town_name": "",
+    "metro_status": "1",
+    "metro_name": "Austin-Round Rock-Georgetown, TX",
+    "area_name": "Austin-Round Rock, TX MSA",
+    "basicdata": {
+      "Efficiency": 1519,
+      "One-Bedroom": 1635,
+      "Two-Bedroom": 1924,
+      "Three-Bedroom": 2470,
+      "Four-Bedroom": 2840,
+      "year": "2024"
+    }
+  }
+}

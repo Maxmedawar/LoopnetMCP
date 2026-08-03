@@ -1,0 +1,45 @@
+{
+  "Results": {
+    "FRSFacility": [
+      {
+        "RegistryId": "110008164244",
+        "FacilityName": "CHEVRON USA INC",
+        "LocationAddress": "9101 E CLINTON",
+        "SupplementalLocation": null,
+        "CityName": "HOUSTON",
+        "CountyName": "HARRIS",
+        "StateAbbr": "TX",
+        "ZipCode": "77029",
+        "FIPSCode": "48201",
+        "Latitude83": "29.73726",
+        "Longitude83": "-95.26384"
+      },
+      {
+        "RegistryId": "110005080456",
+        "FacilityName": "GULF IMPORT AUTO HANDLING",
+        "LocationAddress": "9406 CLINTON DR",
+        "SupplementalLocation": null,
+        "CityName": "HOUSTON",
+        "CountyName": "HARRIS",
+        "StateAbbr": "TX",
+        "ZipCode": "77029",
+        "FIPSCode": "48201",
+        "Latitude83": "29.735454",
+        "Longitude83": "-95.26079"
+      },
+      {
+        "RegistryId": "110005055313",
+        "FacilityName": "O'NEAL STEEL INC",
+        "LocationAddress": "9500 CLINTON DR",
+        "SupplementalLocation": null,
+        "CityName": "HOUSTON",
+        "CountyName": "HARRIS",
+        "StateAbbr": "TX",
+        "ZipCode": "77029",
+        "FIPSCode": "48201",
+        "Latitude83": "29.7364",
+        "Longitude83": "-95.2621"
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 """Tests for Pydantic data models."""
 
-from loopnet_mcp.models import (
+from cre_mcp.models import (
     PropertyType,
     ListingType,
     PropertySummary,

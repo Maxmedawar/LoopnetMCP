@@ -1,0 +1,9 @@
+{
+  "status": {"code": 0, "msg": "SuccessWithResult", "total": 1},
+  "property": [
+    {
+      "identifier": {"fips": "48453", "apn": "0123456789"},
+      "avm": {"eventDate": "2026-06-30", "amount": {"value": 2400000, "valueLow": 2160000, "valueHigh": 2640000, "scr": 82}}
+    }
+  ]
+}

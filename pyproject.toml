@@ -1,5 +1,5 @@
 [project]
-name = "loopnet-mcp"
+name = "cre-mcp"
 version = "0.1.0"
 description = "MCP server for searching Loopnet commercial real estate listings"
 requires-python = ">=3.10"
@@ -17,6 +17,13 @@ dependencies = [
 dev = [
     "pytest>=8.0,<9",
     "pytest-asyncio>=0.24,<1",
+]
+# Document Truth Engine parsers. Optional so the core scraper stays lean; the
+# truth/ parsers import these lazily and fall back to a stdlib path when absent.
+truth = [
+    "pdfplumber>=0.11,<1",
+    "openpyxl>=3.1,<4",
+    "pypdf>=6,<7",
 ]
 
 [build-system]

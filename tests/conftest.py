@@ -21,11 +21,21 @@ def load_fixture(name: str) -> str:
     return fixture_path.read_text()
 
 
+def pytest_addoption(parser):
+    """Register opt-in golden snapshot regeneration."""
+    parser.addoption(
+        "--update-golden",
+        action="store_true",
+        default=False,
+        help="Regenerate Phase 5 deal-score golden snapshots.",
+    )
+
+
 @pytest.fixture(autouse=True)
 def _skip_warmup():
     """Skip the homepage warmup request in all tests."""
     with patch(
-        "loopnet_mcp.scraper.client.LoopnetClient._warmup",
+        "cre_mcp.scraper.client.LoopnetClient._warmup",
         new_callable=AsyncMock,
     ):
         yield
@@ -35,7 +45,7 @@ def _skip_warmup():
 def _disable_browser_fetcher():
     """Prevent real browser launches in all tests."""
     with patch(
-        "loopnet_mcp.scraper.browser.BrowserFetcher._ensure_browser",
+        "cre_mcp.scraper.browser.BrowserFetcher._ensure_browser",
         new_callable=AsyncMock,
     ):
         yield
