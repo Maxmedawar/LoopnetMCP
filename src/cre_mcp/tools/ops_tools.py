@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import logging
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.engine import structured_property_within_territories
+from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.deals.store import get_deal_store
 from cre_mcp.models import Deal, DealContext
 from cre_mcp.ops.playbook import operating_playbook as build_operating_playbook
@@ -18,6 +21,17 @@ async def _deal_context(url_or_id: str, source: str) -> DealContext:
     if "error" in payload:
         raise ValueError(str(payload["error"]))
     deal = Deal.model_validate(payload)
+    tenant = current_context()
+    if (
+        tenant is not None
+        and not tenant.trusted
+        and tenant.profile in TERRITORY_LIMITED
+        and not structured_property_within_territories(
+            deal.listing.model_dump(mode="json"),
+            tenant.territories,
+        )
+    ):
+        raise ValueError("restricted listing result denied")
     return DealContext(
         listing=deal.listing,
         facts=deal.facts,
@@ -61,7 +75,21 @@ async def after_tax_returns(
             "cost_seg": cost_seg,
             "hold_years": hold_years,
         }
-        return calculate_after_tax_returns(ctx, assumptions).model_dump(mode="json")
+        payload = calculate_after_tax_returns(ctx, assumptions).model_dump(mode="json")
+        tenant = current_context()
+        if (
+            tenant is not None
+            and not tenant.trusted
+            and tenant.profile in TERRITORY_LIMITED
+        ):
+            payload["assumptions_used"] = {}
+            payload["subject_property"] = {
+                "address": ctx.listing.address,
+                "city": ctx.listing.city,
+                "state": ctx.listing.state,
+                "zip_code": ctx.listing.zip_code,
+            }
+        return payload
     except Exception as exc:
         logger.error("after_tax_returns error: %s", exc)
         return {"error": str(exc)}

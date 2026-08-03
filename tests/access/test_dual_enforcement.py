@@ -35,7 +35,7 @@ async def test_quota_is_enforced_at_execution(mini_mcp, identity, ctx_tiny, audi
     identity["ctx"] = ctx_tiny
     for _ in range(2):
         data = await call_data(mini_mcp, "search_properties", {"location": "OH"})
-        assert data["ok"] is True
+        assert data["properties"][0]["state"] == "OH"
     with pytest.raises(ToolError, match="quota"):
         await call_data(mini_mcp, "search_properties", {"location": "OH"})
     events = audit.events(workspace_id="ws-tiny")
@@ -58,7 +58,7 @@ async def test_context_quota_overrides_absent_registry_plan(
         "search_properties",
         {"location": "OH"},
     )
-    assert first["ok"] is True
+    assert first["properties"][0]["state"] == "OH"
     with pytest.raises(ToolError, match="quota"):
         await call_data(
             mini_mcp,

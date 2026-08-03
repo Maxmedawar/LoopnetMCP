@@ -9,10 +9,35 @@ real moat: judgment that compounds instead of a static score.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
+from cre_mcp.access.result_models import RestrictedDealTimelineResult
 from cre_mcp.deals.store import get_deal_store
 
 logger = logging.getLogger(__name__)
+
+
+def _restricted_projection_required() -> bool:
+    context = current_context()
+    return bool(
+        context is not None
+        and not context.trusted
+        and context.profile in TERRITORY_LIMITED
+    )
+
+
+def _timeline_subject_property(deal: Mapping[str, object]) -> dict[str, object]:
+    listing = deal.get("listing")
+    if not isinstance(listing, Mapping):
+        raise ValueError("stored deal is missing its listing property")
+    return {
+        "address": listing.get("address"),
+        "city": listing.get("city"),
+        "state": listing.get("state"),
+        "zip_code": listing.get("zip_code"),
+    }
 
 
 async def record_ic_decision(
@@ -102,7 +127,55 @@ async def deal_timeline(deal_id: str) -> dict:
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
-        return await get_deal_store().get_deal_timeline(deal_id.strip())
+        normalized_deal_id = deal_id.strip()
+        store = get_deal_store()
+        result = await store.get_deal_timeline(normalized_deal_id)
+        if not _restricted_projection_required():
+            return result
+
+        if result.get("deal_id") != normalized_deal_id:
+            raise ValueError("deal timeline does not match the requested deal")
+        deal = await store.get_deal(normalized_deal_id)
+        if not isinstance(deal, Mapping):
+            raise ValueError("unknown deal_id")
+        raw_events = result.get("events")
+        raw_decisions = result.get("ic_decisions")
+        if type(raw_events) is not list or not all(
+            isinstance(item, Mapping) for item in raw_events
+        ):
+            raise ValueError("deal timeline events are malformed")
+        if type(raw_decisions) is not list or not all(
+            isinstance(item, Mapping) for item in raw_decisions
+        ):
+            raise ValueError("deal timeline decisions are malformed")
+
+        payload = {
+            "deal_id": normalized_deal_id,
+            "property": _timeline_subject_property(deal),
+            "events": [
+                {
+                    "event_type": item.get("event_type"),
+                    "event_ts": item.get("event_ts"),
+                    "created_at": item.get("created_at"),
+                }
+                for item in raw_events
+            ],
+            "ic_decisions": [
+                {
+                    "system_verdict": item.get("system_verdict"),
+                    "expert_verdict": item.get("expert_verdict"),
+                    "agreed": item.get("agreed"),
+                    "created_at": item.get("created_at"),
+                }
+                for item in raw_decisions
+            ],
+            "event_count": len(raw_events),
+            "ic_decision_count": len(raw_decisions),
+        }
+        return RestrictedDealTimelineResult.model_validate(
+            payload,
+            strict=True,
+        ).model_dump(mode="json")
     except Exception as exc:
         logger.error("deal_timeline error: %s", exc)
         return {"error": str(exc)}

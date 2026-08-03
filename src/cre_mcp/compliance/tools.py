@@ -11,6 +11,10 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
+from cre_mcp.access.territory import project_permit_property
+
 from .calendar import compliance_calendar as _compliance_calendar
 from .calendar import upcoming as _upcoming
 from .energy_rules import energy_compliance as _energy_compliance
@@ -171,10 +175,39 @@ def unpermitted_work_screen(
 ) -> dict[str, Any]:
     """Conservatively match observed work to supplied permit history."""
 
-    return _safe(
+    result = _safe(
         "unpermitted_work_screen",
         lambda: _unpermitted_work_screen(observed_improvements, permit_history),
     )
+    tenant = current_context()
+    if (
+        tenant is not None
+        and not tenant.trusted
+        and tenant.profile in TERRITORY_LIMITED
+        and "error" not in result
+    ):
+        fallback_location = (
+            permit_history.get("city")
+            if isinstance(permit_history, Mapping)
+            and type(permit_history.get("city")) is str
+            else None
+        )
+        for match in result.get("matches", []):
+            if not isinstance(match, dict):
+                continue
+            for candidate in match.get("plausible_permits", []):
+                if not isinstance(candidate, dict):
+                    continue
+                permit = candidate.get("permit")
+                candidate["permit"] = (
+                    project_permit_property(
+                        permit,
+                        fallback_location=fallback_location,
+                    )
+                    if isinstance(permit, Mapping)
+                    else None
+                ) or {}
+    return result
 
 
 def phase2_scope(

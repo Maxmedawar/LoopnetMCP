@@ -3,6 +3,9 @@
 import logging
 from typing import Optional
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.engine import structured_property_within_territories
+from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.models import Listing, ListingRef, MarketOverview, SearchResult
 from cre_mcp.sources.base import SearchQuery, SourceError
 from cre_mcp.sources.loopnet.parsers import build_market_overview
@@ -19,6 +22,22 @@ from cre_mcp.sources.registry import SourceRegistry
 
 logger = logging.getLogger(__name__)
 registry = SourceRegistry()
+
+
+def _restricted_listings(listings: list[Listing]) -> list[Listing]:
+    """Validate provider rows before aggregation and remove opaque egress data."""
+    ctx = current_context()
+    if ctx is None or ctx.trusted or ctx.profile not in TERRITORY_LIMITED:
+        return listings
+    projected: list[Listing] = []
+    for listing in listings:
+        payload = listing.model_dump(mode="json")
+        if not structured_property_within_territories(payload, ctx.territories):
+            raise ValueError("restricted listing result denied")
+        projected.append(
+            listing.model_copy(update={"lat": None, "lon": None, "raw": {}})
+        )
+    return projected
 
 
 def _loopnet_search_metadata(listings: list[Listing]) -> tuple[int | None, bool]:
@@ -80,6 +99,12 @@ async def search_properties(
         )
         requested_sources = ["loopnet"] if sources is None else sources
         aggregated = await registry.search_all(query, sources=requested_sources)
+        # Pagination metadata lives in provider-only raw fields. Capture it
+        # before the restricted projection removes those opaque fields from
+        # every client-visible listing.
+        legacy_total, legacy_has_next = _loopnet_search_metadata(aggregated.listings)
+        restricted_listings = _restricted_listings(aggregated.listings)
+        aggregated = aggregated.model_copy(update={"listings": restricted_listings})
         if sources is not None:
             return aggregated.model_dump(mode="json")
         if aggregated.errors and not aggregated.listings:
@@ -91,14 +116,15 @@ async def search_properties(
             property_summary_from_listing(listing)
             for listing in aggregated.listings
         ]
-        total, has_next = _loopnet_search_metadata(aggregated.listings)
         result = SearchResult(
             query_location=location,
             query_property_type=property_type,
             query_listing_type=listing_type,
-            total_results=total if total is not None else len(properties),
+            total_results=(
+                legacy_total if legacy_total is not None else len(properties)
+            ),
             page=page or 1,
-            has_next_page=has_next,
+            has_next_page=legacy_has_next,
             properties=properties,
         )
         return result.model_dump()
@@ -181,6 +207,8 @@ async def get_market_overview(
         property_type=resolve_property_type(property_type),
     )
     aggregated = await registry.search_all(query, sources=["loopnet"])
+    restricted_listings = _restricted_listings(aggregated.listings)
+    aggregated = aggregated.model_copy(update={"listings": restricted_listings})
     if aggregated.errors and not aggregated.listings:
         message = aggregated.errors.get("loopnet") or next(
             iter(aggregated.errors.values())

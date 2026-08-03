@@ -5,6 +5,9 @@ import logging
 import re
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
+from cre_mcp.access.territory import canonical_property_from_full_address
 from cre_mcp.comps.avm import estimate_value
 from cre_mcp.comps.records import sale_comps
 from cre_mcp.config import CreConfig
@@ -26,6 +29,15 @@ logger = logging.getLogger(__name__)
 _intel: MarketIntel | None = None
 _rent_comps: RentCompsService | None = None
 _owner_lookup: OwnerLookup | None = None
+
+
+def _restricted_projection_required() -> bool:
+    context = current_context()
+    return bool(
+        context is not None
+        and not context.trusted
+        and context.profile in TERRITORY_LIMITED
+    )
 
 
 def _engine() -> MarketIntel:
@@ -175,23 +187,22 @@ def _is_address(value: str) -> bool:
 
 
 def _subject_with_parcel(address: str, parcel: ParcelRecord | None) -> Listing:
-    config_state = None
+    property_identity = canonical_property_from_full_address(address)
+    config_state = property_identity.get("state") if property_identity else None
     raw: dict[str, Any] = {}
     if parcel:
         if parcel.last_sale_price is not None:
             raw["last_sale_price"] = parcel.last_sale_price
         if parcel.last_sale_date:
             raw["last_sale_date"] = parcel.last_sale_date
-    state_match = re.search(r"\b([A-Z]{2})\s+\d{5}(?:-\d{4})?\b", address.upper())
-    if state_match:
-        config_state = state_match.group(1)
     return Listing(
         source="address",
         source_id=normalize_address(address) or address,
         name=address,
         address=address,
-        city="",
+        city=(property_identity.get("city") if property_identity else "") or "",
         state=config_state or "",
+        zip_code=property_identity.get("zip_code") if property_identity else None,
         property_type=parcel.use_code if parcel else None,
         price_usd=None,
         size_sqft_num=parcel.building_sqft if parcel else None,
@@ -364,20 +375,36 @@ async def get_comps(
                     comps,
                     paid_providers,
                 )
-        return {
-            "subject": {
+        subject_payload = {
                 "source": subject.source,
                 "source_id": subject.source_id,
                 "address": subject.address,
                 "asking_price": subject.price_usd,
-            },
+        }
+        if _restricted_projection_required():
+            subject_payload.update(
+                {
+                    "city": subject.city,
+                    "state": subject.state,
+                    "zip_code": subject.zip_code,
+                }
+            )
+        return {
+            "subject": subject_payload,
             "value_estimate": value_estimate.model_dump(mode="json"),
             "value_provenance": {
                 "method": value_estimate.method,
                 "confidence": value_estimate.confidence,
                 "n_comps": value_estimate.n_comps,
             },
-            "comps": [comp.model_dump(mode="json") for comp in comps],
+            "comps": [
+                comp.model_copy(update={"lat": None, "lon": None}).model_dump(
+                    mode="json"
+                )
+                if _restricted_projection_required()
+                else comp.model_dump(mode="json")
+                for comp in comps
+            ],
             "explanation": _comps_explanation(subject, value_estimate),
             "coverage_note": (
                 "Free closed-sale data is county-fragmented and is always tried first. "

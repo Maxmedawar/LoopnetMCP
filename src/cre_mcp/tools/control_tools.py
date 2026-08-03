@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.control.pitch import build_tenant_pitch as compose_tenant_pitch
 from cre_mcp.control.site_fit import (
     evaluate_tenant_site_fit as evaluate_site_fit,
@@ -18,6 +20,15 @@ from cre_mcp.control.structures import (
 )
 from cre_mcp.control.vacant import detect_vacant
 from cre_mcp.models.listings import Listing
+
+
+def _restricted_projection_required() -> bool:
+    context = current_context()
+    return bool(
+        context is not None
+        and not context.trusted
+        and context.profile in TERRITORY_LIMITED
+    )
 
 
 def _number(value: Any) -> float | None:
@@ -174,7 +185,13 @@ async def find_control_opportunities(
             )
             opportunities.append(
                 {
-                    "listing": listing.model_dump(mode="json"),
+                    "listing": (
+                        listing.model_copy(
+                            update={"lat": None, "lon": None, "raw": {}}
+                        )
+                        if _restricted_projection_required()
+                        else listing
+                    ).model_dump(mode="json"),
                     "vacancy": vacancy,
                     "tenant_matches": tenant_matches,
                     "spread": spread,

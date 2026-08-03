@@ -15,6 +15,7 @@ from cre_mcp.access.audit import AuditLog
 from cre_mcp.access.middleware import install_access
 from cre_mcp.access.profiles import Profile
 from cre_mcp.access.registry import WorkspaceRegistry
+from cre_mcp.access.territory import location_state
 
 
 @pytest.fixture
@@ -91,6 +92,7 @@ def mini_mcp(registry, audit, identity):
     so the production capability matrix governs them. Fakes echo the kwargs
     they actually received, which lets tests prove sanitization."""
     app = FastMCP(name="access-test")
+    app._access_test_search_received = {}
 
     @app.tool
     async def search_properties(
@@ -99,14 +101,41 @@ def mini_mcp(registry, audit, identity):
         role: str | None = None,
         db_path: str | None = None,
     ) -> dict:
+        state = location_state(location)
+        normalized = location.casefold()
+        if state == "TX" and "dallas" in normalized:
+            city, zip_code = "Dallas", "75201"
+        elif state == "TX":
+            city, zip_code = "Houston", "77001"
+        elif state == "FL":
+            city, zip_code = "Miami", "33101"
+        elif state == "NY":
+            city, zip_code = "New York", "10001"
+        else:
+            city, zip_code = "Washington", "20001"
+        app._access_test_search_received = {
+            "location": location,
+            "workspace_id": workspace_id,
+            "role": role,
+            "db_path": db_path,
+        }
         return {
-            "ok": True,
-            "received": {
-                "location": location,
-                "workspace_id": workspace_id,
-                "role": role,
-                "db_path": db_path,
-            },
+            "query_location": location,
+            "query_property_type": None,
+            "query_listing_type": None,
+            "total_results": 1,
+            "page": 1,
+            "has_next_page": False,
+            "properties": [
+                {
+                    "name": "Fixture Property",
+                    "address": f"100 Main Street, {city}, {state} {zip_code}",
+                    "city": city,
+                    "state": state or location,
+                    "zip_code": zip_code,
+                    "url": "https://example.test/property",
+                }
+            ],
         }
 
     @app.tool

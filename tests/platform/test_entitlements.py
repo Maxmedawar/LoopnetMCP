@@ -1,6 +1,7 @@
 """Commercial account, subscription, and entitlement synchronization tests."""
 
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -29,7 +30,7 @@ async def _workspace(path):
 
 
 def _subject_id(path, workspace_id: int) -> int:
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         row = connection.execute(
             """
             SELECT user_id
@@ -44,9 +45,9 @@ def _subject_id(path, workspace_id: int) -> int:
     return int(row[0])
 
 
-def test_stripe_activation_is_idempotent_and_grants_access(tmp_path):
+async def test_stripe_activation_is_idempotent_and_grants_access(tmp_path):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
 
     first = store.apply_subscription_event(
@@ -87,9 +88,9 @@ def test_stripe_activation_is_idempotent_and_grants_access(tmp_path):
     assert len(store.list_grants(workspace.public_id)) == 1
 
 
-def test_subscription_upgrade_downgrade_and_cancel(tmp_path):
+async def test_subscription_upgrade_downgrade_and_cancel(tmp_path):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
 
     store.apply_subscription_event(
@@ -135,9 +136,9 @@ def test_subscription_upgrade_downgrade_and_cancel(tmp_path):
     assert store.list_grants(workspace.id)[0].status == "revoked"
 
 
-def test_skool_join_leave_and_duplicate_event(tmp_path):
+async def test_skool_join_leave_and_duplicate_event(tmp_path):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
 
     joined = store.apply_subscription_event(
@@ -180,9 +181,9 @@ def test_skool_join_leave_and_duplicate_event(tmp_path):
     ) is None
 
 
-def test_manual_and_jv_grants_expire_and_revoke(tmp_path):
+async def test_manual_and_jv_grants_expire_and_revoke(tmp_path):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
     now = datetime.now(UTC)
     subject_id = _subject_id(path, workspace.id)
@@ -236,9 +237,9 @@ def test_manual_and_jv_grants_expire_and_revoke(tmp_path):
     ) is None
 
 
-def test_payment_failure_is_terminal_without_dunning_access(tmp_path):
+async def test_payment_failure_is_terminal_without_dunning_access(tmp_path):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
     period_end = datetime.now(UTC) + timedelta(days=3)
 
@@ -265,11 +266,11 @@ def test_payment_failure_is_terminal_without_dunning_access(tmp_path):
         store.set_account_state(workspace.id, "active")
 
 
-def test_unknown_workspace_and_cross_tenant_grant_access_are_denied(tmp_path):
+async def test_unknown_workspace_and_cross_tenant_grant_access_are_denied(tmp_path):
     path = tmp_path / "platform.db"
-    first = __import__("asyncio").run(_workspace(path))
+    first = await _workspace(path)
     repository = PlatformRepository(path)
-    second = __import__("asyncio").run(repository.create_workspace("Other CRE"))
+    second = await repository.create_workspace("Other CRE")
     assert second is not None
     store = EntitlementStore(path)
     subject_id = _subject_id(path, first.id)
@@ -297,9 +298,9 @@ def test_unknown_workspace_and_cross_tenant_grant_access_are_denied(tmp_path):
         )
 
 
-def test_late_provider_event_is_journaled_without_reopening_canceled_account(tmp_path):
+async def test_late_provider_event_is_journaled_without_reopening_canceled_account(tmp_path):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
 
     store.apply_subscription_event(
@@ -353,9 +354,9 @@ def test_late_provider_event_is_journaled_without_reopening_canceled_account(tmp
     ) is None
 
 
-def test_invited_account_state_is_reachable_for_a_new_workspace(tmp_path):
+async def test_invited_account_state_is_reachable_for_a_new_workspace(tmp_path):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
 
     invited = store.set_account_state(workspace.id, "invited")
@@ -363,9 +364,9 @@ def test_invited_account_state_is_reachable_for_a_new_workspace(tmp_path):
     assert store.set_account_state(workspace.id, "active").state == "active"
 
 
-def test_stale_active_provider_event_cannot_reopen_newer_canceled_state(tmp_path):
+async def test_stale_active_provider_event_cannot_reopen_newer_canceled_state(tmp_path):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
     newer = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
     older = newer - timedelta(hours=1)
@@ -405,9 +406,9 @@ def test_stale_active_provider_event_cannot_reopen_newer_canceled_state(tmp_path
     assert len(store.list_events(workspace.id)) == 2
 
 
-def test_distinct_events_with_equal_source_timestamp_are_both_applied(tmp_path):
+async def test_distinct_events_with_equal_source_timestamp_are_both_applied(tmp_path):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
     occurred_at = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
 
@@ -457,12 +458,12 @@ def test_distinct_events_with_equal_source_timestamp_are_both_applied(tmp_path):
 
 
 @pytest.mark.parametrize("compatibility_path", ["grant", "event"])
-def test_provider_compatibility_path_preserves_same_state_operator_reason(
+async def test_provider_compatibility_path_preserves_same_state_operator_reason(
     tmp_path,
     compatibility_path,
 ):
     path = tmp_path / "platform.db"
-    workspace = __import__("asyncio").run(_workspace(path))
+    workspace = await _workspace(path)
     store = EntitlementStore(path)
     store.set_account_state(
         workspace.id,

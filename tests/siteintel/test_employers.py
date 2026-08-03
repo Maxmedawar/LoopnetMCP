@@ -4,6 +4,9 @@ from datetime import date
 import json
 from pathlib import Path
 
+from cre_mcp.access.context import TenantContext, local_context, use_context
+from cre_mcp.access.profiles import Profile
+from cre_mcp.siteintel import tools as siteintel_tools
 from cre_mcp.siteintel.employers import (
     CA_WARN_SOURCE_URL,
     TX_WARN_SOURCE_URL,
@@ -32,6 +35,63 @@ def test_texas_parser_normalizes_captured_real_fixture() -> None:
     }
     assert events[1]["employer"] == "JPMorgan Chase & Co."
     assert events[1]["affected"] == 244
+
+
+def test_texas_parser_preserves_canonical_county_only_rows() -> None:
+    rows = _tx_fixture()
+    rows[0]["city_name"] = ""
+
+    events = parse_tx_warn_rows(rows, "2026-06-13")
+
+    assert len(events) == 2
+    assert "Collin County, TX" in {event["location"] for event in events}
+
+
+async def test_warn_tool_projects_only_restricted_profiles(monkeypatch) -> None:
+    payload = {
+        "status": "OK",
+        "state": "TX",
+        "since": "2026-01-01",
+        "count": 2,
+        "events": [
+            {
+                "employer": "Complete City",
+                "location": "Lewisville, Denton County, TX",
+                "affected": 10,
+                "effective_date": "2026-07-01",
+                "source_url": TX_WARN_SOURCE_URL,
+            },
+            {
+                "employer": "County Only",
+                "location": "Denton County, TX",
+                "affected": 20,
+                "effective_date": "2026-07-02",
+                "source_url": TX_WARN_SOURCE_URL,
+            },
+        ],
+    }
+
+    async def fake_events(state, since):
+        del state, since
+        return payload
+
+    monkeypatch.setattr(siteintel_tools, "_employer_events", fake_events)
+    restricted = TenantContext(
+        workspace_id="restricted-warn",
+        profile=Profile.LOCAL_SCOUT,
+        territories=("TX",),
+    )
+    with use_context(restricted):
+        projected = await siteintel_tools.employer_warn_events("TX")
+    with use_context(local_context()):
+        trusted = await siteintel_tools.employer_warn_events("TX")
+
+    assert projected["count"] == 2
+    assert projected["events"][0]["location"] == "Lewisville, TX"
+    assert projected["events"][0]["county"] is None
+    assert projected["events"][1]["location"] == "TX"
+    assert projected["events"][1]["county"] is None
+    assert trusted == payload
 
 
 async def test_texas_live_adapter_uses_fetch_client_contract_without_network() -> None:

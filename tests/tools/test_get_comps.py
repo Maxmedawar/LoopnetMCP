@@ -86,6 +86,12 @@ async def test_get_comps_returns_estimate_comps_and_plain_english_position():
         "confidence": 0.75,
         "n_comps": 3,
     }
+    assert result["subject"] == {
+        "source": "crexi",
+        "source_id": "123",
+        "address": "100 Main St",
+        "asking_price": 1_100_000,
+    }
     assert result["comps"][0]["parcel_id"] == "1"
     assert "10.0% above" in result["explanation"]
     assert "county-fragmented" in result["coverage_note"]

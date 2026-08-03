@@ -21,6 +21,7 @@ def _owner() -> OwnerRecord:
         last_sale_date="2022-04-01",
         year_built=1983,
         use_code="OFFICE",
+        raw={"provider_record_id": "direct-output-fixture"},
     )
     return OwnerRecord(
         name="SIT-IN MOVEMENT INC",
@@ -46,6 +47,9 @@ async def test_owner_lookup_returns_normalized_owner_record():
     assert result["normalized_name"] == "SIT IN MOVEMENT INC"
     assert result["entity_type"] == "corp"
     assert result["parcels"][0]["land_value"] == 2_909_800
+    assert result["parcels"][0]["raw"] == {
+        "provider_record_id": "direct-output-fixture"
+    }
     engine.lookup.assert_awaited_once_with(
         address="100 A S Elm St",
         apn=None,

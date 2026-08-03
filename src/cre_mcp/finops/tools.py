@@ -11,6 +11,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
+from cre_mcp.access.result_models import RestrictedLenderMatchResult
 from cre_mcp.config import CreConfig
 
 from .assumable_detect import detect_assumable as _detect_assumable
@@ -25,6 +28,127 @@ from .waivers import prepare_waiver_request as _prepare_waiver_request
 
 
 logger = logging.getLogger(__name__)
+
+
+def _restricted_projection_required() -> bool:
+    context = current_context()
+    return bool(
+        context is not None
+        and not context.trusted
+        and context.profile in TERRITORY_LIMITED
+    )
+
+
+def _location_values(deal: Mapping[str, Any]) -> list[str]:
+    supplied = [
+        key
+        for key in ("geography", "geographies", "market", "state")
+        if deal.get(key) is not None
+    ]
+    if len(supplied) != 1:
+        raise ValueError("exactly one lender geography alias is required")
+    raw = deal[supplied[0]]
+    values = raw if isinstance(raw, list) else [raw]
+    if not values or not all(isinstance(value, str) and value.strip() for value in values):
+        raise ValueError("lender geography values are malformed")
+    normalized = [value.strip() for value in values]
+    if len({value.casefold() for value in normalized}) != len(normalized):
+        raise ValueError("lender geography values must be unique")
+    return normalized
+
+
+def _restricted_lender_match_projection(
+    requested_deal: Mapping[str, Any],
+    result: Mapping[str, Any],
+) -> dict[str, Any]:
+    returned_deal = result.get("deal")
+    raw_matches = result.get("matches")
+    raw_ranked = result.get("ranked_lenders")
+    raw_rubric = result.get("fit_rubric")
+    if not isinstance(returned_deal, Mapping):
+        raise ValueError("lender match result is missing its deal")
+    if type(raw_matches) is not list or not all(
+        isinstance(item, Mapping) for item in raw_matches
+    ):
+        raise ValueError("lender match rows are malformed")
+    if raw_ranked is not None and raw_ranked != raw_matches:
+        raise ValueError("lender match duplicate rankings disagree")
+    if not isinstance(raw_rubric, Mapping):
+        raise ValueError("lender match rubric is malformed")
+
+    requested_locations = _location_values(requested_deal)
+    returned_locations = returned_deal.get("geographies")
+    if type(returned_locations) is not list or not all(
+        isinstance(value, str) and value.strip() for value in returned_locations
+    ):
+        raise ValueError("lender match result locations are malformed")
+    normalized_returned = [value.strip() for value in returned_locations]
+    if [value.casefold() for value in requested_locations] != [
+        value.casefold() for value in normalized_returned
+    ]:
+        raise ValueError("lender match result does not match the requested geography")
+
+    matches: list[dict[str, Any]] = []
+    for item in raw_matches:
+        dimensions = item.get("fit_dimensions")
+        if not isinstance(dimensions, Mapping):
+            raise ValueError("lender match dimensions are malformed")
+        safe_dimensions: dict[str, dict[str, Any]] = {}
+        for name in ("size", "geography", "asset_type", "leverage"):
+            dimension = dimensions.get(name)
+            if not isinstance(dimension, Mapping):
+                raise ValueError("lender match dimension is missing")
+            safe_dimensions[name] = {
+                "status": dimension.get("status"),
+                "points": dimension.get("points"),
+                "max_points": dimension.get("max_points"),
+            }
+        matches.append(
+            {
+                "lender_id": item.get("lender_id"),
+                "name": item.get("name"),
+                "type": item.get("type"),
+                "size_min_cents": item.get("size_min_cents", item.get("size_min")),
+                "size_max_cents": item.get("size_max_cents", item.get("size_max")),
+                "leverage_max": item.get("leverage_max"),
+                "asset_types": item.get("asset_types"),
+                "fit_score": item.get("fit_score"),
+                "fit_score_max": item.get("fit_score_max"),
+                "fit_status": item.get("fit_status"),
+                "fit_dimensions": safe_dimensions,
+                "last_confirmed": item.get("last_confirmed"),
+                "is_stale": item.get("is_stale"),
+                "days_since_confirmed": item.get("days_since_confirmed"),
+                "fit_rank": item.get("fit_rank"),
+            }
+        )
+    payload = {
+        "as_of": result.get("as_of"),
+        "stale_after_days": result.get("stale_after_days"),
+        "deal": {
+            "loan_amount_cents": returned_deal.get("loan_amount_cents"),
+            "locations": [
+                {"location": value} for value in normalized_returned
+            ],
+            "asset_types": returned_deal.get("asset_types"),
+            "leverage": returned_deal.get("leverage"),
+        },
+        "lender_count": len(matches),
+        "matches": matches,
+        "fit_rubric": {
+            "size": raw_rubric.get("size"),
+            "geography": raw_rubric.get("geography"),
+            "asset_type": raw_rubric.get("asset_type"),
+            "leverage": raw_rubric.get("leverage"),
+            "unknown_values_receive_neutral_partial_credit": raw_rubric.get(
+                "unknown_values_receive_neutral_partial_credit"
+            ),
+        },
+    }
+    return RestrictedLenderMatchResult.model_validate(
+        payload,
+        strict=True,
+    ).model_dump(mode="json")
 
 
 def _error(tool_name: str, exc: Exception) -> dict[str, str]:
@@ -114,13 +238,16 @@ def match_lenders(
     """Rank stored appetite fit while keeping stale data visibly qualified."""
 
     try:
-        return _match_lenders(
+        result = _match_lenders(
             deal,
             as_of=as_of,
             stale_after_days=stale_after_days,
             db_path=db_path,
             config=config,
         )
+        if _restricted_projection_required():
+            return _restricted_lender_match_projection(deal, result)
+        return result
     except Exception as exc:
         return _error("match_lenders", exc)
 

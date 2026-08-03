@@ -34,8 +34,9 @@ async def test_identity_args_are_stripped_before_the_tool_runs(
         "search_properties",
         {"location": "TX", "workspace_id": "ws-other", "role": "admin"},
     )
-    assert data["received"]["workspace_id"] is None
-    assert data["received"]["role"] is None
+    assert data["properties"][0]["state"] == "TX"
+    assert mini_mcp._access_test_search_received["workspace_id"] is None
+    assert mini_mcp._access_test_search_received["role"] is None
 
 
 async def test_db_path_is_stripped_in_cloud_mode(mini_mcp, identity, ctx_op):

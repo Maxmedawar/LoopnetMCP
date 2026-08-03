@@ -7,6 +7,7 @@ from cre_mcp.control.spread import model_lease_creation_spread
 from cre_mcp.control.structures import recommend_control_structure
 from cre_mcp.control.vacant import detect_vacant
 from cre_mcp.models.listings import Listing
+from cre_mcp.tools.control_tools import find_control_opportunities
 
 
 def test_drive_thru_high_traffic_site_fits_coffee_or_qsr() -> None:
@@ -90,3 +91,24 @@ def test_pitch_uses_passed_traffic_and_anchor() -> None:
     )
     assert "~42,000 cars/day" in pitch["body"]
     assert "Chase" in pitch["body"]
+
+
+async def test_control_screen_preserves_listing_raw_without_restricted_context() -> None:
+    listing = Listing(
+        source="test",
+        source_id="raw-preservation-1",
+        name="Raw preservation fixture",
+        address="100 Main Street, Dallas, TX 75201",
+        city="Dallas",
+        state="TX",
+        zip_code="75201",
+        property_type="retail",
+        url="https://example.test/raw-preservation-1",
+        raw={"provider_marker": "must-survive-direct-call"},
+    )
+
+    result = await find_control_opportunities(
+        [listing.model_dump(mode="json")]
+    )
+
+    assert result["opportunities"][0]["listing"]["raw"] == listing.raw

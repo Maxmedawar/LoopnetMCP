@@ -11,6 +11,48 @@
     "territory_params": [
       "location"
     ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "SearchResult",
+        "request_location_param": "location",
+        "result_location_field": "query_location",
+        "records": [
+          {
+            "path": "properties[]",
+            "model": "PropertySummary",
+            "location_mode": "structured_property",
+            "location_fields": [
+              "address",
+              "city",
+              "state",
+              "zip_code"
+            ]
+          }
+        ]
+      },
+      {
+        "envelope_model": "AggregatedSearchResult",
+        "request_location_param": "location",
+        "result_location_field": "query_location",
+        "records": [
+          {
+            "path": "listings[]",
+            "model": "RestrictedListing",
+            "location_mode": "structured_property",
+            "location_fields": [
+              "address",
+              "city",
+              "state",
+              "zip_code"
+            ]
+          }
+        ],
+        "forbid_nonempty_paths": [
+          "errors",
+          "listings[].raw"
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": "search",
     "approval": null,
@@ -26,6 +68,24 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "PropertyDetail",
+        "records": [
+          {
+            "path": "$",
+            "model": "PropertyDetail",
+            "location_mode": "structured_property",
+            "location_fields": [
+              "address",
+              "city",
+              "state",
+              "zip_code"
+            ]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": "search",
     "approval": null,
@@ -42,6 +102,26 @@
     "sensitive_params": [],
     "territory_params": [
       "location"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "MarketOverview",
+        "request_location_param": "location",
+        "result_location_field": "location",
+        "records": [
+          {
+            "path": "sample_listings[]",
+            "model": "PropertySummary",
+            "location_mode": "structured_property",
+            "location_fields": [
+              "address",
+              "city",
+              "state",
+              "zip_code"
+            ]
+          }
+        ]
+      }
     ],
     "ownership_relevant": false,
     "quota": "search",
@@ -60,6 +140,38 @@
     "territory_params": [
       "location"
     ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "MarketIntelResult",
+        "location_bindings": [
+          {
+            "left_source": "request",
+            "left_path": "location",
+            "left_mode": "location",
+            "right_source": "result",
+            "right_path": "geo",
+            "right_mode": "geo",
+            "relation": "exact"
+          }
+        ],
+        "records": [
+          {
+            "path": "geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": [
+              "level",
+              "name",
+              "state_fips",
+              "county_fips",
+              "cbsa",
+              "zip",
+              "tract"
+            ]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": "search",
     "approval": null,
@@ -76,6 +188,58 @@
     "sensitive_params": [],
     "territory_params": [
       "locations"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "CompareMarketsResult",
+        "location_bindings": [
+          {
+            "left_source": "request",
+            "left_path": "locations[]",
+            "left_mode": "location",
+            "right_source": "result",
+            "right_path": "markets[].location",
+            "right_mode": "location",
+            "relation": "exact_multiset"
+          },
+          {
+            "left_source": "result",
+            "left_path": "markets[].location",
+            "left_mode": "location",
+            "right_source": "result",
+            "right_path": "markets[].geo",
+            "right_mode": "geo",
+            "relation": "pairwise_exact"
+          }
+        ],
+        "records": [
+          {
+            "path": "markets[]",
+            "model": "RankedMarketIntelResult",
+            "location_mode": "address",
+            "location_fields": [
+              "location"
+            ]
+          },
+          {
+            "path": "markets[].geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": [
+              "level",
+              "name",
+              "state_fips",
+              "county_fips",
+              "cbsa",
+              "zip",
+              "tract"
+            ]
+          }
+        ],
+        "forbid_nonempty_paths": [
+          "errors"
+        ]
+      }
     ],
     "ownership_relevant": false,
     "quota": "search",
@@ -94,6 +258,55 @@
     "territory_params": [
       "location"
     ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RentComps",
+        "location_bindings": [
+          {
+            "left_source": "request",
+            "left_path": "location",
+            "left_mode": "location",
+            "right_source": "result",
+            "right_path": "geo",
+            "right_mode": "geo",
+            "relation": "exact"
+          },
+          {
+            "left_source": "result",
+            "left_path": "geo",
+            "left_mode": "geo",
+            "right_source": "result",
+            "right_path": "comps[].location",
+            "right_mode": "location",
+            "relation": "each_within"
+          }
+        ],
+        "records": [
+          {
+            "path": "geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": [
+              "level",
+              "name",
+              "state_fips",
+              "county_fips",
+              "cbsa",
+              "zip",
+              "tract"
+            ]
+          },
+          {
+            "path": "comps[]",
+            "model": "RestrictedRentComparable",
+            "location_mode": "address",
+            "location_fields": [
+              "location"
+            ]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": "search",
     "approval": null,
@@ -109,6 +322,36 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "property_reference_params": [
+      "url_or_id"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "CompsResult",
+        "records": [
+          {
+            "path": "subject",
+            "model": "CompsSubject",
+            "location_mode": "structured_property",
+            "location_fields": [
+              "address",
+              "city",
+              "state",
+              "zip_code"
+            ]
+          },
+          {
+            "path": "comps[]",
+            "model": "RestrictedSaleComp",
+            "location_mode": "county_sale",
+            "location_fields": [
+              "county_fips",
+              "address"
+            ]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": "search",
     "approval": null,
@@ -124,6 +367,65 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "DealAnalysisResult",
+        "records": [
+          {
+            "path": "listing",
+            "model": "RestrictedListing",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "sale_comps[]",
+            "model": "RestrictedSaleComp",
+            "location_mode": "county_sale",
+            "location_fields": ["county_fips", "address"]
+          },
+          {
+            "path": "market_pack.geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": ["level", "state_fips", "zip", "name"]
+          },
+          {
+            "path": "parcel",
+            "model": "RestrictedParcelRecord",
+            "location_mode": "property_address",
+            "location_fields": ["site_address"]
+          },
+          {
+            "path": "owner.parcels[]",
+            "model": "RestrictedParcelRecord",
+            "location_mode": "property_address",
+            "location_fields": ["site_address"]
+          },
+          {
+            "path": "rent_comps.geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": ["level", "state_fips", "zip", "name"]
+          },
+          {
+            "path": "rent_comps.comps[]",
+            "model": "RestrictedRentComparable",
+            "location_mode": "address",
+            "location_fields": ["location"]
+          }
+        ],
+        "forbid_nonempty_paths": [
+          "warnings",
+          "listing.raw",
+          "parcel.raw",
+          "parcel.owner_mailing_address",
+          "owner.mailing_address",
+          "owner.parcels[].raw",
+          "owner.parcels[].owner_mailing_address",
+          "underwriting.assumptions_used"
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": "search",
     "approval": null,
@@ -140,6 +442,67 @@
     "sensitive_params": [],
     "territory_params": [
       "location"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "DealSearchResult",
+        "request_location_param": "location",
+        "result_location_field": "query_location",
+        "records": [
+          {
+            "path": "deals[].listing",
+            "model": "RestrictedListing",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "deals[].sale_comps[]",
+            "model": "RestrictedSaleComp",
+            "location_mode": "county_sale",
+            "location_fields": ["county_fips", "address"]
+          },
+          {
+            "path": "deals[].market_pack.geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": ["level", "state_fips", "zip", "name"]
+          },
+          {
+            "path": "deals[].parcel",
+            "model": "RestrictedParcelRecord",
+            "location_mode": "property_address",
+            "location_fields": ["site_address"]
+          },
+          {
+            "path": "deals[].owner.parcels[]",
+            "model": "RestrictedParcelRecord",
+            "location_mode": "property_address",
+            "location_fields": ["site_address"]
+          },
+          {
+            "path": "deals[].rent_comps.geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": ["level", "state_fips", "zip", "name"]
+          },
+          {
+            "path": "deals[].rent_comps.comps[]",
+            "model": "RestrictedRentComparable",
+            "location_mode": "address",
+            "location_fields": ["location"]
+          }
+        ],
+        "forbid_nonempty_paths": [
+          "errors",
+          "deals[].listing.raw",
+          "deals[].parcel.raw",
+          "deals[].parcel.owner_mailing_address",
+          "deals[].owner.mailing_address",
+          "deals[].owner.parcels[].raw",
+          "deals[].owner.parcels[].owner_mailing_address",
+          "deals[].underwriting.assumptions_used"
+        ]
+      }
     ],
     "ownership_relevant": false,
     "quota": "search",
@@ -158,6 +521,67 @@
     "territory_params": [
       "location"
     ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "DealSearchResult",
+        "request_location_param": "location",
+        "result_location_field": "query_location",
+        "records": [
+          {
+            "path": "deals[].listing",
+            "model": "RestrictedListing",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "deals[].sale_comps[]",
+            "model": "RestrictedSaleComp",
+            "location_mode": "county_sale",
+            "location_fields": ["county_fips", "address"]
+          },
+          {
+            "path": "deals[].market_pack.geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": ["level", "state_fips", "zip", "name"]
+          },
+          {
+            "path": "deals[].parcel",
+            "model": "RestrictedParcelRecord",
+            "location_mode": "property_address",
+            "location_fields": ["site_address"]
+          },
+          {
+            "path": "deals[].owner.parcels[]",
+            "model": "RestrictedParcelRecord",
+            "location_mode": "property_address",
+            "location_fields": ["site_address"]
+          },
+          {
+            "path": "deals[].rent_comps.geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": ["level", "state_fips", "zip", "name"]
+          },
+          {
+            "path": "deals[].rent_comps.comps[]",
+            "model": "RestrictedRentComparable",
+            "location_mode": "address",
+            "location_fields": ["location"]
+          }
+        ],
+        "forbid_nonempty_paths": [
+          "errors",
+          "deals[].listing.raw",
+          "deals[].parcel.raw",
+          "deals[].parcel.owner_mailing_address",
+          "deals[].owner.mailing_address",
+          "deals[].owner.parcels[].raw",
+          "deals[].owner.parcels[].owner_mailing_address",
+          "deals[].underwriting.assumptions_used"
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": "search",
     "approval": null,
@@ -175,6 +599,20 @@
     "territory_params": [
       "address",
       "county"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedOwnerRecord",
+        "records": [
+          {
+            "path": "parcels[]",
+            "model": "RestrictedParcelRecord",
+            "location_mode": "property_address",
+            "location_fields": ["site_address"]
+          }
+        ],
+        "forbid_nonempty_paths": ["parcels[].raw"]
+      }
     ],
     "ownership_relevant": false,
     "quota": "search",
@@ -215,6 +653,19 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "ContactInfoResult",
+        "records": [
+          {
+            "path": "subject_property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -324,6 +775,20 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "ListDealsResult",
+        "records": [
+          {
+            "path": "deals[]",
+            "model": "CompactDealRow",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ],
+        "forbid_nonempty_paths": ["deals[].last_note"]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -386,6 +851,31 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "ListPipelineResult",
+        "records": [
+          {
+            "path": "deals[]",
+            "model": "PipelineDealRow",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "by_stage.*[]",
+            "model": "PipelineDealRow",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ],
+        "forbid_nonempty_paths": [
+          "deals[].last_note",
+          "deals[].notes",
+          "by_stage.*[].last_note",
+          "by_stage.*[].notes"
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -403,6 +893,21 @@
     "territory_params": [
       "location"
     ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "SaveSearchResult",
+        "request_location_param": "location",
+        "result_location_field": "query.location",
+        "records": [
+          {
+            "path": "query",
+            "model": "SavedSearchQuery",
+            "location_mode": "address",
+            "location_fields": ["location"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -418,6 +923,19 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "ListSearchesResult",
+        "records": [
+          {
+            "path": "searches[].query",
+            "model": "SavedSearchQuery",
+            "location_mode": "address",
+            "location_fields": ["location"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -433,6 +951,67 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "AlertCheckResult",
+        "records": [
+          {
+            "path": "new_deals[].listing",
+            "model": "RestrictedListing",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "new_deals[].sale_comps[]",
+            "model": "RestrictedSaleComp",
+            "location_mode": "county_sale",
+            "location_fields": ["county_fips", "address"]
+          },
+          {
+            "path": "new_deals[].market_pack.geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": ["level", "state_fips", "zip", "name"]
+          },
+          {
+            "path": "new_deals[].parcel",
+            "model": "RestrictedParcelRecord",
+            "location_mode": "property_address",
+            "location_fields": ["site_address"]
+          },
+          {
+            "path": "new_deals[].owner.parcels[]",
+            "model": "RestrictedParcelRecord",
+            "location_mode": "property_address",
+            "location_fields": ["site_address"]
+          },
+          {
+            "path": "new_deals[].rent_comps.geo",
+            "model": "GeoRef",
+            "location_mode": "geo",
+            "location_fields": ["level", "state_fips", "zip", "name"]
+          },
+          {
+            "path": "new_deals[].rent_comps.comps[]",
+            "model": "RestrictedRentComparable",
+            "location_mode": "address",
+            "location_fields": ["location"]
+          }
+        ],
+        "forbid_nonempty_paths": [
+          "errors",
+          "results[].source_errors",
+          "results[].error",
+          "new_deals[].listing.raw",
+          "new_deals[].parcel.raw",
+          "new_deals[].parcel.owner_mailing_address",
+          "new_deals[].owner.mailing_address",
+          "new_deals[].owner.parcels[].raw",
+          "new_deals[].owner.parcels[].owner_mailing_address",
+          "new_deals[].underwriting.assumptions_used"
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": "search",
     "approval": null,
@@ -594,6 +1173,20 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedAfterTaxResult",
+        "records": [
+          {
+            "path": "subject_property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ],
+        "forbid_nonempty_paths": ["assumptions_used"]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -734,6 +1327,28 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_records": [
+      {
+        "path": "listings[]",
+        "model": "ControlListingInput",
+        "location_mode": "structured_property",
+        "location_fields": ["address", "city", "state", "zip_code"]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "ControlOpportunitiesResult",
+        "records": [
+          {
+            "path": "opportunities[].listing",
+            "model": "RestrictedListing",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ],
+        "forbid_nonempty_paths": ["opportunities[].listing.raw"]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -888,6 +1503,22 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "property_reference_params": [
+      "deal_id"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedDealTimelineResult",
+        "records": [
+          {
+            "path": "property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -988,6 +1619,31 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_records": [
+      {
+        "path": "spaces[]",
+        "model": "ArbitrageSpaceInput",
+        "location_mode": "structured_property",
+        "location_fields": ["address", "city", "state", "zip_code"]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "ArbitrageOpportunitiesResult",
+        "records": [
+          {
+            "path": "opportunities[]",
+            "model": "ArbitrageOpportunity",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ],
+        "forbid_nonempty_paths": [
+          "skipped_spaces",
+          "opportunities[].screening_summary.skipped_spaces"
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -1251,6 +1907,57 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_contracts": [
+      {
+        "forbid_present_paths": ["record.parcel", "record.parcels"],
+        "records": [
+          {
+            "path": "record",
+            "model": "AssessorRecordInput",
+            "location_mode": "permit_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "envelope_path": "record",
+        "envelope_model": "AssessorParcelEnvelopeInput",
+        "records": [
+          {
+            "path": "record.parcel",
+            "model": "AssessorRecordInput",
+            "location_mode": "permit_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "envelope_path": "record",
+        "envelope_model": "AssessorOwnerEnvelopeInput",
+        "records": [
+          {
+            "path": "record.parcels[]",
+            "model": "AssessorRecordInput",
+            "location_mode": "permit_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "AssessorAuditResult",
+        "records": [
+          {
+            "path": "subject_property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ],
+        "forbid_nonempty_paths": ["assumption_sheet"]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -1294,6 +2001,31 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedOvernightChangesResult",
+        "records": [
+          {
+            "path": "changes[].property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "deadlines[].property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "attention[].property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -1332,6 +2064,22 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "property_reference_params": [
+      "listing_key"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedStaleListingSignalsResult",
+        "records": [
+          {
+            "path": "property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -2022,6 +2770,27 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_records": [
+      {
+        "path": "site",
+        "model": "TenantProspectSiteInput",
+        "location_mode": "structured_property",
+        "location_fields": ["address", "city", "state", "zip_code"]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "TenantProspectListResult",
+        "records": [
+          {
+            "path": "site_inputs",
+            "model": "TenantProspectSiteInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -2172,6 +2941,27 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_records": [
+      {
+        "path": "deal",
+        "model": "BuyerMatchDealInput",
+        "location_mode": "location_values",
+        "location_fields": ["market"]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedBuyerMatchResult",
+        "records": [
+          {
+            "path": "deal",
+            "model": "BuyerMatchDealInput",
+            "location_mode": "location_values",
+            "location_fields": ["market"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -2503,6 +3293,45 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_records": [
+      {
+        "path": "listings[]",
+        "model": "DedupeListingRecord",
+        "location_mode": "structured_property",
+        "location_fields": ["address", "city", "state", "zip"]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "DedupeListingsResult",
+        "records": [
+          {
+            "path": "groups[].canonical",
+            "model": "DedupeListingRecord",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip"]
+          },
+          {
+            "path": "groups[].members[]",
+            "model": "DedupeListingRecord",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip"]
+          },
+          {
+            "path": "candidate_matches[].left",
+            "model": "DedupeCandidateReference",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip"]
+          },
+          {
+            "path": "candidate_matches[].right",
+            "model": "DedupeCandidateReference",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -2545,6 +3374,23 @@
     "sensitive_params": [],
     "territory_params": [
       "state"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "EmployerWarnEventsResult",
+        "request_location_param": "state",
+        "result_location_field": "state",
+        "records": [
+          {
+            "path": "events[]",
+            "model": "EmployerWarnEvent",
+            "location_mode": "address",
+            "location_fields": [
+              "location"
+            ]
+          }
+        ]
+      }
     ],
     "ownership_relevant": false,
     "quota": "search",
@@ -2930,6 +3776,43 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_contracts": [
+      {
+        "records": [
+          {
+            "path": "permit_history[]",
+            "model": "PermitProviderPropertyInput",
+            "location_mode": "permit_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "envelope_path": "permit_history",
+        "envelope_model": "UnpermittedPermitEnvelopeInput",
+        "records": [
+          {
+            "path": "permit_history.permits[]",
+            "model": "PermitProviderPropertyInput",
+            "location_mode": "permit_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "UnpermittedWorkScreenResult",
+        "records": [
+          {
+            "path": "matches[].plausible_permits[].permit",
+            "model": "PermitPropertyInput",
+            "location_mode": "permit_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -2945,6 +3828,25 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "Phase2ScopeResult",
+        "records": [
+          {
+            "path": "scope_items[]",
+            "model": "Phase2ScopeItem",
+            "location_mode": "non_geographic_text",
+            "location_fields": ["location"]
+          },
+          {
+            "path": "unknown_rec_types[]",
+            "model": "Phase2UnknownRecType",
+            "location_mode": "non_geographic_text",
+            "location_fields": ["location"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -2958,6 +3860,25 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedCounterpartyDossierResult",
+        "records": [
+          {
+            "path": "deals[].property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "evidence_properties[].property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -2984,6 +3905,19 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedMeetingBriefingResult",
+        "records": [
+          {
+            "path": "deals[].property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -3037,6 +3971,34 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_records": [
+      {
+        "path": "listing",
+        "model": "RouteListingInput",
+        "location_mode": "structured_property",
+        "location_fields": [
+          "address",
+          "city",
+          "state",
+          "zip_code",
+          "zip",
+          "postal_code"
+        ]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RouteLeadResult",
+        "records": [
+          {
+            "path": "listing",
+            "model": "RouteListingResult",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -3052,6 +4014,73 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_contracts": [
+      {
+        "records": [
+          {
+            "path": "appraisal",
+            "model": "AppraisalInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "appraisal.comps_used[]",
+            "model": "AppraisalComparableInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "evidence",
+            "model": "AppraisalEvidenceInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "evidence.market_comps[]",
+            "model": "AppraisalComparableInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "AppraisalChallengeResult",
+        "records": [
+          {
+            "path": "appraisal_inputs",
+            "model": "AppraisalInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "appraisal_inputs.comps_used[]",
+            "model": "AppraisalComparableInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "submitted_evidence",
+            "model": "AppraisalEvidenceInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "submitted_evidence.market_comps[]",
+            "model": "AppraisalComparableInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          },
+          {
+            "path": "divergence_table[].additional_market_comps[]",
+            "model": "AppraisalComparableInput",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -3230,6 +4259,158 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_contracts": [
+      {
+        "records": [
+          {
+            "path": "permits[]",
+            "model": "PermitProviderPropertyInput",
+            "location_mode": "permit_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "forbid_present_paths": [
+          "permits.permits",
+          "permits.results",
+          "permits.records",
+          "permits.features",
+          "permits.items",
+          "permits.data"
+        ],
+        "records": [
+          {
+            "path": "permits",
+            "model": "PermitProviderPropertyInput",
+            "location_mode": "permit_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "forbid_present_paths": [
+          "permits.results",
+          "permits.records",
+          "permits.features",
+          "permits.items",
+          "permits.data"
+        ],
+        "records": [
+          {
+            "path": "permits",
+            "model": "PermitInputEnvelope",
+            "location_mode": "permit_collection",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "forbid_present_paths": [
+          "permits.permits",
+          "permits.records",
+          "permits.features",
+          "permits.items",
+          "permits.data"
+        ],
+        "records": [
+          {
+            "path": "permits",
+            "model": "PermitInputEnvelope",
+            "location_mode": "permit_collection",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "forbid_present_paths": [
+          "permits.permits",
+          "permits.results",
+          "permits.features",
+          "permits.items",
+          "permits.data"
+        ],
+        "records": [
+          {
+            "path": "permits",
+            "model": "PermitInputEnvelope",
+            "location_mode": "permit_collection",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "forbid_present_paths": [
+          "permits.permits",
+          "permits.results",
+          "permits.records",
+          "permits.items",
+          "permits.data"
+        ],
+        "records": [
+          {
+            "path": "permits",
+            "model": "PermitInputEnvelope",
+            "location_mode": "permit_collection",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "forbid_present_paths": [
+          "permits.permits",
+          "permits.results",
+          "permits.records",
+          "permits.features",
+          "permits.data"
+        ],
+        "records": [
+          {
+            "path": "permits",
+            "model": "PermitInputEnvelope",
+            "location_mode": "permit_collection",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "forbid_present_paths": [
+          "permits.permits",
+          "permits.results",
+          "permits.records",
+          "permits.features",
+          "permits.items"
+        ],
+        "records": [
+          {
+            "path": "permits",
+            "model": "PermitInputEnvelope",
+            "location_mode": "permit_collection",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "StalledProjectsResult",
+        "records": [
+          {
+            "path": "signals[]",
+            "model": "StalledSignal",
+            "location_mode": "stalled_signal",
+            "location_fields": ["address", "normalized_address"]
+          },
+          {
+            "path": "signals[].record",
+            "model": "PermitPropertyInput",
+            "location_mode": "permit_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ],
+        "forbid_nonempty_paths": ["unrecognized_records"]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -3245,6 +4426,27 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_records": [
+    {
+      "path": "records[]",
+      "model": "PortfolioInputRecord",
+      "location_mode": "property_address",
+        "location_fields": ["address"]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "PortfolioOwnerScanResult",
+        "records": [
+        {
+          "path": "owners[].properties[]",
+          "model": "PortfolioProperty",
+          "location_mode": "property_address",
+            "location_fields": ["address"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": false,
     "quota": null,
     "approval": null,
@@ -3535,6 +4737,27 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "request_territory_records": [
+      {
+        "path": "deal",
+        "model": "LenderMatchDealInput",
+        "location_mode": "location_values",
+        "location_fields": ["geography", "geographies", "market", "state"]
+      }
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedLenderMatchResult",
+        "records": [
+          {
+            "path": "deal.locations[]",
+            "model": "RestrictedWorkflowLocation",
+            "location_mode": "location_values",
+            "location_fields": ["location"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,

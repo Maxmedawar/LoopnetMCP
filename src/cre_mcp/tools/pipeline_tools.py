@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.engine import location_value_within_territories
+from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.deals.store import PIPELINE_STAGES, DealStore, get_deal_store
 from cre_mcp.models import Listing
 from cre_mcp.scoring.rubrics import RUBRIC_REGISTRY
@@ -252,6 +255,16 @@ async def list_pipeline(stage: str | None = None) -> dict:
     logger.info("list_pipeline called: stage=%s", stage)
     try:
         deals = await get_deal_store().list_pipeline(stage)
+        ctx = current_context()
+        if (
+            ctx is not None
+            and not ctx.trusted
+            and ctx.profile in TERRITORY_LIMITED
+        ):
+            deals = [
+                {**deal, "notes": [], "last_note": None}
+                for deal in deals
+            ]
         grouped = {name: [] for name in PIPELINE_STAGES}
         for deal in deals:
             grouped.setdefault(str(deal["stage"]), []).append(deal)
@@ -397,6 +410,17 @@ async def check_alerts(search_id: int | None = None) -> dict:
                     }
                 )
                 continue
+            ctx = current_context()
+            if (
+                ctx is not None
+                and not ctx.trusted
+                and ctx.profile in TERRITORY_LIMITED
+                and not location_value_within_territories(
+                    location,
+                    ctx.territories,
+                )
+            ):
+                raise ValueError("saved search is outside the current territory")
             found = await find_deals(
                 location=location,
                 strategy=query.get("strategy"),

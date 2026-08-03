@@ -43,7 +43,7 @@ async def test_national_scout_can_search_anywhere(mini_mcp, identity, ctx_nat):
     data = await call_data(
         mini_mcp, "search_properties", {"location": "Miami, FL"}
     )
-    assert data["ok"] is True
+    assert data["properties"][0]["state"] == "FL"
 
 
 async def test_scout_call_to_operator_tool_is_denied(mini_mcp, identity, ctx_nat):

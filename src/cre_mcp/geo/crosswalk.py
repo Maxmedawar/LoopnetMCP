@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import SecretStr
 
 from cre_mcp.config import CreConfig
+from cre_mcp.geo.constants import ZIP_COUNTY_CBSA
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.market.base import AuthSpec, GovApiClient
 
@@ -17,13 +18,7 @@ logger = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 120 * 24 * 60 * 60
 
-STATIC_CROSSWALK: dict[str, tuple[str, str]] = {
-    "78701": ("48453", "12420"),  # Travis County / Austin-Round Rock
-    "75201": ("48113", "19100"),  # Dallas County / Dallas-Fort Worth
-    "77001": ("48201", "26420"),  # Harris County / Houston-The Woodlands
-    "94105": ("06075", "41860"),  # San Francisco County / San Francisco-Oakland
-    "10001": ("36061", "35620"),  # New York County / New York-Newark
-}
+STATIC_CROSSWALK: dict[str, tuple[str, str]] = ZIP_COUNTY_CBSA
 
 
 def _secret_value(secret: SecretStr | str | None) -> str | None:

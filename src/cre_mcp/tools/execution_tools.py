@@ -3,6 +3,9 @@
 import logging
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.engine import structured_property_within_territories
+from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.deals.store import get_deal_store
 from cre_mcp.execution.closing import closing_plan as build_closing_plan
 from cre_mcp.execution.contacts import find_contact as assemble_contact
@@ -30,6 +33,17 @@ async def _deal_context(
         raise ValueError(str(payload["error"]))
     deal = Deal.model_validate(payload)
     listing = deal.listing
+    tenant = current_context()
+    if (
+        tenant is not None
+        and not tenant.trusted
+        and tenant.profile in TERRITORY_LIMITED
+        and not structured_property_within_territories(
+            listing.model_dump(mode="json"),
+            tenant.territories,
+        )
+    ):
+        raise ValueError("restricted listing result denied")
     if strategy is not None:
         raw = dict(listing.raw)
         raw["strategy"] = strategy
@@ -141,7 +155,27 @@ async def find_contact(
     logger.info("find_contact called: source=%s listing=%s", source, url_or_id)
     try:
         ctx = await _deal_context(url_or_id, source)
-        return (await assemble_contact(ctx)).model_dump(mode="json")
+        payload = (await assemble_contact(ctx)).model_dump(mode="json")
+        tenant = current_context()
+        if (
+            tenant is not None
+            and not tenant.trusted
+            and tenant.profile in TERRITORY_LIMITED
+        ):
+            payload["owner_mailing"] = None
+            registered_agent = payload.get("registered_agent")
+            if isinstance(registered_agent, dict):
+                registered_agent["address"] = None
+                for principal in registered_agent.get("principals") or []:
+                    if isinstance(principal, dict):
+                        principal["address"] = None
+            payload["subject_property"] = {
+                "address": ctx.listing.address,
+                "city": ctx.listing.city,
+                "state": ctx.listing.state,
+                "zip_code": ctx.listing.zip_code,
+            }
+        return payload
     except Exception as exc:
         logger.error("find_contact error: %s", exc)
         return {"error": str(exc)}
@@ -405,6 +439,13 @@ async def list_deals() -> dict:
     logger.info("list_deals called")
     try:
         deals = await get_deal_store().list_deals()
+        ctx = current_context()
+        if (
+            ctx is not None
+            and not ctx.trusted
+            and ctx.profile in TERRITORY_LIMITED
+        ):
+            deals = [{**deal, "last_note": None} for deal in deals]
         return {"deals": deals, "count": len(deals)}
     except Exception as exc:
         logger.error("list_deals error: %s", exc)

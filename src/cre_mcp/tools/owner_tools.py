@@ -2,7 +2,10 @@
 
 import logging
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.enrichment.owner import OwnerLookup
+from cre_mcp.models import OwnerRecord
 
 logger = logging.getLogger(__name__)
 _lookup: OwnerLookup | None = None
@@ -13,6 +16,33 @@ def _engine() -> OwnerLookup:
     if _lookup is None:
         _lookup = OwnerLookup()
     return _lookup
+
+
+def _restricted_owner_projection(owner: OwnerRecord) -> OwnerRecord:
+    """Remove opaque provider blobs only at a limited-profile boundary."""
+    context = current_context()
+    if (
+        context is None
+        or context.trusted
+        or context.profile not in TERRITORY_LIMITED
+    ):
+        return owner
+    return owner.model_copy(
+        update={
+            "mailing_address": None,
+            "parcels": [
+                parcel.model_copy(
+                    update={
+                        "owner_mailing_address": None,
+                        "lat": None,
+                        "lon": None,
+                        "raw": {},
+                    }
+                )
+                for parcel in owner.parcels
+            ]
+        }
+    )
 
 
 async def owner_lookup(
@@ -41,7 +71,7 @@ async def owner_lookup(
         owner = await _engine().lookup(address=address, apn=apn, county=county)
         if owner is None:
             return {"error": "No parcel record found in the enabled provider chain"}
-        return owner.model_dump(mode="json")
+        return _restricted_owner_projection(owner).model_dump(mode="json")
     except Exception as exc:
         logger.error("owner_lookup error: %s", exc)
         return {"error": str(exc)}

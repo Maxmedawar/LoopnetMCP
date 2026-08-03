@@ -10,22 +10,151 @@ Trusted-local identity exists only when the caller explicitly selects the
 stdio runtime. Missing context and dependency failures always fail closed.
 """
 
-from collections.abc import Callable
+import json
+import math
+from collections.abc import Callable, Mapping
 from typing import Any, Literal
 
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.tools.tool import ToolResult
+from mcp.types import TextContent
 
 from cre_mcp.access.audit import AuditLog
 from cre_mcp.access.capabilities import ToolCapability
 from cre_mcp.access.context import TenantContext, local_context, use_context
-from cre_mcp.access.engine import AccessEngine
+from cre_mcp.access.engine import AccessEngine, RESULT_TERRITORY_DENIAL
 from cre_mcp.access.registry import WorkspaceRegistry
 
 UNAUTHENTICATED = "(unauthenticated)"
+MAX_RESULT_JSON_DEPTH = 64
+_CANONICAL_TOOL_RESULT_FIELDS = frozenset(
+    {"content", "structured_content", "meta"}
+)
+_CANONICAL_TOOL_RESULT_SERIALIZER = ToolResult.to_mcp_result
 
 IdentityResolver = Callable[[MiddlewareContext], TenantContext | None]
+
+
+def _reject_json_constant(_value: str) -> None:
+    """Reject the non-standard NaN and infinity tokens accepted by json."""
+    raise ValueError("non-finite JSON constant")
+
+
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Build one JSON object while rejecting duplicate keys at any depth."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _is_strict_json_tree(root: object) -> bool:
+    """Validate JSON value types, finite numbers, depth, and acyclicity."""
+    stack: list[tuple[object, int]] = [(root, 1)]
+    seen_containers: set[int] = set()
+    while stack:
+        value, depth = stack.pop()
+        value_type = type(value)
+        if value_type is dict:
+            if depth > MAX_RESULT_JSON_DEPTH or id(value) in seen_containers:
+                return False
+            seen_containers.add(id(value))
+            if any(type(key) is not str for key in value):
+                return False
+            stack.extend((item, depth + 1) for item in value.values())
+        elif value_type is list:
+            if depth > MAX_RESULT_JSON_DEPTH or id(value) in seen_containers:
+                return False
+            seen_containers.add(id(value))
+            stack.extend((item, depth + 1) for item in value)
+        elif value is None or value_type in (str, bool, int):
+            continue
+        elif value_type is float and math.isfinite(value):
+            continue
+        else:
+            return False
+    return True
+
+
+def _strict_json_mapping(text: str) -> dict[str, object] | None:
+    """Decode one client-visible JSON object with restrictive semantics."""
+    try:
+        decoded = json.loads(
+            text,
+            object_pairs_hook=_unique_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except (TypeError, ValueError, RecursionError, OverflowError):
+        return None
+    if type(decoded) is not dict or not _is_strict_json_tree(decoded):
+        return None
+    return decoded
+
+
+def _result_payloads(
+    result: ToolResult,
+) -> tuple[Mapping[str, object], ...] | None:
+    """Extract every client-visible mapping representation, or fail closed."""
+    try:
+        if type(result) is not ToolResult:
+            return None
+        attributes = vars(result)
+        if (
+            type(attributes) is not dict
+            or frozenset(attributes) != _CANONICAL_TOOL_RESULT_FIELDS
+        ):
+            return None
+        serializer = getattr(result, "to_mcp_result", None)
+        if (
+            getattr(serializer, "__self__", None) is not result
+            or getattr(serializer, "__func__", None)
+            is not _CANONICAL_TOOL_RESULT_SERIALIZER
+        ):
+            return None
+        if result.meta is not None:
+            # A declared result contract does not authorize a second payload
+            # in protocol metadata, including a falsey metadata mapping.
+            return None
+        if type(result.content) is not list:
+            return None
+
+        payloads: list[Mapping[str, object]] = []
+        structured = result.structured_content
+        if structured is not None:
+            if type(structured) is not dict or not _is_strict_json_tree(structured):
+                return None
+            payloads.append(structured)
+
+        for block in result.content:
+            if type(block) is not TextContent:
+                return None
+            if type(block.type) is not str or block.type != "text":
+                return None
+            if block.meta is not None:
+                return None
+            extras = block.model_extra
+            if type(extras) is not dict or extras:
+                return None
+            # Search results have no declared annotation channel. Rejecting
+            # the entire field prevents both standard and extension metadata
+            # from becoming an unvalidated client-visible side channel.
+            if block.annotations is not None:
+                return None
+            if type(block.text) is not str:
+                return None
+            decoded = _strict_json_mapping(block.text)
+            if decoded is None:
+                return None
+            payloads.append(decoded)
+
+        return tuple(payloads) or None
+    except (AttributeError, TypeError, ValueError, RecursionError, OverflowError):
+        # Expected malformed-result failures are intentionally indistinguishable
+        # from any other post-result territory denial at the protocol boundary.
+        return None
 
 
 def _default_resolver_for(
@@ -120,8 +249,41 @@ class AccessMiddleware(Middleware):
             )
 
         context.message.arguments = sanitized
-        with use_context(ctx):
-            result = await call_next(context)
+        requires_result_check = self.engine.requires_result_territory_check(
+            ctx,
+            tool_name,
+        )
+        try:
+            with use_context(ctx):
+                result = await call_next(context)
+        except Exception:
+            if not requires_result_check:
+                raise
+            # Provider and tool exceptions are client-visible output. A
+            # restricted search cannot release their untyped messages because
+            # those strings may contain property data outside the territory.
+            self.audit.record(
+                workspace_id=workspace,
+                tool=tool_name,
+                decision="denied",
+                reason=RESULT_TERRITORY_DENIAL,
+            )
+            raise ToolError(RESULT_TERRITORY_DENIAL) from None
+        if requires_result_check:
+            result_decision = self.engine.check_result(
+                ctx,
+                tool_name,
+                _result_payloads(result),
+                sanitized,
+            )
+            if result_decision.outcome == "denied":
+                self.audit.record(
+                    workspace_id=workspace,
+                    tool=tool_name,
+                    decision="denied",
+                    reason=result_decision.reason,
+                )
+                raise ToolError(result_decision.reason)
         self.audit.record(
             workspace_id=workspace,
             tool=tool_name,

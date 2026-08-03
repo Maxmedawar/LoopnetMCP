@@ -6,50 +6,13 @@ from typing import Any
 
 from cre_mcp.cache import SQLiteCache
 from cre_mcp.config import CreConfig
-from cre_mcp.geo.constants import STATE_FIPS
+from cre_mcp.geo.constants import CITY_FALLBACKS, COUNTY_FIPS, STATE_FIPS
 from cre_mcp.geo.crosswalk import GeoCrosswalk
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.market.base import AuthSpec, GovApiClient
 from cre_mcp.models.geo import GeoLevel, GeoRef
 
 logger = logging.getLogger(__name__)
-
-COUNTY_FIPS = {
-    ("travis", "TX"): "48453",
-    ("dallas", "TX"): "48113",
-    ("harris", "TX"): "48201",
-    ("bexar", "TX"): "48029",
-    ("tarrant", "TX"): "48439",
-    ("los angeles", "CA"): "06037",
-    ("san francisco", "CA"): "06075",
-    ("new york", "NY"): "36061",
-    ("miami-dade", "FL"): "12086",
-    ("broward", "FL"): "12011",
-    ("maricopa", "AZ"): "04013",
-    ("clark", "NV"): "32003",
-    ("fulton", "GA"): "13121",
-    ("mecklenburg", "NC"): "37119",
-    ("cook", "IL"): "17031",
-    ("guilford", "NC"): "37081",
-    ("yavapai", "AZ"): "04025",
-    ("douglas", "CO"): "08035",
-}
-
-CITY_FALLBACKS = {
-    ("austin", "TX"): ("48453", "12420", "Austin, TX"),
-    ("dallas", "TX"): ("48113", "19100", "Dallas, TX"),
-    ("houston", "TX"): ("48201", "26420", "Houston, TX"),
-    ("san antonio", "TX"): ("48029", "41700", "San Antonio, TX"),
-    ("phoenix", "AZ"): ("04013", "38060", "Phoenix, AZ"),
-    ("las vegas", "NV"): ("32003", "29820", "Las Vegas, NV"),
-    ("miami", "FL"): ("12086", "33100", "Miami, FL"),
-    ("fort lauderdale", "FL"): ("12011", "33100", "Fort Lauderdale, FL"),
-    ("atlanta", "GA"): ("13121", "12060", "Atlanta, GA"),
-    ("charlotte", "NC"): ("37119", "16740", "Charlotte, NC"),
-    ("san francisco", "CA"): ("06075", "41860", "San Francisco, CA"),
-    ("new york", "NY"): ("36061", "35620", "New York, NY"),
-}
-
 
 class GeoResolutionError(ValueError):
     """Raised when a human location cannot be mapped to a supported geography."""
@@ -217,4 +180,30 @@ async def resolve(location: str) -> GeoRef:
     global _resolver
     if _resolver is None:
         _resolver = GeoResolver()
-    return await _resolver.resolve(location)
+    return project_for_release(await _resolver.resolve(location))
+
+
+def project_for_release(geo: GeoRef) -> GeoRef:
+    """Drop an unproved sub-city carrier only for restricted execution.
+
+    Census geocoder responses include an address tract even when the requested
+    and returned geography is city-level.  The checked-in authority proves
+    tract existence, county, and ZIP intersections but does not prove one
+    common tract-to-place relationship.  Restricted profiles therefore expose
+    the city projection and omit that unrelated carrier.  Full operators retain
+    the original resolver object unchanged.
+    """
+
+    from cre_mcp.access.context import current_context
+    from cre_mcp.access.profiles import TERRITORY_LIMITED
+
+    context = current_context()
+    if (
+        context is not None
+        and not context.trusted
+        and context.profile in TERRITORY_LIMITED
+        and geo.level == GeoLevel.CITY
+        and geo.tract is not None
+    ):
+        return geo.model_copy(update={"tract": None})
+    return geo

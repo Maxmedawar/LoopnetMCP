@@ -6,6 +6,8 @@ import sqlite3
 
 import pytest
 
+from cre_mcp.access.context import TenantContext, local_context, use_context
+from cre_mcp.access.profiles import Profile
 from cre_mcp.deals.store import DealStore
 from cre_mcp.relations.coverage import coverage_report, route_lead
 from cre_mcp.relations.stalls import record_thread_state, stalled_threads
@@ -256,7 +258,59 @@ def test_route_lead_matches_state_property_type_and_capacity_with_reasons() -> N
     assert "property_type matched" in reasons
     assert "geography matched" in reasons
     assert "capacity matched" in reasons
+    assert result["recommended"]["matched_mandate"] == {
+        "property_types": ["retail"],
+        "states": ["TX"],
+        "capacity": 5_000_000,
+    }
+    assert result["listing"] == {
+        "id": "listing-1",
+        "recorded_fields": [
+            "city",
+            "price_usd",
+            "property_type",
+            "source_id",
+            "state",
+        ],
+    }
     assert "verify current capacity" in result["message"].casefold()
+
+
+@pytest.mark.parametrize(
+    "context",
+    [
+        None,
+        local_context(),
+        TenantContext(
+            workspace_id="full-route-test",
+            profile=Profile.FULL_OPERATOR,
+            territories=("TX",),
+        ),
+    ],
+    ids=("direct", "trusted", "full-operator"),
+)
+def test_route_lead_preserves_full_unrestricted_evidence(context) -> None:
+    mandate = {
+        "property_types": ["retail"],
+        "states": ["TX"],
+        "capacity": 5_000_000,
+    }
+    with use_context(context):
+        result = route_lead(
+            {
+                "source_id": "listing-1",
+                "address": "100 Main Street, Austin, TX 78701",
+                "city": "Austin",
+                "state": "TX",
+                "property_type": "retail",
+                "price_usd": 4_000_000,
+            },
+            [{"name": "Alex", "mandates": [mandate]}],
+        )
+
+    assert result["recommended"]["matched_mandate"] == mandate
+    assert "property_type matched: retail" in result["recommended"]["reasons"]
+    assert "address" not in result["listing"]
 
 
 def test_route_lead_honest_no_match_and_boundary() -> None:

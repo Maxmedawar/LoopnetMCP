@@ -83,7 +83,11 @@ def parse_tx_warn_rows(
             continue
         city = str(row.get("city_name") or "").strip()
         county = str(row.get("county_name") or "").strip()
-        location_parts = [part for part in (city, county and f"{county} County", "TX") if part]
+        location_parts = [
+            part
+            for part in (city, county and f"{county} County", "TX")
+            if part
+        ]
         events.append(
             {
                 "employer": employer,

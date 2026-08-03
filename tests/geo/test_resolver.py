@@ -67,4 +67,3 @@ async def test_census_geocoder_maps_city_county_and_tract(tmp_path):
     assert geo.county_fips == "48453"
     assert geo.tract == "48453000700"
     assert "address=Austin%2C+TX" in fetch.get_json.await_args.args[0]
-

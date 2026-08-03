@@ -10,6 +10,8 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.config import CreConfig
 
 
@@ -30,6 +32,15 @@ UNTOUCHED_NOTE = (
     "inventory and recorded screening events. It is an instrumentation queue, not "
     "proof that a listing received no offline review."
 )
+
+
+def _restricted_projection_required() -> bool:
+    context = current_context()
+    return bool(
+        context is not None
+        and not context.trusted
+        and context.profile in TERRITORY_LIMITED
+    )
 
 
 def _db_path(
@@ -534,8 +545,41 @@ def route_lead(
         route["rank"] = rank
         route.pop("team_order", None)
     listing_id = _first_value(listing_values, ("deal_id", "source_id", "id", "url", "address"))
+    restricted = _restricted_projection_required()
+    if restricted:
+        for route in routes:
+            route["reasons"] = [
+                str(reason).split(":", 1)[0]
+                for reason in route["reasons"]
+            ]
+            route["evidence_gaps"] = (
+                ["one or more requested criteria lacked recorded values"]
+                if route["evidence_gaps"]
+                else []
+            )
+            route["matched_mandate"] = (
+                "structured mandate"
+                if isinstance(route["matched_mandate"], Mapping)
+                else "text mandate"
+            )
+    listing_result = {
+        "id": listing_id,
+        "recorded_fields": sorted(listing_values),
+    }
+    if restricted:
+        listing_result.update(
+            {
+                "address": listing_values.get("address"),
+                "city": listing_values.get("city"),
+                "state": listing_values.get("state"),
+                "zip_code": _first_value(
+                    listing_values,
+                    ("zip_code", "zip", "postal_code"),
+                ),
+            }
+        )
     return {
-        "listing": {"id": listing_id, "recorded_fields": sorted(listing_values)},
+        "listing": listing_result,
         "recommended": routes[0] if routes else None,
         "routes": routes,
         "candidate_count": len(routes),

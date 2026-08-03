@@ -4,6 +4,9 @@ import logging
 import re
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.engine import structured_property_within_territories
+from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.eval.status import UNCALIBRATED_DISCLAIMER, is_score_calibrated
 from cre_mcp.comps.avm import estimate_value
 from cre_mcp.comps.records import sale_comps
@@ -15,6 +18,7 @@ from cre_mcp.enrichment.attributes import (
 from cre_mcp.enrichment.listing_facts import extract_facts
 from cre_mcp.enrichment.owner import OwnerLookup
 from cre_mcp.enrichment.traffic import TrafficProvider
+from cre_mcp.geo.constants import COUNTY_FIPS
 from cre_mcp.geo.resolver import resolve
 from cre_mcp.market.intel import MarketIntel
 from cre_mcp.market.rent_comps import RentCompsService
@@ -49,6 +53,67 @@ _market_intel: MarketIntel | None = None
 _owner_lookup: OwnerLookup | None = None
 _attribute_enricher: AttributeEnricher | None = None
 _rent_comps: RentCompsService | None = None
+
+_COUNTY_DISPLAY_NAME_BY_FIPS = {
+    fips: f"{county.title()} County, {state}"
+    for (county, state), fips in COUNTY_FIPS.items()
+}
+
+
+def _restricted_context():
+    ctx = current_context()
+    if (
+        ctx is None
+        or ctx.trusted
+        or ctx.profile not in TERRITORY_LIMITED
+    ):
+        return None
+    return ctx
+
+
+def _validate_restricted_listing(listing: Listing) -> None:
+    """Reject a provider row before it can influence restricted analysis."""
+    ctx = _restricted_context()
+    if ctx is None:
+        return
+    if not structured_property_within_territories(
+        listing.model_dump(mode="json"),
+        ctx.territories,
+    ):
+        raise ValueError("restricted listing result denied")
+
+
+def _client_deal_payload(deal: Deal) -> dict[str, Any]:
+    """Project opaque provider/provenance maps out of restricted egress."""
+    payload = deal.model_dump(mode="json")
+    if _restricted_context() is None:
+        return payload
+    payload["listing"]["raw"] = {}
+    payload["listing"]["lat"] = None
+    payload["listing"]["lon"] = None
+    for comp in payload.get("sale_comps") or []:
+        if isinstance(comp, dict):
+            comp["lat"] = None
+            comp["lon"] = None
+    parcel = payload.get("parcel")
+    if isinstance(parcel, dict):
+        parcel["owner_mailing_address"] = None
+        parcel["lat"] = None
+        parcel["lon"] = None
+        parcel["raw"] = {}
+    owner = payload.get("owner")
+    if isinstance(owner, dict):
+        owner["mailing_address"] = None
+        for owner_parcel in owner.get("parcels") or []:
+            if isinstance(owner_parcel, dict):
+                owner_parcel["owner_mailing_address"] = None
+                owner_parcel["lat"] = None
+                owner_parcel["lon"] = None
+                owner_parcel["raw"] = {}
+    underwriting = payload.get("underwriting")
+    if isinstance(underwriting, dict):
+        underwriting["assumptions_used"] = {}
+    return payload
 
 
 def _market_engine() -> MarketIntel:
@@ -111,11 +176,17 @@ def _geo_from_listing(listing: Listing) -> GeoRef | None:
     fips = str(county_fips or "")
     if not re.fullmatch(r"\d{5}", fips):
         return None
+    raw_county_name = listing.raw.get("county_name") or listing.raw.get("county")
+    county_name = _COUNTY_DISPLAY_NAME_BY_FIPS.get(fips)
+    if county_name is None and isinstance(raw_county_name, str):
+        county_name = raw_county_name.strip()
+    if not county_name:
+        county_name = f"County {fips}"
     return GeoRef(
         level="county",
         state_fips=fips[:2],
         county_fips=fips,
-        name=f"{listing.city or listing.address}, {listing.state}".strip(", "),
+        name=county_name,
     )
 
 
@@ -497,6 +568,7 @@ async def analyze_deal(
         listing_source = registry.get(source)
         ref = _input_ref(url_or_id, source)
         listing = await listing_source.get_detail(ref)
+        _validate_restricted_listing(listing)
         location = _location_for_listing(listing)
         market, market_error = await _market_for(location)
         geo = _geo_from_listing(listing)
@@ -522,7 +594,7 @@ async def analyze_deal(
             sale_comps_used=comps,
             value_estimate=value_estimate,
         )
-        payload = deal.model_dump(mode="json")
+        payload = _client_deal_payload(deal)
         payload.update(_score_calibration_metadata(deal.scores))
         payload["value_provenance"] = {
             "method": value_estimate.method,
@@ -600,6 +672,8 @@ async def find_deals(
             size_max=size_max,
         )
         aggregated = await registry.search_all(query, sources=sources)
+        for listing in aggregated.listings:
+            _validate_restricted_listing(listing)
         market, market_error = await _market_for(location)
         errors = dict(aggregated.errors)
         if market_error:
@@ -622,6 +696,17 @@ async def find_deals(
                 try:
                     listing_source = registry.get(listing.source)
                     detail = await listing_source.get_detail(_listing_ref(listing))
+                except Exception as exc:
+                    key = f"detail:{listing.source}:{listing.source_id}"
+                    errors[key] = str(exc)
+                    deepened.append(deal)
+                    continue
+
+                # A refreshed provider row is a new property result. Validate
+                # it before reading provider context, valuing it, reranking it,
+                # or silently falling back to the initial in-scope row.
+                _validate_restricted_listing(detail)
+                try:
                     context_rows = listing.raw.get("comparable_listings")
                     if isinstance(context_rows, list):
                         raw = dict(detail.raw)
@@ -657,7 +742,7 @@ async def find_deals(
         return {
             "query_location": location,
             "strategy": strategy,
-            "deals": [deal.model_dump(mode="json") for deal in selected],
+            "deals": [_client_deal_payload(deal) for deal in selected],
             "total_scored": total_scored,
             "returned": len(selected),
             "errors": errors,
@@ -732,6 +817,8 @@ async def find_distressed(
         )
         distressed_sources = ["hud_reo", "auction_com", "county"]
         aggregated = await registry.search_all(query, sources=distressed_sources)
+        for listing in aggregated.listings:
+            _validate_restricted_listing(listing)
         listings = [
             listing
             for listing in aggregated.listings
@@ -757,7 +844,7 @@ async def find_distressed(
         return {
             "query_location": location,
             "strategy": "distressed",
-            "deals": [deal.model_dump(mode="json") for deal in selected],
+            "deals": [_client_deal_payload(deal) for deal in selected],
             "total_scored": total_scored,
             "returned": len(selected),
             "errors": errors,

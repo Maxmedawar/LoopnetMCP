@@ -10,6 +10,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
+from cre_mcp.access.result_models import RestrictedBuyerMatchResult
+
 from .bids import normalize_bids as _normalize_bids
 from .bids import record_bid as _record_bid
 from .buyers import match_buyers as _match_buyers
@@ -17,6 +21,118 @@ from .buyers import record_buyer as _record_buyer
 from .exits import compare_exit_paths as _compare_exit_paths
 from .process import design_sale_process as _design_sale_process
 from .readiness import disposition_readiness as _disposition_readiness
+
+
+def _restricted_projection_required() -> bool:
+    context = current_context()
+    return bool(
+        context is not None
+        and not context.trusted
+        and context.profile in TERRITORY_LIMITED
+    )
+
+
+def _restricted_buyer_match_projection(
+    requested_deal: Mapping[str, Any],
+    result: Mapping[str, Any],
+) -> dict[str, Any]:
+    returned_deal = result.get("deal")
+    raw_matches = result.get("matches")
+    raw_ranked = result.get("ranked_buyers")
+    raw_rubric = result.get("fit_rubric")
+    if not isinstance(returned_deal, Mapping):
+        raise ValueError("buyer match result is missing its deal")
+    if type(raw_matches) is not list or not all(
+        isinstance(item, Mapping) for item in raw_matches
+    ):
+        raise ValueError("buyer match rows are malformed")
+    if raw_ranked is not None and raw_ranked != raw_matches:
+        raise ValueError("buyer match duplicate rankings disagree")
+    if not isinstance(raw_rubric, Mapping):
+        raise ValueError("buyer match rubric is malformed")
+
+    try:
+        requested_price = float(requested_deal["price"])
+        returned_price = float(returned_deal["price"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("buyer match deal price is malformed") from exc
+    if (
+        requested_price != returned_price
+        or str(requested_deal.get("type") or "").strip()
+        != str(returned_deal.get("type") or "").strip()
+        or str(requested_deal.get("market") or "").strip()
+        != str(returned_deal.get("market") or "").strip()
+    ):
+        raise ValueError("buyer match result does not match the requested deal")
+
+    matches: list[dict[str, Any]] = []
+    for item in raw_matches:
+        dimensions = item.get("fit_dimensions")
+        if not isinstance(dimensions, Mapping):
+            raise ValueError("buyer match dimensions are malformed")
+        safe_dimensions: dict[str, dict[str, Any]] = {}
+        for name in ("check_size", "asset_type", "geography"):
+            dimension = dimensions.get(name)
+            if not isinstance(dimension, Mapping):
+                raise ValueError("buyer match dimension is missing")
+            safe_dimensions[name] = {
+                "status": dimension.get("status"),
+                "points": dimension.get("points"),
+                "max_points": dimension.get("max_points"),
+            }
+        matches.append(
+            {
+                "buyer_id": item.get("buyer_id"),
+                "name": item.get("name"),
+                "type": item.get("type"),
+                "check_size_min": item.get("check_size_min"),
+                "check_size_max": item.get("check_size_max"),
+                "asset_types": item.get("asset_types"),
+                "fit_score": item.get("fit_score"),
+                "fit_score_max": item.get("fit_score_max"),
+                "fit_status": item.get("fit_status"),
+                "check_size_fit": item.get("check_size_fit"),
+                "fit_dimensions": safe_dimensions,
+                "bids_made": item.get("bids_made"),
+                "retrades": item.get("retrades"),
+                "closes": item.get("closes"),
+                "behavioral_history_status": item.get(
+                    "behavioral_history_status"
+                ),
+                "behavioral_score": item.get("behavioral_score"),
+                "behavior_used_in_fit_score": item.get(
+                    "behavior_used_in_fit_score"
+                ),
+                "fit_rank": item.get("fit_rank"),
+            }
+        )
+    payload = {
+        "deal": {
+            "price": returned_deal.get("price"),
+            "type": returned_deal.get("type"),
+            "market": returned_deal.get("market"),
+        },
+        "buyer_count": len(matches),
+        "matches": matches,
+        "fit_rubric": {
+            "check_size": raw_rubric.get("check_size"),
+            "unknown_check_size_neutral_credit": raw_rubric.get(
+                "unknown_check_size_neutral_credit"
+            ),
+            "asset_type": raw_rubric.get("asset_type"),
+            "geography": raw_rubric.get("geography"),
+            "unrecorded_preference_neutral_credit": raw_rubric.get(
+                "unrecorded_preference_neutral_credit"
+            ),
+            "behavioral_history_weight": raw_rubric.get(
+                "behavioral_history_weight"
+            ),
+        },
+    }
+    return RestrictedBuyerMatchResult.model_validate(
+        payload,
+        strict=True,
+    ).model_dump(mode="json")
 
 
 def disposition_readiness(
@@ -77,7 +193,10 @@ def match_buyers(
     """Rank the recorded buyer universe using disclosed attribute fit only."""
 
     try:
-        return _match_buyers(deal)
+        result = _match_buyers(deal)
+        if _restricted_projection_required():
+            return _restricted_buyer_match_projection(deal, result)
+        return result
     except Exception as exc:
         return {"error": str(exc)}
 

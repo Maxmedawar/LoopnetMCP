@@ -7,6 +7,9 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Any
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
+from cre_mcp.access.territory import permit_full_address, project_permit_property
 from cre_mcp.prospect.assemblage import adjacent_parcels as _adjacent_parcels
 from cre_mcp.prospect.microlocation import micro_location_score as _micro_location_score
 from cre_mcp.prospect.portfolio_sellers import portfolio_owner_scan as _portfolio_owner_scan
@@ -59,11 +62,52 @@ def stalled_project_signals(
     """Return permit-inactivity signals or an error dictionary."""
 
     try:
-        return _stalled_projects(
+        result = _stalled_projects(
             permits,
             min_age_days=min_age_days,
             as_of=as_of,
         )
+        tenant = current_context()
+        if (
+            tenant is not None
+            and not tenant.trusted
+            and tenant.profile in TERRITORY_LIMITED
+        ):
+            is_collection_envelope = isinstance(permits, Mapping) and any(
+                type(permits.get(field)) is list
+                for field in (
+                    "permits",
+                    "results",
+                    "records",
+                    "features",
+                    "items",
+                    "data",
+                )
+            )
+            fallback_location = (
+                permits.get("city")
+                if is_collection_envelope
+                and type(permits.get("city")) is str
+                else None
+            )
+            for signal in result.get("signals", []):
+                if not isinstance(signal, dict):
+                    continue
+                record = signal.get("record")
+                projected = (
+                    project_permit_property(
+                        record,
+                        fallback_location=fallback_location,
+                    )
+                    if isinstance(record, Mapping)
+                    else None
+                )
+                signal["record"] = projected or {}
+                full_address = permit_full_address(projected or {})
+                if full_address is not None:
+                    signal["address"] = full_address
+                    signal["normalized_address"] = full_address.upper()
+        return result
     except Exception as exc:
         logger.error("stalled_project_signals error: %s", exc)
         return {"error": str(exc)}
