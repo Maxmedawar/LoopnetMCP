@@ -398,21 +398,29 @@ async def test_real_http_oauth_initializes_lists_and_calls_allowed_tool(tmp_path
                 session_id=session_id,
             )
             names = {tool["name"] for tool in listed.json()["result"]["tools"]}
-            assert "capabilities" in names
+            assert len(names) == 8
+            assert "cre_pipeline" in names
+            assert "capabilities" not in names
             assert "generate_loi" not in names
             called = await _raw_mcp_request(
                 client,
                 tenant.token,
                 method="tools/call",
                 request_id=3,
-                params={"name": "capabilities", "arguments": {}},
+                params={
+                    "name": "cre_pipeline",
+                    "arguments": {
+                        "action": "list_searches",
+                        "arguments": {},
+                    },
+                },
                 session_id=session_id,
             )
             result = called.json()["result"]
             await _raw_close_session(client, tenant.token, session_id)
 
     assert result["isError"] is False
-    assert "authority_matrix" in result["structuredContent"]
+    assert result["structuredContent"]["searches"] == []
 
 
 @pytest.mark.parametrize("case", ["missing", "malformed", "expired", "revoked"])
@@ -628,10 +636,13 @@ async def test_territory_change_applies_to_next_mcp_call_without_refresh(tmp_pat
                 method="tools/call",
                 request_id=2,
                 params={
-                    "name": "save_search",
+                    "name": "cre_pipeline",
                     "arguments": {
-                        "name": "Texas box",
-                        "location": "Austin, TX",
+                        "action": "save_search",
+                        "arguments": {
+                            "name": "Texas box",
+                            "location": "Austin, TX",
+                        },
                     },
                 },
                 session_id=session_id,
@@ -651,10 +662,13 @@ async def test_territory_change_applies_to_next_mcp_call_without_refresh(tmp_pat
                 method="tools/call",
                 request_id=3,
                 params={
-                    "name": "save_search",
+                    "name": "cre_pipeline",
                     "arguments": {
-                        "name": "Stale Texas box",
-                        "location": "Austin, TX",
+                        "action": "save_search",
+                        "arguments": {
+                            "name": "Stale Texas box",
+                            "location": "Austin, TX",
+                        },
                     },
                 },
                 session_id=session_id,
@@ -703,17 +717,21 @@ async def test_workspace_cannot_be_selected_through_http_or_mcp_input(tmp_path):
                 method="tools/call",
                 request_id=2,
                 params={
-                    "name": "capabilities",
+                    "name": "cre_pipeline",
                     "arguments": {
-                        "workspace_id": beta.workspace_id,
-                        "workspace": beta.workspace_id,
-                        "profile": "full_operator",
+                        "action": "list_searches",
+                        "arguments": {
+                            "workspace_id": beta.workspace_id,
+                            "workspace": beta.workspace_id,
+                            "profile": "full_operator",
+                        },
                     },
                 },
                 session_id=session_id,
             )
             result = response.json()["result"]
-            assert "authority_matrix" in result["structuredContent"]
+            assert result["isError"] is False
+            assert result["structuredContent"]["searches"] == []
             await _raw_close_session(client, alpha.token, session_id)
 
 

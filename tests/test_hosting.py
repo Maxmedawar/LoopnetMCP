@@ -114,7 +114,13 @@ def test_run_server_keeps_stdio_call_shape_by_default(tmp_path):
 
 
 def test_run_server_binds_configured_http_host_and_port(tmp_path):
-    with patch("cre_mcp.server.mcp.run") as run:
+    from fastmcp import FastMCP
+
+    hosted = FastMCP(name="hosted-test")
+    with patch(
+        "cre_mcp.server._build_hosted_customer_server",
+        return_value=hosted,
+    ), patch.object(hosted, "run") as run:
         run_server(
             _config(
                 transport="http",

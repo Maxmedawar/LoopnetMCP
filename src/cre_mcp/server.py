@@ -129,6 +129,7 @@ def install_access_control(
     runtime_mode: Literal["stdio", "http"] | None = None,
     server: FastMCP | None = None,
     platform_api=None,
+    surface_catalog=None,
 ):
     """Install tenant-aware access control on the module server instance.
 
@@ -157,13 +158,33 @@ def install_access_control(
     access_dir = config.cache_db_path.parent / "access"
     registry = WorkspaceRegistry(config.access_registry_path or access_dir / "registry.json")
     audit_log = AuditLog(config.access_audit_path or access_dir / "audit.jsonl")
+    tool_call_resolver = None
+    tool_visibility_resolver = None
+    if surface_catalog is not None:
+        from cre_mcp.surface.server import resolve_surface_call
+
+        tool_call_resolver = lambda tool_name, arguments: resolve_surface_call(
+            tool_name,
+            arguments,
+            catalog=surface_catalog,
+        )
+        tool_visibility_resolver = surface_catalog.is_visible
     return install_access(
         target,
         registry=registry,
         audit_log=audit_log,
         runtime_mode=runtime_mode,
         config=config,
+        tool_call_resolver=tool_call_resolver,
+        tool_visibility_resolver=tool_visibility_resolver,
     )
+
+
+def _build_hosted_customer_server() -> FastMCP:
+    """Build the grouped hosted surface over the complete internal server."""
+    from cre_mcp.surface import build_customer_server
+
+    return build_customer_server(mcp)
 
 
 def create_http_app(path: str = "/mcp", config: CreConfig | None = None):
@@ -180,13 +201,16 @@ def create_http_app(path: str = "/mcp", config: CreConfig | None = None):
 
     config = config or CreConfig()
     platform = PlatformApi(config)
-    hosted_server = _build_server()
+    from cre_mcp.surface import CUSTOMER_SURFACE
+
+    hosted_server = _build_hosted_customer_server()
     _register_platform_routes(hosted_server, platform)
     install_access_control(
         config,
         runtime_mode="http",
         server=hosted_server,
         platform_api=platform,
+        surface_catalog=CUSTOMER_SURFACE,
     )
     # JSON responses avoid creating an SSE watcher and per-request stream for
     # ordinary request/response traffic. Streamable HTTP session semantics and
@@ -206,6 +230,31 @@ def run_server(
     """Run stdio by default or the configured opt-in Streamable HTTP server."""
     config = config or CreConfig()
     transport = resolve_transport(config, force_http=force_http)
+    if transport == "http":
+        from cre_mcp.platform.api import PlatformApi
+        from cre_mcp.surface import CUSTOMER_SURFACE
+
+        platform = PlatformApi(config)
+        hosted_server = _build_hosted_customer_server()
+        _register_platform_routes(hosted_server, platform)
+        uninstall = install_access_control(
+            config,
+            runtime_mode="http",
+            server=hosted_server,
+            platform_api=platform,
+            surface_catalog=CUSTOMER_SURFACE,
+        )
+        try:
+            hosted_server.run(
+                transport="http",
+                host=config.http_host,
+                port=config.http_port,
+                json_response=True,
+            )
+        finally:
+            uninstall()
+        return
+
     from cre_mcp.access.middleware import AccessMiddleware
 
     prior_access = [
@@ -214,14 +263,6 @@ def run_server(
     prior_auth = mcp.auth
     uninstall = install_access_control(config, runtime_mode=transport)
     try:
-        if transport == "http":
-            mcp.run(
-                transport="http",
-                host=config.http_host,
-                port=config.http_port,
-                json_response=True,
-            )
-            return
         mcp.run(transport="stdio")
     finally:
         uninstall()

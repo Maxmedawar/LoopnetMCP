@@ -41,6 +41,15 @@ _CANONICAL_TOOL_RESULT_FIELDS = frozenset(
 _CANONICAL_TOOL_RESULT_SERIALIZER = ToolResult.to_mcp_result
 
 IdentityResolver = Callable[[MiddlewareContext], TenantContext | None]
+ToolArgumentWrapper = Callable[[dict[str, Any]], dict[str, Any]]
+ToolCallResolver = Callable[
+    [str, Mapping[str, Any] | None],
+    tuple[str, dict[str, Any], ToolArgumentWrapper] | None,
+]
+ToolVisibilityResolver = Callable[
+    [TenantContext | None, str, AccessEngine],
+    bool,
+]
 
 
 def _reject_json_constant(_value: str) -> None:
@@ -203,20 +212,31 @@ class AccessMiddleware(Middleware):
         capabilities: dict[str, ToolCapability] | None = None,
         runtime_mode: Literal["stdio", "http"] | None = None,
         config: Any | None = None,
+        tool_call_resolver: ToolCallResolver | None = None,
+        tool_visibility_resolver: ToolVisibilityResolver | None = None,
     ) -> None:
         self.engine = AccessEngine(registry, capabilities)
         self.audit = audit_log
         self._resolve = identity_resolver or _default_resolver_for(runtime_mode)
         self._config = config
+        self._resolve_tool_call = tool_call_resolver
+        self._tool_is_visible = tool_visibility_resolver
 
     async def on_list_tools(self, context: MiddlewareContext, call_next) -> Any:
         ctx = self._resolve(context)
         tools = await call_next(context)
-        visible = [
-            tool
-            for tool in tools
-            if self.engine.check_tool(ctx, tool.name).outcome == "allowed"
-        ]
+        if self._tool_is_visible is None:
+            visible = [
+                tool
+                for tool in tools
+                if self.engine.check_tool(ctx, tool.name).outcome == "allowed"
+            ]
+        else:
+            visible = [
+                tool
+                for tool in tools
+                if self._tool_is_visible(ctx, tool.name, self.engine)
+            ]
         self.audit.record(
             workspace_id=ctx.workspace_id if ctx else UNAUTHENTICATED,
             tool="__list_tools__",
@@ -227,8 +247,26 @@ class AccessMiddleware(Middleware):
 
     async def on_call_tool(self, context: MiddlewareContext, call_next) -> ToolResult:
         ctx = self._resolve(context)
-        tool_name = context.message.name
+        requested_tool = context.message.name
+        tool_name = requested_tool
         args = context.message.arguments or {}
+        wrap_arguments: ToolArgumentWrapper = lambda value: value
+        if self._resolve_tool_call is not None:
+            try:
+                resolved_call = self._resolve_tool_call(requested_tool, args)
+            except Exception:
+                resolved_call = None
+            if resolved_call is None:
+                workspace = ctx.workspace_id if ctx else UNAUTHENTICATED
+                reason = "access denied: grouped action is not available"
+                self.audit.record(
+                    workspace_id=workspace,
+                    tool=requested_tool,
+                    decision="denied",
+                    reason=reason,
+                )
+                raise ToolError(reason)
+            tool_name, args, wrap_arguments = resolved_call
         decision, sanitized = self.engine.check_call(ctx, tool_name, args)
         workspace = ctx.workspace_id if ctx else UNAUTHENTICATED
         safe_reason = safe_error_message(decision.reason, config=self._config)
@@ -249,16 +287,17 @@ class AccessMiddleware(Middleware):
                 decision="approval_required",
                 reason=safe_reason,
             )
-            return ToolResult(
-                structured_content={
-                    "approval_required": True,
-                    "approval_id": decision.approval_id,
-                    "tool": tool_name,
-                    "message": safe_reason,
-                }
-            )
+            approval_payload = {
+                "approval_required": True,
+                "approval_id": decision.approval_id,
+                "tool": requested_tool,
+                "message": safe_reason,
+            }
+            if requested_tool != tool_name:
+                approval_payload["capability_id"] = tool_name
+            return ToolResult(structured_content=approval_payload)
 
-        context.message.arguments = sanitized
+        context.message.arguments = wrap_arguments(sanitized)
         requires_result_check = self.engine.requires_result_territory_check(
             ctx,
             tool_name,
@@ -343,6 +382,8 @@ def install_access(
     capabilities: dict[str, ToolCapability] | None = None,
     runtime_mode: Literal["stdio", "http"] | None = None,
     config: Any | None = None,
+    tool_call_resolver: ToolCallResolver | None = None,
+    tool_visibility_resolver: ToolVisibilityResolver | None = None,
 ) -> Callable[[], None]:
     """Install access control on a FastMCP server; returns an uninstaller."""
     middleware = AccessMiddleware(
@@ -352,6 +393,8 @@ def install_access(
         capabilities=capabilities,
         runtime_mode=runtime_mode,
         config=config,
+        tool_call_resolver=tool_call_resolver,
+        tool_visibility_resolver=tool_visibility_resolver,
     )
     mcp.add_middleware(middleware)
 
