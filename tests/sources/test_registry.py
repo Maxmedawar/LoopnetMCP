@@ -51,10 +51,21 @@ class FakeSource(ListingSource):
         return self._listings[0]
 
 
+def _rights_config(*source_ids: str) -> CreConfig:
+    return CreConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled={source_id: True for source_id in source_ids},
+    )
+
+
 async def test_search_all_fans_out_to_both_sources():
     alpha = FakeSource("alpha", [_listing("alpha", "1", "101 Main St")])
     beta = FakeSource("beta", [_listing("beta", "2", "202 Oak Ave")])
-    registry = SourceRegistry(sources=[alpha, beta])
+    registry = SourceRegistry(
+        config=_rights_config("unclassified.network"),
+        sources=[alpha, beta],
+    )
 
     result = await registry.search_all(SearchQuery(location="Dallas, TX"))
 
@@ -67,7 +78,10 @@ async def test_search_all_fans_out_to_both_sources():
 async def test_search_all_captures_one_error_and_keeps_other_results():
     working = FakeSource("working", [_listing("working", "1", "101 Main St")])
     failing = FakeSource("failing", error=RuntimeError("source unavailable"))
-    registry = SourceRegistry(sources=[working, failing])
+    registry = SourceRegistry(
+        config=_rights_config("unclassified.network"),
+        sources=[working, failing],
+    )
 
     result = await registry.search_all(SearchQuery(location="Dallas, TX"))
 
@@ -84,7 +98,10 @@ async def test_search_all_dedupes_collision_and_unions_refs():
     crexi_listing = _listing("crexi", "cx-1", "101 Main St")
     crexi_listing.price = "$2,000,000"
     crexi = FakeSource("crexi", [crexi_listing])
-    registry = SourceRegistry(sources=[loopnet, crexi])
+    registry = SourceRegistry(
+        config=_rights_config("listing.loopnet", "listing.crexi"),
+        sources=[loopnet, crexi],
+    )
 
     result = await registry.search_all(SearchQuery(location="Dallas, TX"))
 
@@ -111,9 +128,9 @@ def test_registry_instantiates_only_enabled_configured_sources():
         registry.get("loopnet")
 
 
-def test_registry_instantiates_default_distressed_sources():
+def test_registry_has_no_default_distressed_sources():
     registry = SourceRegistry()
 
-    assert registry.get("hud_reo").capabilities.supports_distressed is True
-    assert registry.get("auction_com").capabilities.supports_distressed is True
-    assert registry.get("county").capabilities.supports_distressed is True
+    for source_name in ("hud_reo", "auction_com", "county"):
+        with pytest.raises(SourceError, match=f"Unknown listing source: {source_name}"):
+            registry.get(source_name)

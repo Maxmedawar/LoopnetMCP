@@ -16,7 +16,6 @@ from cre_mcp.http.browser import (
     is_cloudflare_challenge,
     is_imperva_challenge,
 )
-
 logger = logging.getLogger(__name__)
 
 _INCOMPLETE_PAGE_LENGTH = 1_000
@@ -100,39 +99,44 @@ class BrowserFetcher(_BaseBrowserFetcher):
                 super()._ensure_browser(),
                 timeout=self._operation_timeout,
             )
-        except TimeoutError as exc:
+        except TimeoutError:
             raise _BrowserOperationTimeout(
                 "loopnet_blocked: browser_start_timeout "
                 f"after {self._operation_timeout:g}s"
-            ) from exc
+            ) from None
         except BrowserFetchError:
             raise
-        except Exception as exc:
+        except Exception:
             raise _BrowserOperationTimeout(
-                f"loopnet_blocked: browser_start_failed: {exc}"
-            ) from exc
+                "loopnet_blocked: browser_start_failed"
+            ) from None
 
     async def _navigate(self, url: str):
+        self._require_authorized_url(url)
         try:
+            await self._install_request_guard()
             return await asyncio.wait_for(
                 self._browser.get(url),
                 timeout=self._operation_timeout,
             )
-        except TimeoutError as exc:
+        except TimeoutError:
             raise _BrowserOperationTimeout(
                 "loopnet_blocked: browser_navigation_timeout "
-                f"after {self._operation_timeout:g}s for URL: {url}"
-            ) from exc
+                f"after {self._operation_timeout:g}s for URL: "
+                f"{self._safe_url(url)}"
+            ) from None
         except BrowserFetchError:
             raise
-        except Exception as exc:
+        except Exception:
             raise BrowserFetchError(
-                f"loopnet_blocked: browser_navigation_failed for URL: {url}: {exc}"
-            ) from exc
+                "loopnet_blocked: browser_navigation_failed for URL: "
+                f"{self._safe_url(url)}"
+            ) from None
 
     async def _warmup(self, url: str) -> None:
         """Warm the host, marking it ready only after navigation succeeds."""
-        parsed = urlparse(url)
+        self._require_authorized_url(url)
+        parsed = urlparse(self._safe_url(url))
         host = parsed.netloc
         if not host or host in self._warmed:
             return
@@ -147,17 +151,20 @@ class BrowserFetcher(_BaseBrowserFetcher):
                 page.get_content(),
                 timeout=self._operation_timeout,
             )
-        except TimeoutError as exc:
+        except TimeoutError:
             raise _BrowserOperationTimeout(
                 "loopnet_blocked: browser_content_timeout "
-                f"after {self._operation_timeout:g}s for URL: {url}"
-            ) from exc
-        except Exception as exc:
+                f"after {self._operation_timeout:g}s for URL: "
+                f"{self._safe_url(url)}"
+            ) from None
+        except Exception:
             raise BrowserFetchError(
-                f"loopnet_blocked: browser_content_failed for URL: {url}: {exc}"
-            ) from exc
+                "loopnet_blocked: browser_content_failed for URL: "
+                f"{self._safe_url(url)}"
+            ) from None
 
     async def _fetch_once(self, url: str) -> str:
+        self._require_authorized_url(url)
         await self._ensure_browser()
         await self._warmup(url)
 
@@ -184,11 +191,13 @@ class BrowserFetcher(_BaseBrowserFetcher):
                     else f"{reason} persisted"
                 )
                 raise BrowserFetchError(
-                    f"loopnet_blocked: {label} for URL: {url}"
+                    f"loopnet_blocked: {label} for URL: "
+                    f"{self._safe_url(url)}"
                 )
             raise BrowserFetchError(
                 "loopnet_blocked: incomplete_page "
-                f"({len(html)} bytes) after readiness wait for URL: {url}"
+                f"({len(html)} bytes) after readiness wait for URL: "
+                f"{self._safe_url(url)}"
             )
         finally:
             try:
@@ -197,7 +206,10 @@ class BrowserFetcher(_BaseBrowserFetcher):
                     timeout=self._operation_timeout,
                 )
             except Exception:
-                logger.debug("Unable to close LoopNet tab for %s", url, exc_info=True)
+                logger.debug(
+                    "Unable to close LoopNet tab for %s",
+                    self._safe_url(url),
+                )
 
     async def _reset_after_timeout(self, error: BrowserFetchError) -> None:
         await super().close()
@@ -217,13 +229,14 @@ class BrowserFetcher(_BaseBrowserFetcher):
 
     async def fetch(self, url: str) -> str:
         """Fetch with bounded replacement of a wedged or unbound browser."""
+        self._require_authorized_url(url)
         async with self._fetch_lock:
             for attempt in range(_MAX_BROWSER_ATTEMPTS):
                 try:
                     return await self._fetch_once(url)
                 except _BrowserOperationTimeout as error:
                     if attempt == _MAX_BROWSER_ATTEMPTS - 1:
-                        raise BrowserFetchError(str(error)) from error
+                        raise BrowserFetchError(str(error)) from None
                     await self._reset_after_timeout(error)
             raise AssertionError("unreachable")
 

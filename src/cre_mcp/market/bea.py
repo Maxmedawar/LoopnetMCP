@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from cre_mcp.access.context import resolve_runtime_config
 from cre_mcp.config import CreConfig
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.market.base import (
@@ -26,7 +27,7 @@ class BeaProvider(MarketDataProvider):
         config: CreConfig | None = None,
         fetch: FetchClient | None = None,
     ):
-        config = config or CreConfig()
+        config = resolve_runtime_config(config)
         self._has_key = bool(client is not None or config.bea_api_key is not None)
         super().__init__(
             client

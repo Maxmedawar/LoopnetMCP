@@ -19,6 +19,11 @@ from cre_mcp.sources.loopnet.urls import (
     resolve_property_type,
 )
 from cre_mcp.sources.registry import SourceRegistry
+from cre_mcp.source_rights.output import (
+    safe_error_message,
+    safe_source_reference,
+    sanitize_payload,
+)
 
 logger = logging.getLogger(__name__)
 registry = SourceRegistry()
@@ -81,9 +86,9 @@ async def search_properties(
     """
     logger.info(
         "search_properties called: location=%s, type=%s, sources=%s",
-        location,
-        property_type,
-        sources,
+        safe_source_reference(location),
+        safe_source_reference(property_type or ""),
+        safe_error_message(sources),
     )
     try:
         query = SearchQuery(
@@ -106,12 +111,16 @@ async def search_properties(
         restricted_listings = _restricted_listings(aggregated.listings)
         aggregated = aggregated.model_copy(update={"listings": restricted_listings})
         if sources is not None:
-            return aggregated.model_dump(mode="json")
+            return sanitize_payload(aggregated.model_dump(mode="json"))
         if aggregated.errors and not aggregated.listings:
             message = aggregated.errors.get("loopnet") or next(
                 iter(aggregated.errors.values())
             )
-            return {"error": message, "query_location": location, "properties": []}
+            return {
+                "error": safe_error_message(message),
+                "query_location": location,
+                "properties": [],
+            }
         properties = [
             property_summary_from_listing(listing)
             for listing in aggregated.listings
@@ -127,10 +136,11 @@ async def search_properties(
             has_next_page=legacy_has_next,
             properties=properties,
         )
-        return result.model_dump()
+        return sanitize_payload(result.model_dump(), source="loopnet")
     except SourceError as e:
-        logger.error("search_properties error: %s", e)
-        return {"error": str(e), "query_location": location, "properties": []}
+        message = safe_error_message(e)
+        logger.error("search_properties error: %s", message)
+        return {"error": message, "query_location": location, "properties": []}
 
 
 async def get_property_details(
@@ -149,7 +159,11 @@ async def get_property_details(
     Returns:
         Comprehensive property information including price, size, year built, description, broker info, and images.
     """
-    logger.info("get_property_details called: %s (source=%s)", url_or_id, source)
+    logger.info(
+        "get_property_details called: %s (source=%s)",
+        safe_source_reference(url_or_id, source=source),
+        safe_source_reference(source or ""),
+    )
     raw = url_or_id.strip()
     resolved_source = source.lower() if source else None
     url: str | None = None
@@ -174,18 +188,28 @@ async def get_property_details(
         url = build_detail_url(source_id)
 
     try:
-        src = registry.get(resolved_source)
+        src = registry.get_authorized(resolved_source)
         listing = await src.get_detail(
             ListingRef(source=resolved_source, source_id=source_id, url=url)
         )
         detail = property_detail_from_listing(listing)
-        return detail.model_dump()
+        return sanitize_payload(detail.model_dump(), source=resolved_source)
     except SourceError as e:
-        logger.error("get_property_details client error: %s", e)
-        return {"error": str(e), "url": url, "source": resolved_source}
+        message = safe_error_message(e)
+        logger.error("get_property_details client error: %s", message)
+        return sanitize_payload(
+            {"error": message, "url": url, "source": resolved_source}
+        )
     except Exception as e:
-        logger.error("get_property_details parse error: %s", e)
-        return {"error": f"Failed to parse property page: {e}", "url": url, "source": resolved_source}
+        message = safe_error_message(e)
+        logger.error("get_property_details parse error: %s", message)
+        return sanitize_payload(
+            {
+                "error": f"Failed to parse property page: {message}",
+                "url": url,
+                "source": resolved_source,
+            }
+        )
 
 
 async def get_market_overview(
@@ -201,7 +225,11 @@ async def get_market_overview(
     Returns:
         Market statistics including total listings, average price, price per sqft, and breakdowns by type.
     """
-    logger.info("get_market_overview called: location=%s, type=%s", location, property_type)
+    logger.info(
+        "get_market_overview called: location=%s, type=%s",
+        safe_source_reference(location),
+        safe_source_reference(property_type or ""),
+    )
     query = SearchQuery(
         location=location,
         property_type=resolve_property_type(property_type),
@@ -213,6 +241,7 @@ async def get_market_overview(
         message = aggregated.errors.get("loopnet") or next(
             iter(aggregated.errors.values())
         )
+        message = safe_error_message(message)
         logger.error("Market overview fetch failed: %s", message)
         return {"error": message, "location": location}
     properties = [
@@ -220,4 +249,4 @@ async def get_market_overview(
         for listing in aggregated.listings
     ]
     overview = build_market_overview(location, property_type, properties)
-    return overview.model_dump()
+    return sanitize_payload(overview.model_dump(), source="loopnet")

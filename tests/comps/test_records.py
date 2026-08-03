@@ -11,8 +11,10 @@ from cre_mcp.comps.records import (
     map_sale_comp,
     sale_comps,
 )
+from cre_mcp.config import CreConfig
 from cre_mcp.enrichment.counties import COUNTY_PARCEL_ENDPOINTS
 from cre_mcp.models import GeoLevel, GeoRef, Listing
+from cre_mcp.source_rights.gate import SourceRightsDeniedError
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "comps"
 
@@ -73,7 +75,9 @@ async def test_sale_comps_uses_shared_arcgis_radius_and_filters_candidates():
     with patch(
         "cre_mcp.comps.records.arcgis_query",
         new=AsyncMock(return_value=[row]),
-    ) as query:
+    ) as query, patch("cre_mcp.comps.records.require_source"), patch(
+        "cre_mcp.comps.records.require_url"
+    ):
         comps = await sale_comps(_geo("37081"), _subject())
 
     assert len(comps) == 1
@@ -132,9 +136,54 @@ async def test_phase23_new_county_uses_its_verified_spatial_sales_layer():
     with patch(
         "cre_mcp.comps.records.arcgis_query",
         new=AsyncMock(return_value=[row]),
-    ) as query:
+    ) as query, patch("cre_mcp.comps.records.require_source"), patch(
+        "cre_mcp.comps.records.require_url"
+    ):
         comps = await sale_comps(_geo("37183"), subject)
 
     assert len(comps) == 1
     assert query.await_args.args[0] == COUNTY_SALES_ENDPOINTS["37183"].sales_layer
     assert "TOTSALPRICE" in query.await_args.kwargs["out_fields"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "enabled",
+    [
+        {"parcel.maricopa_04013": True},
+        {"sales.maricopa_04013": True},
+    ],
+)
+async def test_maricopa_sales_requires_both_capability_and_shared_url_toggles(
+    enabled,
+):
+    runtime = CreConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled=enabled,
+    )
+    query = AsyncMock(return_value=[])
+
+    with patch("cre_mcp.comps.records.arcgis_query", new=query):
+        with pytest.raises(SourceRightsDeniedError):
+            await sale_comps(_geo("04013"), _subject(), runtime_config=runtime)
+
+    query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_maricopa_sales_runs_only_when_both_toggles_are_enabled():
+    runtime = CreConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled={
+            "parcel.maricopa_04013": True,
+            "sales.maricopa_04013": True,
+        },
+    )
+    query = AsyncMock(return_value=[])
+
+    with patch("cre_mcp.comps.records.arcgis_query", new=query):
+        await sale_comps(_geo("04013"), _subject(), runtime_config=runtime)
+
+    query.assert_awaited_once()

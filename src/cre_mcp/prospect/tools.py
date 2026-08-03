@@ -18,6 +18,7 @@ from cre_mcp.prospect.saleleaseback import (
     sale_leaseback_candidates as _sale_leaseback_candidates,
 )
 from cre_mcp.prospect.stalled import stalled_projects as _stalled_projects
+from cre_mcp.source_rights.output import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,9 @@ async def find_adjacent_parcels(
             county=county,
         )
     except Exception as exc:
-        logger.error("find_adjacent_parcels error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("find_adjacent_parcels error: %s", message)
+        return {"error": message}
 
 
 def sale_leaseback_candidates(
@@ -50,8 +52,9 @@ def sale_leaseback_candidates(
     try:
         return _sale_leaseback_candidates(records)
     except Exception as exc:
-        logger.error("sale_leaseback_candidates error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("sale_leaseback_candidates error: %s", message)
+        return {"error": message}
 
 
 def stalled_project_signals(
@@ -109,8 +112,9 @@ def stalled_project_signals(
                     signal["normalized_address"] = full_address.upper()
         return result
     except Exception as exc:
-        logger.error("stalled_project_signals error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("stalled_project_signals error: %s", message)
+        return {"error": message}
 
 
 def portfolio_owner_scan(
@@ -122,8 +126,9 @@ def portfolio_owner_scan(
     try:
         return _portfolio_owner_scan(records, min_properties=min_properties)
     except Exception as exc:
-        logger.error("portfolio_owner_scan error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("portfolio_owner_scan error: %s", message)
+        return {"error": message}
 
 
 def adjust_rent_comp(
@@ -142,8 +147,9 @@ def adjust_rent_comp(
             as_of=as_of,
         )
     except Exception as exc:
-        logger.error("adjust_rent_comp error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("adjust_rent_comp error: %s", message)
+        return {"error": message}
 
 
 def micro_location_score(
@@ -155,8 +161,9 @@ def micro_location_score(
     try:
         return _micro_location_score(site, nearby_anchors=nearby_anchors)
     except Exception as exc:
-        logger.error("micro_location_score error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("micro_location_score error: %s", message)
+        return {"error": message}
 
 
 __all__ = [

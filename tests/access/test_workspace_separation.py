@@ -40,3 +40,26 @@ async def test_cloud_workspace_storage_is_physically_isolated(
         from cre_mcp.deals.store import DealStore
 
         assert await DealStore(db_path=legacy).list_searches() == []
+
+
+def test_startup_config_is_copied_per_workspace_without_mutating_base(
+    tmp_path,
+    ctx_op,
+    ctx_op2,
+):
+    from cre_mcp.access.context import use_context, use_runtime_config
+    from cre_mcp.config import CreConfig
+
+    base = CreConfig(_env_file=None, cache_db_path=tmp_path / "cache.db")
+    with use_context(ctx_op), use_runtime_config(base) as first:
+        assert first is not None
+        assert first.cache_db_path == (
+            tmp_path / "workspaces" / "ws-op" / "cache.db"
+        )
+    with use_context(ctx_op2), use_runtime_config(base) as second:
+        assert second is not None
+        assert second.cache_db_path == (
+            tmp_path / "workspaces" / "ws-op2" / "cache.db"
+        )
+
+    assert base.cache_db_path == tmp_path / "cache.db"

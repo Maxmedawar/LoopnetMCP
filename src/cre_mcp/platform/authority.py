@@ -320,6 +320,8 @@ class AuthorityResolver:
                 active=True,
                 trusted=False,
                 display_name=workspace.name,
+                actor_id=str(membership.user_id) if membership is not None else "",
+                session_id=session.session_id,
             )
 
         return AuthorityOutcome(

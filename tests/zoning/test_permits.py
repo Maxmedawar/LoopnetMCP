@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from cre_mcp.config import CreConfig
 from cre_mcp.zoning.permits import build_permit_query, permits_near
 from tests.conftest import load_fixture
 
@@ -46,13 +47,16 @@ def test_permit_soql_builder_uses_city_schema_and_within_circle(
 
 
 @pytest.mark.asyncio
-async def test_real_chicago_fixture_is_returned_with_source_and_optional_token(
-    monkeypatch,
-):
+async def test_real_chicago_fixture_is_returned_with_source_and_optional_token():
     fetch = AsyncMock()
     fixture = json.loads(load_fixture("zoning/chicago_permits.json"))
     fetch.get_json.return_value = fixture
-    monkeypatch.setenv("CRE_SOCRATA_APP_TOKEN", "test-token")
+    config = CreConfig(
+        _env_file=None,
+        transport="stdio",
+        socrata_app_token="test-token",
+        source_rights_enabled={"permits.chicago": True},
+    )
 
     result = await permits_near(
         41.8781,
@@ -60,17 +64,51 @@ async def test_real_chicago_fixture_is_returned_with_source_and_optional_token(
         "Chicago, IL",
         365,
         fetch=fetch,
+        config=config,
     )
 
     assert result["status"] == "OK"
     assert result["count"] == 2
-    assert result["permits"][0]["permit_"] == "B200432852"
+    assert result["permits"][0]["permit_id"] == "B200432852"
+    assert result["permits"][0]["address"] == "145 S WELLS ST"
+    assert "contact_1_name" not in result["permits"][0]
     assert result["source_endpoint"].endswith("/ydr8-5enu.json")
     assert result["source_layer"] == "Building Permits (ydr8-5enu)"
     assert result["app_token_used"] is True
     assert fetch.get_json.await_args.kwargs["headers"] == {
         "X-App-Token": "test-token"
     }
+
+
+@pytest.mark.asyncio
+async def test_unknown_source_native_permit_fields_cannot_reach_output():
+    fetch = AsyncMock()
+    fetch.get_json.return_value = [
+        {
+            "permit_": "B-1",
+            "permit_type": "New Construction",
+            "private_upstream_field": "must-not-survive",
+            "contact_1_name": "must-not-survive",
+        }
+    ]
+    config = CreConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled={"permits.chicago": True},
+    )
+
+    result = await permits_near(
+        41.8781,
+        -87.6298,
+        "Chicago, IL",
+        365,
+        fetch=fetch,
+        config=config,
+    )
+
+    assert result["permits"] == [
+        {"permit_id": "B-1", "permit_type": "New Construction"}
+    ]
 
 
 @pytest.mark.asyncio

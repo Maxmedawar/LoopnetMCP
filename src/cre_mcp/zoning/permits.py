@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
-import os
+import math
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any, Mapping
 from urllib.parse import urlencode
 
+from cre_mcp.access.context import current_runtime_config
 from cre_mcp.http.errors import FetchClientError
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
+from cre_mcp.source_rights.gate import require_url
+
+if TYPE_CHECKING:
+    from cre_mcp.config import CreConfig
 
 
 @dataclass(frozen=True)
@@ -94,6 +99,193 @@ _ALIASES = {
 }
 
 
+# Socrata schemas contain source-native contact, fee, and administrative fields
+# that are not part of this adapter's output contract. Select and normalize only
+# the fields required by downstream permit analysis. Unknown upstream additions
+# therefore cannot silently become hosted output.
+_TEXT_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "permit_id": (
+        "permit_number",
+        "permit_no",
+        "permit_id",
+        "record_number",
+        "record_id",
+        "permit_",
+        "id",
+    ),
+    "source_record_id": ("id", "record_id", "record_number"),
+    "permit_status": ("permit_status", "status", "current_status"),
+    "permit_milestone": ("permit_milestone", "milestone"),
+    "permit_type": (
+        "permit_type",
+        "permit_type_definition",
+        "permittypemapped",
+        "type",
+    ),
+    "permit_subtype": (
+        "permit_sub_type",
+        "permit_subtype",
+        "permittypedesc",
+        "subtype",
+    ),
+    "work_class": ("work_class", "workclass"),
+    "work_type": ("work_type", "worktype"),
+    "description": (
+        "work_description",
+        "work_desc",
+        "description",
+        "project_description",
+    ),
+    "application_date": (
+        "application_start_date",
+        "application_date",
+        "applieddate",
+    ),
+    "issue_date": ("issue_date", "issued_date", "issueddate", "permit_date"),
+    "expiration_date": ("expiration_date", "expiresdate", "expiry_date"),
+    "completion_date": (
+        "completion_date",
+        "completed_date",
+        "final_date",
+    ),
+    "address": (
+        "address",
+        "site_address",
+        "project_address",
+        "property_address",
+        "full_address",
+    ),
+    "street_number": ("street_number", "street_no", "housenumber"),
+    "street_direction": ("street_direction", "street_dir"),
+    "street_name": ("street_name", "streetname"),
+    "street_suffix": ("street_suffix", "street_type"),
+    "unit": ("unit", "unit_number", "suite"),
+    "parcel_id": ("parcel_id", "parcel_number", "apn", "pin", "pin_list"),
+    "community_area": ("community_area",),
+    "ward": ("ward",),
+    "census_tract": ("census_tract",),
+}
+
+_REPORTED_COST_FIELDS = (
+    "reported_cost",
+    "estimated_cost",
+    "estimated_value",
+    "valuation",
+    "job_value",
+)
+_REPORTED_AREA_FIELDS = (
+    "total_new_addition_sqft",
+    "new_addition_demo_floor_area",
+    "remodel_total_sqft",
+    "total_existing_bldg_sqft",
+    "building_area",
+    "square_feet",
+    "floor_area",
+    "floor_area_l_a_building_code_definition",
+    "projectareasqft",
+    "squarefeet",
+)
+
+
+def _text_value(
+    row: Mapping[str, Any],
+    aliases: tuple[str, ...],
+    *,
+    max_length: int = 4_000,
+) -> str | None:
+    for field in aliases:
+        value = row.get(field)
+        if value is None or isinstance(value, (bool, dict, list, tuple, set)):
+            continue
+        text = str(value).strip()
+        if text:
+            return text[:max_length]
+    return None
+
+
+def _nonnegative_number(
+    row: Mapping[str, Any], aliases: tuple[str, ...]
+) -> float | None:
+    for field in aliases:
+        value = row.get(field)
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            number = float(str(value).replace(",", "").replace("$", ""))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number) and number >= 0:
+            return number
+    return None
+
+
+def _coordinate(row: Mapping[str, Any], axis: str) -> float | None:
+    aliases = (
+        ("latitude", "lat")
+        if axis == "latitude"
+        else ("longitude", "lon", "lng")
+    )
+    value: Any = next(
+        (row[field] for field in aliases if row.get(field) not in (None, "")),
+        None,
+    )
+    if value is None:
+        for location_field in ("location", "location1", "geolocation"):
+            location = row.get(location_field)
+            if not isinstance(location, Mapping):
+                continue
+            direct = location.get(axis)
+            if direct not in (None, ""):
+                value = direct
+                break
+            coordinates = location.get("coordinates")
+            if isinstance(coordinates, (list, tuple)) and len(coordinates) >= 2:
+                value = coordinates[1 if axis == "latitude" else 0]
+                break
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    bound = 90 if axis == "latitude" else 180
+    return number if math.isfinite(number) and -bound <= number <= bound else None
+
+
+def _normalize_permit_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    normalized = {
+        field: value
+        for field, aliases in _TEXT_FIELD_ALIASES.items()
+        if (value := _text_value(row, aliases)) is not None
+    }
+    if "address" not in normalized:
+        address = " ".join(
+            part
+            for field in (
+                "street_number",
+                "street_direction",
+                "street_name",
+                "street_suffix",
+                "unit",
+            )
+            if (part := normalized.get(field))
+        )
+        if address:
+            normalized["address"] = address
+
+    reported_cost = _nonnegative_number(row, _REPORTED_COST_FIELDS)
+    if reported_cost is not None:
+        normalized["reported_cost"] = reported_cost
+    reported_area = _nonnegative_number(row, _REPORTED_AREA_FIELDS)
+    if reported_area is not None:
+        normalized["reported_area_sf"] = reported_area
+    for axis in ("latitude", "longitude"):
+        coordinate = _coordinate(row, axis)
+        if coordinate is not None:
+            normalized[axis] = coordinate
+    return normalized
+
+
 def resolve_permit_source(city: str) -> PermitSource | None:
     if not city or not city.strip():
         return None
@@ -167,6 +359,7 @@ async def permits_near(
     since_days: int,
     *,
     fetch: FetchClient | None = None,
+    config: CreConfig | None = None,
 ) -> dict[str, Any]:
     """Fetch permits within 500 metres and the requested lookback window."""
 
@@ -179,7 +372,13 @@ async def permits_near(
         city,
         since_days,
     )
-    token = os.getenv("CRE_SOCRATA_APP_TOKEN", "").strip()
+    runtime = current_runtime_config() or config
+    require_url(request_url, config=runtime)
+    token = (
+        runtime.socrata_app_token.get_secret_value().strip()
+        if runtime is not None and runtime.socrata_app_token is not None
+        else ""
+    )
     headers = {"X-App-Token": token} if token else None
     payload = await (fetch or get_fetch_client()).get_json(
         request_url,
@@ -187,15 +386,20 @@ async def permits_near(
     )
     if isinstance(payload, dict) and payload.get("error"):
         raise FetchClientError(
-            f"Socrata permit query failed for {source.dataset_id}: {payload}"
+            f"Socrata permit query failed for dataset {source.dataset_id}"
         )
     if not isinstance(payload, list):
         raise FetchClientError(
             f"Socrata permit response for {source.dataset_id} must be a JSON list"
         )
-    permits = [row for row in payload if isinstance(row, dict)]
+    permits = [
+        _normalize_permit_row(row)
+        for row in payload
+        if isinstance(row, Mapping)
+    ]
     return {
         "status": "OK",
+        "source": f"permits.{source.key}",
         "city": source.city,
         "count": len(permits),
         "permits": permits,

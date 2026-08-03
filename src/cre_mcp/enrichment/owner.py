@@ -4,9 +4,10 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 
+from cre_mcp.access.context import resolve_runtime_config
 from cre_mcp.cache import SQLiteCache
 from cre_mcp.config import CreConfig
-from cre_mcp.enrichment.arcgis import ArcgisParcelProvider
+from cre_mcp.enrichment.arcgis import ArcgisParcelProvider, county_sales_authorized
 from cre_mcp.enrichment.base import ParcelProvider, ProviderUnavailable
 from cre_mcp.enrichment.counties import CountyParcelConfig, config_for_geo
 from cre_mcp.enrichment.providers.attom import AttomProvider
@@ -15,10 +16,17 @@ from cre_mcp.geo.resolver import resolve
 from cre_mcp.models.enrichment import OwnerRecord, ParcelRecord
 from cre_mcp.models.geo import GeoRef
 from cre_mcp.sources.dedupe import normalize_address
+from cre_mcp.source_rights.gate import require_url
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 _CACHE_TTL_SECONDS = 90 * 24 * 60 * 60
 _MISSING = {"missing": True}
 logger = logging.getLogger(__name__)
+
+_PAID_RIGHTS_URLS = {
+    "attom": "https://api.gateway.attomdata.com/propertyapi/v1.0.0/property/detailowner",
+    "regrid": "https://app.regrid.com/api/v2/parcels/address",
+}
 
 PaidProviderFactory = Callable[[CreConfig, SQLiteCache], ParcelProvider]
 
@@ -113,10 +121,12 @@ class OwnerLookup:
         ] = ArcgisParcelProvider,
         paid_provider_factories: tuple[PaidProviderFactory, ...] | None = None,
     ):
-        self.config = config or CreConfig()
+        self.config = resolve_runtime_config(config)
         self.cache = cache or SQLiteCache(self.config.cache_db_path)
         self.resolver = resolver
         self.provider_factory = provider_factory
+        self._uses_default_provider_factory = provider_factory is ArcgisParcelProvider
+        self._uses_default_paid_factories = paid_provider_factories is None
         self.paid_provider_factories = (
             _default_paid_provider_factories()
             if paid_provider_factories is None
@@ -147,6 +157,53 @@ class OwnerLookup:
         ]
         return "+".join(enabled) if enabled else "free"
 
+    def _authorized_cache_ttl(
+        self,
+        county_config: CountyParcelConfig | None,
+        provider_tag: str,
+    ) -> tuple[int, bool]:
+        """Gate every real source that could have contributed to an owner hit."""
+        if not self._uses_default_provider_factory or not self._uses_default_paid_factories:
+            # Explicit test/application providers own their cache contract.
+            return _CACHE_TTL_SECONDS, False
+        records = []
+        sales_authorized = False
+        if county_config is not None:
+            records.append(
+                require_url(
+                    county_config.arcgis_url,
+                    method="GET",
+                    config=self.config,
+                )
+            )
+            sales_authorized = county_sales_authorized(
+                county_config,
+                runtime_config=self.config,
+            )
+            if county_config.sales_layer and sales_authorized:
+                records.append(
+                    require_url(
+                        county_config.sales_layer,
+                        method="GET",
+                        config=self.config,
+                    )
+                )
+        for name in provider_tag.split("+"):
+            url = _PAID_RIGHTS_URLS.get(name)
+            if url is not None:
+                records.append(require_url(url, method="GET", config=self.config))
+        if not records:
+            return 0, sales_authorized
+        return (
+            min(
+                record.operating_policy.persistent_cache_ttl_seconds
+                if record is not None
+                else 0
+                for record in records
+            ),
+            sales_authorized,
+        )
+
     async def _paid_lookup(
         self,
         address: str | None,
@@ -163,7 +220,7 @@ class OwnerLookup:
                 logger.warning(
                     "Opt-in paid parcel provider %s failed non-fatally: %s",
                     type(provider).__name__,
-                    exc,
+                    safe_error_message(exc, config=self.config),
                 )
                 continue
             if parcel is not None:
@@ -188,21 +245,34 @@ class OwnerLookup:
         county_config = config_for_geo(geo)
         county_fips = geo.county_fips or "unknown"
         provider_tag = self._provider_tag()
+        cache_ttl, sales_authorized = self._authorized_cache_ttl(
+            county_config,
+            provider_tag,
+        )
+        cache_scope = f"{provider_tag}:sales" if sales_authorized else f"{provider_tag}:parcel"
         cache_key = self._cache_key(
             address,
             apn,
             county_fips,
-            provider_tag,
+            cache_scope,
         )
-        cached = await self.cache.get(cache_key)
-        if cached == _MISSING:
-            return None
-        if cached is not None:
-            return OwnerRecord.model_validate(cached)
+        if cache_ttl > 0:
+            cached = await self.cache.get(cache_key)
+            if cached == _MISSING:
+                return None
+            if cached is not None:
+                return OwnerRecord.model_validate(cached)
 
         parcel = None
         if county_config is not None:
-            provider = self.provider_factory(county_config)
+            provider = (
+                ArcgisParcelProvider(
+                    county_config,
+                    runtime_config=self.config,
+                )
+                if self._uses_default_provider_factory
+                else self.provider_factory(county_config)
+            )
             try:
                 parcel = await provider.lookup(address, apn, geo)
             except Exception as exc:
@@ -210,22 +280,28 @@ class OwnerLookup:
                     raise
                 logger.warning(
                     "Free county parcel lookup failed for %s: %s",
-                    county_config.name,
-                    exc,
+                    safe_source_reference(county_config.name, config=self.config),
+                    safe_error_message(exc, config=self.config),
                 )
         if parcel is None or (provider_tag != "free" and not parcel.owner_name):
             paid_parcel = await self._paid_lookup(address, apn, geo)
             if paid_parcel is not None:
                 parcel = paid_parcel
         if parcel is None:
-            await self.cache.set(cache_key, _MISSING, ttl_seconds=_CACHE_TTL_SECONDS)
+            if cache_ttl > 0:
+                await self.cache.set(
+                    cache_key,
+                    _MISSING,
+                    ttl_seconds=min(_CACHE_TTL_SECONDS, cache_ttl),
+                )
             return None
         owner = owner_from_parcel(parcel)
-        await self.cache.set(
-            cache_key,
-            owner.model_dump(mode="json"),
-            ttl_seconds=_CACHE_TTL_SECONDS,
-        )
+        if cache_ttl > 0:
+            await self.cache.set(
+                cache_key,
+                owner.model_dump(mode="json"),
+                ttl_seconds=min(_CACHE_TTL_SECONDS, cache_ttl),
+            )
         return owner
 
 

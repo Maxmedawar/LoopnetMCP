@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from cre_mcp.access.context import local_context, use_context
 from cre_mcp.config import CreConfig
 from cre_mcp.deals.store import DealStore
 from cre_mcp.models.listings import Listing
@@ -22,6 +23,12 @@ T12_CSV = (
     "Total Operating Expenses,70000\n"
     "Net Operating Income,180000\n"
 )
+
+
+@pytest.fixture(autouse=True)
+def _trusted_local_document_runtime():
+    with use_context(local_context()):
+        yield
 
 
 def _listing() -> Listing:

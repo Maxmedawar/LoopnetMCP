@@ -15,6 +15,7 @@ from cre_mcp.access.context import current_context
 from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.access.result_models import RestrictedDealTimelineResult
 from cre_mcp.deals.store import get_deal_store
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,10 @@ async def record_ic_decision(
     Returns:
         The persisted decision id and whether system and expert agreed.
     """
-    logger.info("record_ic_decision called: deal=%s", deal_id)
+    logger.info(
+        "record_ic_decision called: deal=%s",
+        safe_source_reference(deal_id),
+    )
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
@@ -86,8 +90,9 @@ async def record_ic_decision(
             "note": "Shadow-IC: this pairs with the realized outcome later to score judgment.",
         }
     except Exception as exc:
-        logger.error("record_ic_decision error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("record_ic_decision error: %s", message)
+        return {"error": message}
 
 
 async def log_deal_event(deal_id: str, event_type: str, detail: dict | None = None) -> dict:
@@ -101,7 +106,11 @@ async def log_deal_event(deal_id: str, event_type: str, detail: dict | None = No
     Returns:
         The persisted event id.
     """
-    logger.info("log_deal_event called: deal=%s type=%s", deal_id, event_type)
+    logger.info(
+        "log_deal_event called: deal=%s type=%s",
+        safe_source_reference(deal_id),
+        safe_source_reference(event_type),
+    )
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
@@ -110,8 +119,9 @@ async def log_deal_event(deal_id: str, event_type: str, detail: dict | None = No
             raise ValueError(f"unknown deal_id: {deal_id}")
         return {"status": "logged", "event_id": event_id, "deal_id": deal_id.strip(), "event_type": event_type}
     except Exception as exc:
-        logger.error("log_deal_event error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("log_deal_event error: %s", message)
+        return {"error": message}
 
 
 async def deal_timeline(deal_id: str) -> dict:
@@ -123,7 +133,7 @@ async def deal_timeline(deal_id: str) -> dict:
     Returns:
         The ordered events and IC decisions (the deal-graph view of one deal).
     """
-    logger.info("deal_timeline called: deal=%s", deal_id)
+    logger.info("deal_timeline called: deal=%s", safe_source_reference(deal_id))
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
@@ -177,8 +187,9 @@ async def deal_timeline(deal_id: str) -> dict:
             strict=True,
         ).model_dump(mode="json")
     except Exception as exc:
-        logger.error("deal_timeline error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("deal_timeline error: %s", message)
+        return {"error": message}
 
 
 async def ic_scorecard() -> dict:
@@ -192,8 +203,9 @@ async def ic_scorecard() -> dict:
     try:
         return await get_deal_store().ic_scorecard()
     except Exception as exc:
-        logger.error("ic_scorecard error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("ic_scorecard error: %s", message)
+        return {"error": message}
 
 
 __all__ = ["record_ic_decision", "log_deal_event", "deal_timeline", "ic_scorecard"]

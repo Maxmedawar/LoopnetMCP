@@ -12,6 +12,7 @@ from statistics import median
 from typing import Any
 from urllib.parse import urlencode
 
+from cre_mcp.access.context import resolve_runtime_config
 from cre_mcp.config import CreConfig
 from cre_mcp.geo.resolver import STATE_FIPS
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
@@ -25,6 +26,7 @@ from cre_mcp.models.market import (
     RentComparable,
     RentComps,
 )
+from cre_mcp.source_rights.output import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +149,7 @@ class RentCastProvider:
         *,
         fetch: FetchClient | None = None,
     ):
-        self.config = config or CreConfig()
+        self.config = resolve_runtime_config(config)
         self.fetch = fetch or get_fetch_client()
         self._key = (
             self.config.rentcast_api_key.get_secret_value()
@@ -256,7 +258,7 @@ class RentCompsService:
         hud: HudProvider | None = None,
         rentcast: RentCastProvider | None = None,
     ):
-        self.config = config or CreConfig()
+        self.config = resolve_runtime_config(config)
         self.zori = zori or ZoriProvider()
         self.census = census or CensusProvider(config=self.config)
         self.hud = hud or HudProvider(config=self.config)
@@ -266,7 +268,11 @@ class RentCompsService:
         try:
             return await operation
         except Exception as exc:
-            logger.warning("Rent provider %s unavailable: %s", label, exc)
+            logger.warning(
+                "Rent provider %s unavailable: %s",
+                label,
+                safe_error_message(exc),
+            )
             return None
 
     async def get_rent_comps(

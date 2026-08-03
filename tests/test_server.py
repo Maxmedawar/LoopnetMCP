@@ -11,6 +11,8 @@ from cre_mcp.scraper import client as client_module
 from cre_mcp.scraper.client import LoopnetBlockedError, LoopnetClientError
 from tests.conftest import load_fixture
 
+pytestmark = pytest.mark.usefixtures("legacy_loopnet_runtime")
+
 
 @pytest.fixture
 def mcp_client():

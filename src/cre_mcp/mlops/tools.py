@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from cre_mcp.config import CreConfig
+from cre_mcp.source_rights.output import safe_error_message
 
 from .breach_watch import breach_report as _breach_report
 from .breach_watch import record_watch_item as _record_watch_item
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 def _error(tool_name: str, exc: Exception) -> dict[str, str]:
     message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
-    message = message or exc.__class__.__name__
+    message = safe_error_message(message or exc.__class__.__name__)
     logger.error("%s error: %s", tool_name, message)
     return {"error": message}
 

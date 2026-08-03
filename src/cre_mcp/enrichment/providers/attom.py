@@ -15,6 +15,7 @@ from datetime import date, datetime
 from typing import Any
 from urllib.parse import urlencode
 
+from cre_mcp.access.context import resolve_runtime_config
 from cre_mcp.cache import SQLiteCache
 from cre_mcp.config import CreConfig
 from cre_mcp.enrichment.base import ProviderUnavailable
@@ -23,6 +24,8 @@ from cre_mcp.models.comps import CompsProviderResult, SaleComp, ValueEstimate
 from cre_mcp.models.enrichment import ParcelRecord
 from cre_mcp.models.geo import GeoRef
 from cre_mcp.models.listings import Listing
+from cre_mcp.source_rights.gate import require_url
+from cre_mcp.source_rights.output import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +280,7 @@ class AttomProvider:
         fetch: FetchClient | None = None,
         cache: SQLiteCache | None = None,
     ):
-        self.config = config or CreConfig()
+        self.config = resolve_runtime_config(config)
         self.fetch = fetch or get_fetch_client()
         self.cache = cache or SQLiteCache(self.config.cache_db_path)
 
@@ -329,13 +332,24 @@ class AttomProvider:
         geo: GeoRef | None,
     ) -> ParcelRecord | None:
         """Return ATTOM detail-owner data only after explicit key opt-in."""
-        self._api_key()
         if not address and not apn:
             return None
+        self._api_key()
+        record = require_url(
+            f"{_BASE_URL}/property/detailowner",
+            method="GET",
+            config=self.config,
+        )
+        cache_ttl = (
+            record.operating_policy.persistent_cache_ttl_seconds
+            if record is not None
+            else 0
+        )
         cache_key = self._cache_key("parcel", address, apn, geo.county_fips if geo else None)
-        cached = await self.cache.get(cache_key)
-        if cached is not None:
-            return None if cached.get("missing") else ParcelRecord.model_validate(cached)
+        if cache_ttl > 0:
+            cached = await self.cache.get(cache_key)
+            if cached is not None:
+                return None if cached.get("missing") else ParcelRecord.model_validate(cached)
 
         params: dict[str, Any]
         if address:
@@ -348,11 +362,12 @@ class AttomProvider:
         payload = await self._get("property/detailowner", params)
         rows = _records(payload)
         parcel = map_attom_parcel(rows[0]) if rows else None
-        await self.cache.set(
-            cache_key,
-            parcel.model_dump(mode="json") if parcel else {"missing": True},
-            ttl_seconds=_PARCEL_CACHE_TTL,
-        )
+        if cache_ttl > 0:
+            await self.cache.set(
+                cache_key,
+                parcel.model_dump(mode="json") if parcel else {"missing": True},
+                ttl_seconds=min(_PARCEL_CACHE_TTL, cache_ttl),
+            )
         return parcel
 
     async def get_comps(
@@ -362,12 +377,33 @@ class AttomProvider:
     ) -> CompsProviderResult:
         """Return ATTOM sale comps plus AVM, cached before another paid call."""
         self._api_key()
+        records = (
+            require_url(
+                f"{_BASE_URL}/salescomparables",
+                method="GET",
+                config=self.config,
+            ),
+            require_url(
+                f"{_BASE_URL}/attomavm/detail",
+                method="GET",
+                config=self.config,
+            ),
+        )
+        cache_ttl = min(
+            (
+                record.operating_policy.persistent_cache_ttl_seconds
+                if record is not None
+                else 0
+            )
+            for record in records
+        )
         cache_key = self._cache_key(
             "comps", subject.address, subject.source_id, geo.county_fips if geo else None
         )
-        cached = await self.cache.get(cache_key)
-        if cached is not None:
-            return CompsProviderResult.model_validate(cached)
+        if cache_ttl > 0:
+            cached = await self.cache.get(cache_key)
+            if cached is not None:
+                return CompsProviderResult.model_validate(cached)
 
         address1, address2 = self._subject_parts(subject)
         params = {"address1": address1, "address2": address2, "radius": 5, "pageSize": 25}
@@ -388,7 +424,10 @@ class AttomProvider:
                 if (comp := map_attom_comp(row, county_fips)) is not None
             ]
         except Exception as exc:
-            logger.warning("ATTOM paid sales comparables unavailable: %s", exc)
+            logger.warning(
+                "ATTOM paid sales comparables unavailable: %s",
+                safe_error_message(exc),
+            )
         try:
             payload = await self._get(
                 "attomavm/detail",
@@ -397,18 +436,21 @@ class AttomProvider:
             successful_response = True
             avm = map_attom_avm(payload)
         except Exception as exc:
-            logger.warning("ATTOM paid AVM unavailable: %s", exc)
+            logger.warning(
+                "ATTOM paid AVM unavailable: %s",
+                safe_error_message(exc),
+            )
 
         result = CompsProviderResult(
             provider=self.name,
             comps=comps,
             value_estimate=avm,
         )
-        if successful_response:
+        if successful_response and cache_ttl > 0:
             await self.cache.set(
                 cache_key,
                 result.model_dump(mode="json"),
-                ttl_seconds=_COMPS_CACHE_TTL,
+                ttl_seconds=min(_COMPS_CACHE_TTL, cache_ttl),
             )
         return result
 

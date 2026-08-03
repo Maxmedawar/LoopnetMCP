@@ -10,6 +10,7 @@ from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.deals.store import get_deal_store
 from cre_mcp.models import Deal, DealContext
 from cre_mcp.ops.playbook import operating_playbook as build_operating_playbook
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.tax.after_tax import after_tax_returns as calculate_after_tax_returns
 from cre_mcp.tools.deal_tools import analyze_deal
 
@@ -66,7 +67,11 @@ async def after_tax_returns(
         AfterTaxResult with canonical pre_tax_irr, after_tax_irr, depreciation_annual,
         recapture_1250, detailed schedules/taxes, assumptions, and the CPA gate.
     """
-    logger.info("after_tax_returns called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "after_tax_returns called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         assumptions = {
@@ -91,8 +96,9 @@ async def after_tax_returns(
             }
         return payload
     except Exception as exc:
-        logger.error("after_tax_returns error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("after_tax_returns error: %s", message)
+        return {"error": message}
 
 
 async def operating_playbook(
@@ -108,15 +114,20 @@ async def operating_playbook(
     Returns:
         Month-one, recurring, lease-critical, and strategic reminders with professional gates.
     """
-    logger.info("operating_playbook called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "operating_playbook called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         return (
             await build_operating_playbook(ctx, store=get_deal_store())
         ).model_dump(mode="json")
     except Exception as exc:
-        logger.error("operating_playbook error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("operating_playbook error: %s", message)
+        return {"error": message}
 
 
 __all__ = ["after_tax_returns", "operating_playbook"]

@@ -14,7 +14,13 @@ from tests.conftest import load_fixture
 
 
 def _resolver(tmp_path, fetch):
-    config = CreConfig(cache_db_path=tmp_path / "geo.db", hud_api_token=None)
+    config = CreConfig(
+        _env_file=None,
+        transport="stdio",
+        cache_db_path=tmp_path / "geo.db",
+        hud_api_token=None,
+        source_rights_enabled={"geo.census_geocoder": True},
+    )
     crosswalk = GeoCrosswalk(config, fetch=fetch, hud_token=None)
     return GeoResolver(
         config,

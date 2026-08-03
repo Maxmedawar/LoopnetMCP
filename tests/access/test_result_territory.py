@@ -2517,7 +2517,7 @@ async def test_actual_owner_lookup_projects_provider_raw_before_release(
     )
 
     assert result.data["parcels"][0]["site_address"].endswith("TX 75201")
-    assert result.data["parcels"][0]["raw"] == {}
+    assert "raw" not in result.data["parcels"][0]
 
 
 @pytest.mark.parametrize("context_fixture", _LIMITED_CONTEXT_FIXTURES)
@@ -4112,9 +4112,13 @@ async def test_real_search_shapes_release_through_fastmcp_structured_content(
 
     call_result = await _call_search(registry, audit, identity, result)
 
+    expected = [
+        {key: value for key, value in row.items() if key != "raw"}
+        for row in result[collection]
+    ]
     assert call_result.structured_content is not None
-    assert call_result.structured_content[collection] == result[collection]
-    assert call_result.data[collection] == result[collection]
+    assert call_result.structured_content[collection] == expected
+    assert call_result.data[collection] == expected
 
 
 @pytest.mark.parametrize(

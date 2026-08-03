@@ -7,6 +7,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from cre_mcp.source_rights.output import safe_error_message
+
 from .certificates import certificate_gaps as _certificate_gaps
 from .certificates import expire_radar as _expire_radar
 from .certificates import record_certificate as _record_certificate
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def _error(tool_name: str, exc: Exception) -> dict[str, str]:
     message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
-    message = message or exc.__class__.__name__
+    message = safe_error_message(message or exc.__class__.__name__)
     logger.error("%s error: %s", tool_name, message)
     return {"error": message}
 

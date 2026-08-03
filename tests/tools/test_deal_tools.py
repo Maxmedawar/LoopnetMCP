@@ -90,7 +90,7 @@ async def test_analyze_deal_deep_fetches_underwrites_and_scores():
     source = Mock(capabilities=SourceCapabilities(detail_is_expensive=True))
     source.get_detail = AsyncMock(return_value=_listing("31948105"))
     fake_registry = Mock()
-    fake_registry.get.return_value = source
+    fake_registry.get_authorized.return_value = source
     market_engine = Mock()
     market_engine.get_market_pack = AsyncMock(return_value=_market())
     owner_engine = Mock()
@@ -147,7 +147,7 @@ async def test_analyze_deal_extracts_asset_id_from_crexi_url():
     source = Mock(capabilities=SourceCapabilities(detail_is_expensive=False))
     source.get_detail = AsyncMock(return_value=detail)
     fake_registry = Mock()
-    fake_registry.get.return_value = source
+    fake_registry.get_authorized.return_value = source
     market_engine = Mock()
     market_engine.get_market_pack = AsyncMock(return_value=_market())
     owner_engine = Mock()
@@ -185,7 +185,7 @@ async def test_analyze_deal_populates_phase8_attributes_rent_and_signals():
     source = Mock(capabilities=SourceCapabilities(detail_is_expensive=True))
     source.get_detail = AsyncMock(return_value=listing)
     fake_registry = Mock()
-    fake_registry.get.return_value = source
+    fake_registry.get_authorized.return_value = source
     market_engine = Mock()
     market_engine.get_market_pack = AsyncMock(return_value=_market())
     owner_engine = Mock()
@@ -304,7 +304,7 @@ async def test_find_deals_deep_fetches_only_return_limit():
             per_source_counts={"loopnet": 2},
         )
     )
-    fake_registry.get.return_value = source
+    fake_registry.get_authorized.return_value = source
     market_engine = Mock()
     market_engine.get_market_pack = AsyncMock(return_value=_market())
 
@@ -327,7 +327,7 @@ async def test_find_deals_deep_fetches_only_return_limit():
 @pytest.mark.asyncio
 async def test_deal_tools_return_error_dicts():
     with patch(
-        "cre_mcp.tools.deal_tools.registry.get",
+        "cre_mcp.tools.deal_tools.registry.get_authorized",
         side_effect=ValueError("unknown source"),
     ):
         assert await analyze_deal("123", source="bad") == {

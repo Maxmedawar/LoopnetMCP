@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from cre_mcp.config import CreConfig
 from cre_mcp.models import Listing, ListingRef, SourceCapabilities
 from cre_mcp.sources.base import ListingSource, SearchQuery
 from cre_mcp.sources.registry import SourceRegistry
@@ -54,6 +55,18 @@ class FakeSource(ListingSource):
         return self._listings[0]
 
 
+def _rights_config() -> CreConfig:
+    return CreConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled={
+            "listing.loopnet": True,
+            "listing.crexi": True,
+            "unclassified.network": True,
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_multisource_merge_prefers_crexi_and_unions_provenance():
     loopnet = FakeSource(
@@ -65,7 +78,10 @@ async def test_multisource_merge_prefers_crexi_and_unions_provenance():
         [_listing("crexi", "cx-1", price_usd=3_500_000, price="$3,500,000")],
     )
     failing = FakeSource("failing", error=RuntimeError("temporarily unavailable"))
-    registry = SourceRegistry(sources=[loopnet, crexi, failing])
+    registry = SourceRegistry(
+        config=_rights_config(),
+        sources=[loopnet, crexi, failing],
+    )
 
     result = await registry.search_all(SearchQuery(location="Austin, TX"))
 
@@ -85,6 +101,7 @@ async def test_multisource_merge_prefers_crexi_and_unions_provenance():
 @pytest.mark.asyncio
 async def test_search_properties_explicit_sources_returns_rich_shape():
     registry = SourceRegistry(
+        config=_rights_config(),
         sources=[
             FakeSource("loopnet", [_listing("loopnet", "ln-1")]),
             FakeSource("crexi", [_listing("crexi", "cx-2", address="200 Congress Ave")]),

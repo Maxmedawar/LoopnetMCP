@@ -7,10 +7,13 @@ import logging
 import sqlite3
 from pathlib import Path
 
+from cre_mcp.access.context import current_runtime_config, resolve_runtime_config
 from cre_mcp.config import CreConfig
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.market.base import AuthSpec, GovApiClient, MarketDataProvider
 from cre_mcp.models.market import MetricValue
+from cre_mcp.source_rights.gate import require_url
+from cre_mcp.source_rights.output import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +42,8 @@ class IrsSoiProvider(MarketDataProvider):
         fetch: FetchClient | None = None,
         db_path: str | Path | None = None,
     ):
-        config = config or CreConfig()
+        config = resolve_runtime_config(config)
+        self.config = config
         self.db_path = Path(db_path or config.cache_db_path).expanduser()
         self.fetch = fetch or (client.fetch if client is not None else get_fetch_client())
         self._load_lock = asyncio.Lock()
@@ -81,11 +85,27 @@ class IrsSoiProvider(MarketDataProvider):
         )
         return connection
 
-    def _dataset_loaded(self) -> bool:
+    def _authorized_cache_ttl(self) -> int:
+        records = (
+            require_url(COUNTY_INFLOW_URL, config=self.config),
+            require_url(COUNTY_OUTFLOW_URL, config=self.config),
+        )
+        return min(
+            int(record.operating_policy.persistent_cache_ttl_seconds)
+            if record is not None
+            else 0
+            for record in records
+        )
+
+    def _dataset_loaded(self, ttl_seconds: int) -> bool:
+        if ttl_seconds <= 0:
+            return False
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT 1 FROM soi_migration_meta WHERE dataset = ?",
-                (LATEST_MIGRATION_YEAR,),
+                """SELECT 1 FROM soi_migration_meta
+                   WHERE dataset = ?
+                     AND loaded_at >= datetime('now', ?)""",
+                (LATEST_MIGRATION_YEAR, f"-{ttl_seconds} seconds"),
             ).fetchone()
         return row is not None
 
@@ -96,11 +116,21 @@ class IrsSoiProvider(MarketDataProvider):
                 (LATEST_MIGRATION_YEAR,),
             )
 
+    def _clear_stale_dataset(self) -> None:
+        """Delete normalized rows once their authorized retention has expired."""
+        with self._connect() as connection:
+            connection.execute("DELETE FROM soi_migration")
+            connection.execute(
+                "DELETE FROM soi_migration_meta WHERE dataset = ?",
+                (LATEST_MIGRATION_YEAR,),
+            )
+
     def _load_csv(
         self,
         text: str,
         direction: str | None,
         year: str | None,
+        persist: bool,
     ) -> int:
         reader = csv.DictReader(io.StringIO(text))
         rows = [
@@ -161,43 +191,44 @@ class IrsSoiProvider(MarketDataProvider):
                 )
         else:
             raise ValueError("Could not determine whether IRS CSV is inflow or outflow")
-        with self._connect() as connection:
-            if normalized:
-                connection.executemany(
-                    """
-                    INSERT INTO soi_migration VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(county_fips, year) DO UPDATE SET
-                        inflow_returns=excluded.inflow_returns,
-                        outflow_returns=excluded.outflow_returns,
-                        inflow_exemptions=excluded.inflow_exemptions,
-                        outflow_exemptions=excluded.outflow_exemptions,
-                        inflow_agi=excluded.inflow_agi,
-                        outflow_agi=excluded.outflow_agi
-                    """,
-                    values,
-                )
-            elif direction == "inflow":
-                connection.executemany(
-                    """
-                    INSERT INTO soi_migration VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(county_fips, year) DO UPDATE SET
-                        inflow_returns=excluded.inflow_returns,
-                        inflow_exemptions=excluded.inflow_exemptions,
-                        inflow_agi=excluded.inflow_agi
-                    """,
-                    values,
-                )
-            else:
-                connection.executemany(
-                    """
-                    INSERT INTO soi_migration VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(county_fips, year) DO UPDATE SET
-                        outflow_returns=excluded.outflow_returns,
-                        outflow_exemptions=excluded.outflow_exemptions,
-                        outflow_agi=excluded.outflow_agi
-                    """,
-                    values,
-                )
+        if persist:
+            with self._connect() as connection:
+                if normalized:
+                    connection.executemany(
+                        """
+                        INSERT INTO soi_migration VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(county_fips, year) DO UPDATE SET
+                            inflow_returns=excluded.inflow_returns,
+                            outflow_returns=excluded.outflow_returns,
+                            inflow_exemptions=excluded.inflow_exemptions,
+                            outflow_exemptions=excluded.outflow_exemptions,
+                            inflow_agi=excluded.inflow_agi,
+                            outflow_agi=excluded.outflow_agi
+                        """,
+                        values,
+                    )
+                elif direction == "inflow":
+                    connection.executemany(
+                        """
+                        INSERT INTO soi_migration VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(county_fips, year) DO UPDATE SET
+                            inflow_returns=excluded.inflow_returns,
+                            inflow_exemptions=excluded.inflow_exemptions,
+                            inflow_agi=excluded.inflow_agi
+                        """,
+                        values,
+                    )
+                else:
+                    connection.executemany(
+                        """
+                        INSERT INTO soi_migration VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(county_fips, year) DO UPDATE SET
+                            outflow_returns=excluded.outflow_returns,
+                            outflow_exemptions=excluded.outflow_exemptions,
+                            outflow_agi=excluded.outflow_agi
+                        """,
+                        values,
+                    )
         return len(values)
 
     async def load_csv(
@@ -208,14 +239,32 @@ class IrsSoiProvider(MarketDataProvider):
         year: str | None = None,
     ) -> int:
         """Load normalized or official IRS county inflow/outflow CSV data."""
-        return await asyncio.to_thread(self._load_csv, text, direction, year)
+        runtime = current_runtime_config()
+        if runtime is not None and runtime is not self.config:
+            return await IrsSoiProvider(config=runtime).load_csv(
+                text,
+                direction=direction,
+                year=year,
+            )
+        cache_ttl = self._authorized_cache_ttl()
+        count = await asyncio.to_thread(
+            self._load_csv,
+            text,
+            direction,
+            year,
+            cache_ttl > 0,
+        )
+        if count > 0 and cache_ttl > 0:
+            await asyncio.to_thread(self._mark_dataset_loaded)
+        return count
 
-    async def _ensure_latest_loaded(self) -> None:
-        if await asyncio.to_thread(self._dataset_loaded):
+    async def _ensure_latest_loaded(self, cache_ttl: int) -> None:
+        if await asyncio.to_thread(self._dataset_loaded, cache_ttl):
             return
         async with self._load_lock:
-            if await asyncio.to_thread(self._dataset_loaded):
+            if await asyncio.to_thread(self._dataset_loaded, cache_ttl):
                 return
+            await asyncio.to_thread(self._clear_stale_dataset)
             inflow, outflow = await asyncio.gather(
                 self.fetch.get_text(COUNTY_INFLOW_URL),
                 self.fetch.get_text(COUNTY_OUTFLOW_URL),
@@ -230,7 +279,8 @@ class IrsSoiProvider(MarketDataProvider):
                 direction="outflow",
                 year=LATEST_MIGRATION_YEAR,
             )
-            await asyncio.to_thread(self._mark_dataset_loaded)
+            if cache_ttl > 0:
+                await asyncio.to_thread(self._mark_dataset_loaded)
 
     def _net_migration(self, county_fips: str) -> tuple[float, str] | None:
         with self._connect() as connection:
@@ -246,13 +296,26 @@ class IrsSoiProvider(MarketDataProvider):
 
     async def net_migration(self, county_fips: str) -> MetricValue:
         """Return latest net exemptions, used as a people-migration proxy."""
-        row = await asyncio.to_thread(self._net_migration, county_fips)
+        runtime = current_runtime_config()
+        if runtime is not None and runtime is not self.config:
+            return await IrsSoiProvider(config=runtime).net_migration(county_fips)
+        cache_ttl = self._authorized_cache_ttl()
+        dataset_fresh = await asyncio.to_thread(self._dataset_loaded, cache_ttl)
+        row = (
+            await asyncio.to_thread(self._net_migration, county_fips)
+            if dataset_fresh
+            else None
+        )
         if row is None and county_fips:
             try:
-                await self._ensure_latest_loaded()
-                row = await asyncio.to_thread(self._net_migration, county_fips)
+                await self._ensure_latest_loaded(cache_ttl)
+                if cache_ttl > 0:
+                    row = await asyncio.to_thread(self._net_migration, county_fips)
             except Exception as exc:
-                logger.warning("IRS SOI migration data unavailable: %s", exc)
+                logger.warning(
+                    "IRS SOI migration data unavailable: %s",
+                    safe_error_message(exc),
+                )
         return MetricValue(
             value=row[0] if row else None,
             unit="people",

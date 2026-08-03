@@ -17,6 +17,7 @@ from cre_mcp.scoring.explain import render_explanation
 from cre_mcp.scoring.rubrics import CORE_RUBRIC, applicable_rubrics
 from cre_mcp.scoring.rubrics import thresholds as T
 from cre_mcp.scoring.signals import DISQUALIFIER_PREDICATES, SIGNAL_EXTRACTORS
+from cre_mcp.source_rights.output import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,11 @@ def _disqualifier_hits(ctx: DealContext, rubric: Rubric) -> list[str]:
         try:
             matched = predicate(ctx)
         except Exception as exc:
-            logger.warning("Disqualifier predicate %s failed: %s", spec.key, exc)
+            logger.warning(
+                "Disqualifier predicate %s failed: %s",
+                spec.key,
+                safe_error_message(exc),
+            )
             matched = False
         if matched:
             hits.append(spec.reason_template)
@@ -122,9 +127,10 @@ def _evaluate_signals(ctx: DealContext, rubric: Rubric) -> _Evaluation:
                 raw_value = extractor(ctx)
                 note = None
             except Exception as exc:
-                logger.warning("Signal extractor %s failed: %s", signal.key, exc)
+                message = safe_error_message(exc)
+                logger.warning("Signal extractor %s failed: %s", signal.key, message)
                 raw_value = None
-                note = str(exc)
+                note = message
         if raw_value is None:
             results.append(
                 SignalResult(

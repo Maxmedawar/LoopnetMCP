@@ -8,6 +8,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from cre_mcp.source_rights.output import safe_error_message
+
 from .benchmarks import flag_underperformance as _flag_underperformance
 from .capex_rank import prioritize_capex as _prioritize_capex
 from .marginal import marginal_return as _marginal_return
@@ -24,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def _error(tool_name: str, exc: Exception) -> dict[str, str]:
     message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
-    message = message or exc.__class__.__name__
+    message = safe_error_message(message or exc.__class__.__name__)
     logger.error("%s error: %s", tool_name, message)
     return {"error": message}
 

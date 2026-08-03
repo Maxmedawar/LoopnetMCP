@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import quote
 
+from cre_mcp.access.context import resolve_runtime_config
 from cre_mcp.config import CreConfig
 from cre_mcp.enrichment.owner import entity_type as classify_entity
 from cre_mcp.enrichment.owner import normalize_owner_name
@@ -21,6 +22,7 @@ from cre_mcp.models.execution import (
     ContactInfo,
     RegisteredAgentContact,
 )
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 logger = logging.getLogger(__name__)
 
@@ -122,13 +124,16 @@ class SosLookup:
     ) -> RegisteredAgentContact | None:
         endpoint = STATE_SOS_ENDPOINTS.get(state.upper())
         if endpoint is None:
-            logger.info("No public business-search configuration for state %s", state)
+            logger.info(
+                "No public business-search configuration for state %s",
+                safe_source_reference(state),
+            )
             return None
         if endpoint.adapter != "tx_comptroller_json":
             logger.info(
                 "%s business registry is a graceful automation gap: %s",
-                state.upper(),
-                endpoint.note,
+                safe_source_reference(state.upper()),
+                safe_source_reference(endpoint.note or ""),
             )
             return None
         return await self._texas_registered_agent(entity_name, endpoint)
@@ -211,7 +216,7 @@ class RealEstateApiSkiptraceProvider:
         config: CreConfig | None = None,
         fetch: FetchClient | None = None,
     ):
-        self.config = config or CreConfig()
+        self.config = resolve_runtime_config(config)
         self.fetch = fetch or get_fetch_client()
 
     @property
@@ -342,14 +347,14 @@ async def find_contact(
         except Exception as exc:
             logger.warning(
                 "Business-registry lookup failed for %s in %s: %s",
-                owner_name,
-                ctx.listing.state,
-                exc,
+                safe_source_reference(owner_name, config=config),
+                safe_source_reference(ctx.listing.state, config=config),
+                safe_error_message(exc, config=config),
             )
         if agent is not None and endpoint is not None:
             sources.append(endpoint.agency)
 
-    selected_config = config or CreConfig()
+    selected_config = resolve_runtime_config(config)
     provider = skiptrace or RealEstateApiSkiptraceProvider(selected_config)
     skiptrace_available = provider.available
     if skiptrace_available:
@@ -362,7 +367,10 @@ async def find_contact(
         except ProviderUnavailableError:
             skiptrace_available = False
         except Exception as exc:
-            logger.warning("Optional skip-trace lookup failed: %s", exc)
+            logger.warning(
+                "Optional skip-trace lookup failed: %s",
+                safe_error_message(exc),
+            )
 
     return ContactInfo(
         broker=broker,

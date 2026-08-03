@@ -7,6 +7,7 @@ from typing import Any
 
 from cre_mcp.models import Listing, ListingRef, ListingType, PropertyType
 from cre_mcp.sources.base import SearchQuery
+from cre_mcp.source_rights.output import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,10 @@ def _map_legacy_asset(asset: dict[str, Any]) -> Listing:
     """Map the still-live legacy asset/search and asset-detail shapes."""
     unknown_keys = sorted(set(asset) - _KNOWN_ASSET_KEYS)
     if unknown_keys:
-        logger.debug("Crexi asset schema has unrecognized keys: %s", unknown_keys)
+        logger.debug(
+            "Crexi asset schema has unrecognized keys: %s",
+            safe_error_message(unknown_keys, source="crexi"),
+        )
 
     locations = asset.get("locations")
     location = locations[0] if isinstance(locations, list) and locations else {}
@@ -398,7 +402,7 @@ def _map_universal_asset(asset: dict[str, Any]) -> Listing:
     if unknown_keys:
         logger.debug(
             "Crexi universal-search schema has unrecognized keys: %s",
-            unknown_keys,
+            safe_error_message(unknown_keys, source="crexi"),
         )
 
     addresses = asset.get("address")

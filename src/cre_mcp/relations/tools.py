@@ -25,6 +25,7 @@ from cre_mcp.access.result_models import (
 from cre_mcp.config import CreConfig
 from cre_mcp.deals.store import DealStore
 from cre_mcp.negotiation.commitments import CommitmentStore
+from cre_mcp.source_rights.output import safe_error_message
 
 from .appraisal_challenge import challenge_appraisal as _challenge_appraisal
 from .briefing import meeting_briefing as _meeting_briefing
@@ -455,7 +456,7 @@ async def _restricted_dossier_projection(
 
 def _error(tool_name: str, exc: Exception) -> dict[str, str]:
     message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
-    message = message or exc.__class__.__name__
+    message = safe_error_message(message or exc.__class__.__name__)
     logger.error("%s error: %s", tool_name, message)
     return {"error": message}
 

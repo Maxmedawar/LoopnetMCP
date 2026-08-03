@@ -22,6 +22,7 @@ from typing import Any, Callable, Iterable, TypeVar
 
 from pydantic import BaseModel
 
+from cre_mcp.access.context import current_runtime_config
 from cre_mcp.config import CreConfig
 from cre_mcp.platform.models import (
     CLIENT_STATUSES,
@@ -45,6 +46,7 @@ from cre_mcp.platform.models import (
     Workspace,
 )
 from cre_mcp.platform.schema import create_schema
+from cre_mcp.source_rights.output import safe_error_message, sanitize_payload
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +113,15 @@ class PlatformRepository:
         config: CreConfig | None = None,
     ) -> None:
         if isinstance(db_path, CreConfig):
-            resolved = db_path.cache_db_path
+            selected_config = db_path
         else:
-            resolved = db_path or (config or CreConfig()).cache_db_path
+            selected_config = config or current_runtime_config() or CreConfig()
+        self._config = selected_config
+        resolved = (
+            selected_config.cache_db_path
+            if isinstance(db_path, CreConfig)
+            else db_path or selected_config.cache_db_path
+        )
         self.db_path = Path(resolved).expanduser()
 
     @contextmanager
@@ -269,7 +277,11 @@ class PlatformRepository:
         try:
             return await asyncio.to_thread(func, *args)
         except sqlite3.IntegrityError as exc:
-            logger.info("%s rejected by database integrity rules: %s", label, exc)
+            logger.info(
+                "%s rejected by database integrity rules: %s",
+                safe_error_message(label, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     async def _run_list(
@@ -634,6 +646,11 @@ class PlatformRepository:
         stage: str | None,
     ) -> SavedDeal:
         now = self._now()
+        stored_payload = sanitize_payload(
+            payload or {},
+            purpose="storage",
+            config=self._config,
+        )
         with self._connect() as connection:
             existing = connection.execute(
                 "SELECT id, stage FROM platform_saved_deals "
@@ -650,7 +667,7 @@ class PlatformRepository:
                         workspace_id,
                         deal_ref,
                         title,
-                        _encode(payload or {}),
+                        _encode(stored_payload),
                         stage or "watching",
                         now,
                         now,
@@ -658,7 +675,7 @@ class PlatformRepository:
                 )
             else:
                 fields = ["title = ?", "payload = ?", "updated_at = ?"]
-                values: list[Any] = [title, _encode(payload or {}), now]
+                values: list[Any] = [title, _encode(stored_payload), now]
                 if stage is not None:
                     fields.append("stage = ?")
                     values.append(stage)
@@ -672,7 +689,19 @@ class PlatformRepository:
                 "WHERE workspace_id = ? AND deal_ref = ?",
                 (workspace_id, deal_ref),
             ).fetchone()
-        return self._to_model("platform_saved_deals", row)
+        return self._sanitize_saved_deal(
+            self._to_model("platform_saved_deals", row)
+        )
+
+    def _sanitize_saved_deal(self, deal: SavedDeal) -> SavedDeal:
+        return deal.model_copy(
+            update={
+                "payload": sanitize_payload(
+                    deal.payload,
+                    config=self._config,
+                )
+            }
+        )
 
     async def save_deal(
         self,
@@ -693,8 +722,14 @@ class PlatformRepository:
             "saved-deal upsert",
             self._save_deal,
             workspace_id,
-            _require(deal_ref, "deal_ref"),
-            _require(title, "deal title"),
+            safe_error_message(
+                _require(deal_ref, "deal_ref"),
+                config=self._config,
+            ),
+            safe_error_message(
+                _require(title, "deal title"),
+                config=self._config,
+            ),
             payload,
             normalized_stage,
         )
@@ -702,10 +737,11 @@ class PlatformRepository:
     async def get_saved_deal(
         self, workspace: WorkspaceRef, saved_deal_id: int
     ) -> SavedDeal | None:
-        return await self._run(
+        deal = await self._run(
             "saved-deal read", self._get_scoped_row,
             "platform_saved_deals", workspace, saved_deal_id
         )
+        return self._sanitize_saved_deal(deal) if deal is not None else None
 
     async def list_saved_deals(
         self,
@@ -721,7 +757,7 @@ class PlatformRepository:
         if stage is not None:
             where += " AND stage = ?"
             params = (*params, _one_of(stage, SAVED_DEAL_STAGES, "stage"))
-        return await self._run_list(
+        deals = await self._run_list(
             "saved-deal list",
             lambda: self._list_rows(
                 "platform_saved_deals",
@@ -730,6 +766,7 @@ class PlatformRepository:
                 order="updated_at DESC, id",
             ),
         )
+        return [self._sanitize_saved_deal(deal) for deal in deals]
 
     async def update_saved_deal(
         self,
@@ -742,15 +779,25 @@ class PlatformRepository:
     ) -> SavedDeal | None:
         fields: dict[str, Any] = {}
         if title is not None:
-            fields["title"] = _require(title, "deal title")
+            fields["title"] = safe_error_message(
+                _require(title, "deal title"),
+                config=self._config,
+            )
         if payload is not None:
-            fields["payload"] = _encode(payload)
+            fields["payload"] = _encode(
+                sanitize_payload(
+                    payload,
+                    purpose="storage",
+                    config=self._config,
+                )
+            )
         if stage is not None:
             fields["stage"] = _one_of(stage, SAVED_DEAL_STAGES, "stage")
-        return await self._run(
+        deal = await self._run(
             "saved-deal update", self._update_scoped_row,
             "platform_saved_deals", workspace, saved_deal_id, fields
         )
+        return self._sanitize_saved_deal(deal) if deal is not None else None
 
     # --- notes ----------------------------------------------------------------
 
@@ -1125,7 +1172,7 @@ class PlatformRepository:
 
 def get_platform_repository(config: CreConfig | None = None) -> PlatformRepository:
     """Build a repository façade over the configured shared database."""
-    return PlatformRepository(config=config or CreConfig())
+    return PlatformRepository(config=config)
 
 
 __all__ = ["PlatformRepository", "get_platform_repository"]

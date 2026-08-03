@@ -3,13 +3,18 @@
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from cre_mcp.enrichment.counties import CountyParcelConfig
 from cre_mcp.http.arcgis import arcgis_query
 from cre_mcp.models.enrichment import ParcelRecord
 from cre_mcp.models.geo import GeoRef
 from cre_mcp.sources.dedupe import normalize_address
+from cre_mcp.source_rights.gate import SourceRightsDeniedError, require_source
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
+
+if TYPE_CHECKING:
+    from cre_mcp.config import CreConfig
 
 logger = logging.getLogger(__name__)
 
@@ -193,8 +198,18 @@ def _quote(value: str) -> str:
 class ArcgisParcelProvider:
     """Query one configured county assessor ArcGIS layer."""
 
-    def __init__(self, config: CountyParcelConfig):
+    def __init__(
+        self,
+        config: CountyParcelConfig,
+        *,
+        runtime_config: "CreConfig | None" = None,
+    ):
         self.config = config
+        self.runtime_config = runtime_config
+        self.sales_authorized = county_sales_authorized(
+            config,
+            runtime_config=runtime_config,
+        )
 
     async def lookup(
         self,
@@ -233,8 +248,27 @@ class ArcgisParcelProvider:
         else:
             return None
 
+        restricted_sale_fields = {
+            field.casefold()
+            for field in (
+                self.config.field_map.get("last_sale_price"),
+                self.config.field_map.get("last_sale_date"),
+                self.config.sales_field_map.get("sale_price"),
+                self.config.sales_field_map.get("time_adjusted_price"),
+                self.config.sales_field_map.get("sale_date"),
+            )
+            if field
+        }
         fields = ",".join(
-            dict.fromkeys(field for field in self.config.field_map.values() if field)
+            dict.fromkeys(
+                field
+                for key, field in self.config.field_map.items()
+                if field
+                and (
+                    self.sales_authorized
+                    or key not in {"last_sale_price", "last_sale_date"}
+                )
+            )
         )
         features = await arcgis_query(
             self.config.arcgis_url,
@@ -245,10 +279,24 @@ class ArcgisParcelProvider:
         if not features:
             return None
         parcel = map_parcel(features[0], self.config)
+        if not self.sales_authorized:
+            parcel = parcel.model_copy(
+                update={
+                    "last_sale_price": None,
+                    "last_sale_date": None,
+                    "raw": {
+                        key: value
+                        for key, value in parcel.raw.items()
+                        if key.casefold() not in restricted_sale_fields
+                    },
+                }
+            )
         return await self._with_latest_sale(parcel)
 
     async def _with_latest_sale(self, parcel: ParcelRecord) -> ParcelRecord:
         """Attach the subject's own latest verified sale when the county exposes it."""
+        if not self.sales_authorized:
+            return parcel
         parcel_field = self.config.sales_field_map.get("parcel_id")
         price_field = self.config.sales_field_map.get("sale_price")
         date_field = self.config.sales_field_map.get("sale_date")
@@ -277,9 +325,9 @@ class ArcgisParcelProvider:
         except Exception as exc:
             logger.warning(
                 "Latest parcel sale unavailable for %s in %s: %s",
-                parcel.apn,
-                self.config.name,
-                exc,
+                safe_source_reference(parcel.apn or "", config=self.runtime_config),
+                safe_source_reference(self.config.name, config=self.runtime_config),
+                safe_error_message(exc, config=self.runtime_config),
             )
             return parcel
         if not rows:
@@ -293,4 +341,22 @@ class ArcgisParcelProvider:
         )
 
 
-__all__ = ["ArcgisParcelProvider", "map_parcel"]
+def county_sales_authorized(
+    county: CountyParcelConfig,
+    *,
+    runtime_config: "CreConfig | None" = None,
+) -> bool:
+    """Return whether this request may exercise the county sales capability."""
+    if not county.sales_layer:
+        return False
+    try:
+        require_source(
+            f"cre_mcp.comps.records:{county.fips}",
+            config=runtime_config,
+        )
+    except SourceRightsDeniedError:
+        return False
+    return True
+
+
+__all__ = ["ArcgisParcelProvider", "county_sales_authorized", "map_parcel"]

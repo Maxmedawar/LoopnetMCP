@@ -141,6 +141,16 @@ def test_map_asset_tolerates_missing_and_extra_fields(caplog):
     assert "anotherFutureField" in caplog.text
 
 
+def test_map_asset_unknown_key_log_redacts_credential_assignment(caplog):
+    secret = "crexi-schema-secret-72ab"
+    caplog.set_level(logging.DEBUG)
+
+    map_asset({f"api_key={secret}": "ignored"})
+
+    assert secret not in caplog.text
+    assert "api_key=[redacted]" in caplog.text
+
+
 @pytest.mark.asyncio
 async def test_crexi_source_uses_shared_client_for_search_and_detail():
     client = AsyncMock()
@@ -168,6 +178,24 @@ async def test_crexi_source_uses_shared_client_for_search_and_detail():
         DETAIL_URL.format(source_id="2622985")
     )
     assert detail.cap_rate_pct == pytest.approx(6.65)
+
+
+@pytest.mark.asyncio
+async def test_crexi_malformed_search_item_log_never_echoes_raw_value(caplog):
+    secret = "crexi-malformed-secret-a91d"
+    client = AsyncMock()
+    client.post_json.return_value = {
+        "items": [f"https://api.crexi.com/failure?api_key={secret}"]
+    }
+    caplog.set_level(logging.DEBUG)
+
+    listings = await CrexiSource(client=client).search(
+        SearchQuery(location="Austin, TX")
+    )
+
+    assert listings == []
+    assert secret not in caplog.text
+    assert "index=0 type=str" in caplog.text
 
 
 @pytest.mark.asyncio

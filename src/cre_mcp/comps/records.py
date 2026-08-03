@@ -6,7 +6,7 @@ import logging
 import math
 import re
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from cre_mcp.enrichment.counties import CountyParcelConfig, config_for_geo
 from cre_mcp.http.arcgis import arcgis_query
@@ -15,6 +15,11 @@ from cre_mcp.models.geo import GeoRef
 from cre_mcp.models.listings import Listing
 from cre_mcp.scoring.rubrics import thresholds as T
 from cre_mcp.sources.dedupe import normalize_address
+from cre_mcp.source_rights.gate import require_source, require_url
+from cre_mcp.source_rights.output import safe_source_reference
+
+if TYPE_CHECKING:
+    from cre_mcp.config import CreConfig
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +297,12 @@ def _recent(comp: SaleComp) -> bool:
     return age_years <= T.SALE_COMP_MAX_AGE_YEARS
 
 
-async def sale_comps(geo: GeoRef, subject: Listing) -> list[SaleComp]:
+async def sale_comps(
+    geo: GeoRef,
+    subject: Listing,
+    *,
+    runtime_config: "CreConfig | None" = None,
+) -> list[SaleComp]:
     """Return nearby, recent, like-use county sales when a verified layer exists."""
     config = sales_config_for_geo(geo)
     if config is None or not config.sales_layer:
@@ -304,9 +314,14 @@ async def sale_comps(geo: GeoRef, subject: Listing) -> list[SaleComp]:
     if subject.lat is None or subject.lon is None:
         logger.info(
             "County sale comps unavailable for %s; subject coordinates are missing",
-            subject.address,
+            safe_source_reference(subject.address, config=runtime_config),
         )
         return []
+    require_source(
+        f"cre_mcp.comps.records:{config.fips}",
+        config=runtime_config,
+    )
+    require_url(config.sales_layer, method="GET", config=runtime_config)
     fields = ",".join(
         dict.fromkeys(field for field in config.sales_field_map.values() if field)
     )

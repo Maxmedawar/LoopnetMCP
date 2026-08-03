@@ -9,6 +9,7 @@ from typing import Any
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.models.attributes import DealAttributes
 from cre_mcp.models.listings import Listing
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,9 @@ class AttributeEnricher:
                     headers=OVERPASS_HEADERS,
                 )
             except Exception as exc:
-                errors.append(f"{endpoint}: {exc}")
+                errors.append(
+                    f"{safe_source_reference(endpoint)}: {safe_error_message(exc)}"
+                )
                 continue
             if isinstance(payload, dict) and isinstance(payload.get("elements"), list):
                 return [
@@ -122,7 +125,7 @@ class AttributeEnricher:
             errors.append(f"{endpoint}: response did not contain elements")
         logger.warning(
             "OpenStreetMap attributes unavailable for %s: %s",
-            listing.address,
+            safe_source_reference(listing.address),
             "; ".join(errors),
         )
         return None

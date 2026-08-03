@@ -18,6 +18,7 @@ from cre_mcp.structure.exchange import (
     identify_replacement as record_replacement,
 )
 from cre_mcp.structure.exchange import start_exchange as create_exchange
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.tools.deal_tools import analyze_deal
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,11 @@ async def recommend_structure(
     Returns:
         StructureAdvice with alternatives, eligibility notes, traps, and counsel gate.
     """
-    logger.info("recommend_structure called: mode=%s investors=%s", mode, investors)
+    logger.info(
+        "recommend_structure called: mode=%s investors=%s",
+        safe_source_reference(mode),
+        investors,
+    )
     try:
         return screen_structure(
             {
@@ -73,8 +78,9 @@ async def recommend_structure(
             }
         ).model_dump(mode="json")
     except Exception as exc:
-        logger.error("recommend_structure error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("recommend_structure error: %s", message)
+        return {"error": message}
 
 
 async def start_exchange(
@@ -92,7 +98,11 @@ async def start_exchange(
     Returns:
         Exchange countdown with hard QI-before-closing and CPA/Form-8824 gates.
     """
-    logger.info("start_exchange called: deal=%s close=%s", deal_id, relinquished_close_date)
+    logger.info(
+        "start_exchange called: deal=%s close=%s",
+        safe_source_reference(deal_id),
+        safe_source_reference(relinquished_close_date),
+    )
     try:
         store = get_deal_store()
         saved_id = await _ensure_saved_deal(deal_id, source, store)
@@ -104,8 +114,9 @@ async def start_exchange(
             )
         ).model_dump(mode="json")
     except Exception as exc:
-        logger.error("start_exchange error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("start_exchange error: %s", message)
+        return {"error": message}
 
 
 async def exchange_status(exchange_id: int) -> dict:
@@ -123,8 +134,9 @@ async def exchange_status(exchange_id: int) -> dict:
             await get_exchange_status(exchange_id, store=get_deal_store())
         ).model_dump(mode="json")
     except Exception as exc:
-        logger.error("exchange_status error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("exchange_status error: %s", message)
+        return {"error": message}
 
 
 async def identify_replacement(
@@ -142,7 +154,11 @@ async def identify_replacement(
     Returns:
         Updated Exchange status or an error dictionary.
     """
-    logger.info("identify_replacement called: exchange=%s listing=%s", exchange_id, url_or_id)
+    logger.info(
+        "identify_replacement called: exchange=%s listing=%s",
+        exchange_id,
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         store = get_deal_store()
         deal_id = await _ensure_saved_deal(url_or_id, source, store)
@@ -150,8 +166,9 @@ async def identify_replacement(
             await record_replacement(exchange_id, deal_id, store=store)
         ).model_dump(mode="json")
     except Exception as exc:
-        logger.error("identify_replacement error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("identify_replacement error: %s", message)
+        return {"error": message}
 
 
 async def calc_boot_basis(
@@ -187,8 +204,9 @@ async def calc_boot_basis(
             },
         ).model_dump(mode="json")
     except Exception as exc:
-        logger.error("calc_boot_basis error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("calc_boot_basis error: %s", message)
+        return {"error": message}
 
 
 __all__ = [

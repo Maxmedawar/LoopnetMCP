@@ -21,6 +21,7 @@ from cre_mcp.pmops.vendors import compare_vendors as _compare_vendors
 from cre_mcp.pmops.vendors import record_vendor as _record_vendor
 from cre_mcp.pmops.workorders import record_workorder as _record_workorder
 from cre_mcp.pmops.workorders import triage_queue as _triage_queue
+from cre_mcp.source_rights.output import safe_error_message
 
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 def _error(operation: str, exc: Exception) -> dict[str, str]:
     message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
-    message = message or exc.__class__.__name__
+    message = safe_error_message(message or exc.__class__.__name__)
     logger.error("%s error: %s", operation, message)
     return {"error": message}
 

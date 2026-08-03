@@ -4,16 +4,23 @@ import logging
 import re
 from typing import Any
 
+from cre_mcp.access.context import current_runtime_config, resolve_runtime_config
 from cre_mcp.cache import SQLiteCache
 from cre_mcp.config import CreConfig
 from cre_mcp.geo.constants import CITY_FALLBACKS, COUNTY_FIPS, STATE_FIPS
-from cre_mcp.geo.crosswalk import GeoCrosswalk
+from cre_mcp.geo.crosswalk import GeoCrosswalk, STATIC_CROSSWALK
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.market.base import AuthSpec, GovApiClient
 from cre_mcp.models.geo import GeoLevel, GeoRef
+from cre_mcp.source_rights.gate import SourceRightsDeniedError, require_url
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 logger = logging.getLogger(__name__)
 
+_CENSUS_GEOCODER_URL = (
+    "https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress"
+)
+_HUD_CROSSWALK_URL = "https://www.huduser.gov/hudapi/public/usps"
 class GeoResolutionError(ValueError):
     """Raised when a human location cannot be mapped to a supported geography."""
 
@@ -29,7 +36,7 @@ class GeoResolver:
         crosswalk: GeoCrosswalk | None = None,
         cache: SQLiteCache | None = None,
     ):
-        self.config = config or CreConfig()
+        self.config = resolve_runtime_config(config)
         self.fetch = fetch or get_fetch_client()
         self.cache = cache or SQLiteCache(self.config.cache_db_path)
         self.crosswalk = crosswalk or GeoCrosswalk(self.config, fetch=self.fetch)
@@ -43,11 +50,19 @@ class GeoResolver:
         payload = await self.cache.get(f"geo:v1:{location.casefold().strip()}")
         return GeoRef.model_validate(payload) if payload is not None else None
 
-    async def _store(self, location: str, geo: GeoRef) -> GeoRef:
+    async def _store(
+        self,
+        location: str,
+        geo: GeoRef,
+        *,
+        ttl_seconds: int = 0,
+    ) -> GeoRef:
+        if ttl_seconds <= 0:
+            return geo
         await self.cache.set(
             f"geo:v1:{location.casefold().strip()}",
             geo.model_dump(mode="json"),
-            ttl_seconds=90 * 24 * 60 * 60,
+            ttl_seconds=ttl_seconds,
         )
         return geo
 
@@ -96,11 +111,33 @@ class GeoResolver:
         normalized = location.strip()
         if not normalized:
             raise GeoResolutionError("Location cannot be empty")
-        cached = await self._from_cache(normalized)
-        if cached is not None:
-            return cached
 
         if re.fullmatch(r"\d{5}", normalized):
+            fallback = STATIC_CROSSWALK.get(normalized)
+            if fallback is not None and self.config.hud_api_token is None:
+                county, cbsa = fallback
+                return GeoRef(
+                    level=GeoLevel.ZIP,
+                    state_fips=county[:2],
+                    county_fips=county,
+                    cbsa=cbsa,
+                    zip=normalized,
+                    name=normalized,
+                )
+            record = require_url(
+                _HUD_CROSSWALK_URL,
+                method="GET",
+                config=self.config,
+            )
+            cache_ttl = (
+                record.operating_policy.persistent_cache_ttl_seconds
+                if record is not None
+                else 0
+            )
+            if cache_ttl > 0:
+                cached = await self._from_cache(normalized)
+                if cached is not None:
+                    return cached
             county = await self.crosswalk.zip_to_county(normalized)
             cbsa = await self.crosswalk.zip_to_cbsa(normalized)
             if county is None:
@@ -115,17 +152,15 @@ class GeoResolver:
                     zip=normalized,
                     name=normalized,
                 ),
+                ttl_seconds=cache_ttl,
             )
 
         upper = normalized.upper()
         if upper in STATE_FIPS:
-            return await self._store(
-                normalized,
-                GeoRef(
-                    level=GeoLevel.STATE,
-                    state_fips=STATE_FIPS[upper],
-                    name=upper,
-                ),
+            return GeoRef(
+                level=GeoLevel.STATE,
+                state_fips=STATE_FIPS[upper],
+                name=upper,
             )
 
         segments = [part.strip() for part in normalized.split(",") if part.strip()]
@@ -139,34 +174,62 @@ class GeoResolver:
             county_name = re.sub(r"\s+county$", "", local_name, flags=re.I).casefold()
             county_fips = COUNTY_FIPS.get((county_name, state))
             if county_fips and local_name.casefold().endswith("county"):
-                return await self._store(
-                    normalized,
-                    GeoRef(
-                        level=GeoLevel.COUNTY,
-                        state_fips=STATE_FIPS[state],
-                        county_fips=county_fips,
-                        name=f"{local_name}, {state}",
-                    ),
+                return GeoRef(
+                    level=GeoLevel.COUNTY,
+                    state_fips=STATE_FIPS[state],
+                    county_fips=county_fips,
+                    name=f"{local_name}, {state}",
                 )
+            fallback = CITY_FALLBACKS.get((local_name.casefold(), state))
+            try:
+                record = require_url(
+                    _CENSUS_GEOCODER_URL,
+                    method="GET",
+                    config=self.config,
+                )
+            except SourceRightsDeniedError:
+                if fallback is None:
+                    raise
+                county, cbsa, name = fallback
+                return GeoRef(
+                    level=GeoLevel.CITY,
+                    state_fips=STATE_FIPS[state],
+                    county_fips=county,
+                    cbsa=cbsa,
+                    name=name,
+                )
+            cache_ttl = (
+                record.operating_policy.persistent_cache_ttl_seconds
+                if record is not None
+                else 0
+            )
+            if cache_ttl > 0:
+                cached = await self._from_cache(normalized)
+                if cached is not None:
+                    return cached
             try:
                 geocoded = await self._geocode(normalized)
             except Exception as exc:
-                logger.warning("Census geocoding failed for %s: %s", normalized, exc)
+                logger.warning(
+                    "Census geocoding failed for %s: %s",
+                    safe_source_reference(normalized),
+                    safe_error_message(exc),
+                )
                 geocoded = None
             if geocoded is not None:
-                return await self._store(normalized, geocoded)
-            fallback = CITY_FALLBACKS.get((local_name.casefold(), state))
-            if fallback:
-                county, cbsa, name = fallback
                 return await self._store(
                     normalized,
-                    GeoRef(
-                        level=GeoLevel.CITY,
-                        state_fips=STATE_FIPS[state],
-                        county_fips=county,
-                        cbsa=cbsa,
-                        name=name,
-                    ),
+                    geocoded,
+                    ttl_seconds=cache_ttl,
+                )
+            if fallback:
+                county, cbsa, name = fallback
+                return GeoRef(
+                    level=GeoLevel.CITY,
+                    state_fips=STATE_FIPS[state],
+                    county_fips=county,
+                    cbsa=cbsa,
+                    name=name,
                 )
 
         raise GeoResolutionError(f"Could not resolve location: {location}")
@@ -178,6 +241,9 @@ _resolver: GeoResolver | None = None
 async def resolve(location: str) -> GeoRef:
     """Resolve with the module-level shared resolver."""
     global _resolver
+    runtime = current_runtime_config()
+    if runtime is not None:
+        return await GeoResolver(runtime).resolve(location)
     if _resolver is None:
         _resolver = GeoResolver()
     return project_for_release(await _resolver.resolve(location))

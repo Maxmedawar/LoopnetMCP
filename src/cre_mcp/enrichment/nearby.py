@@ -10,6 +10,9 @@ from typing import Any
 
 from curl_cffi import requests
 
+from cre_mcp.source_rights.gate import require_source, require_url
+from cre_mcp.source_rights.output import safe_error_message
+
 logger = logging.getLogger(__name__)
 
 _EARTH_RADIUS_M = 6_371_008.8
@@ -90,26 +93,39 @@ def _cache_key(lat: float, lon: float, radius_m: int) -> _CacheKey:
     return (round(lat, 5), round(lon, 5), radius_m)
 
 
-def _cache_get(key: _CacheKey) -> list[dict[str, Any]] | None:
+def _cache_get(
+    key: _CacheKey,
+    *,
+    ttl_seconds: int,
+) -> list[dict[str, Any]] | None:
+    if ttl_seconds <= 0:
+        return None
     now = time.monotonic()
     with _CACHE_LOCK:
         entry = _CACHE.get(key)
         if entry is None:
             return None
         cached_at, results = entry
-        if now - cached_at >= _CACHE_TTL_SECONDS:
+        if now - cached_at >= ttl_seconds:
             del _CACHE[key]
             return None
         return [dict(result) for result in results]
 
 
-def _cache_set(key: _CacheKey, results: list[dict[str, Any]]) -> None:
+def _cache_set(
+    key: _CacheKey,
+    results: list[dict[str, Any]],
+    *,
+    ttl_seconds: int,
+) -> None:
+    if ttl_seconds <= 0:
+        return
     now = time.monotonic()
     with _CACHE_LOCK:
         expired = [
             cache_key
             for cache_key, (cached_at, _) in _CACHE.items()
-            if now - cached_at >= _CACHE_TTL_SECONDS
+            if now - cached_at >= ttl_seconds
         ]
         for cache_key in expired:
             del _CACHE[cache_key]
@@ -211,8 +227,14 @@ def nearby_brands(
         ):
             return []
 
+        # Rights are checked before even consulting cached source data.
+        record = require_source("overpass")
+        cache_ttl = min(
+            _CACHE_TTL_SECONDS,
+            int(record.operating_policy.memory_cache_ttl_seconds) if record else 0,
+        )
         key = _cache_key(latitude, longitude, radius)
-        cached = _cache_get(key)
+        cached = _cache_get(key, ttl_seconds=cache_ttl)
         if cached is not None:
             return cached[:result_limit]
 
@@ -222,11 +244,14 @@ def nearby_brands(
         )
         for endpoint in _OVERPASS_ENDPOINTS:
             try:
+                # Re-check at the direct socket boundary for every mirror.
+                require_url(endpoint, method="POST")
                 response = requests.post(
                     endpoint,
                     data={"data": query},
                     headers={"User-Agent": _USER_AGENT},
                     timeout=30,
+                    allow_redirects=False,
                 )
                 if response.status_code != 200:
                     logger.warning(
@@ -241,13 +266,17 @@ def nearby_brands(
                 results = _parse_elements(payload.get("elements"), latitude, longitude)
                 if not results:
                     continue
-                _cache_set(key, results)
+                _cache_set(key, results, ttl_seconds=cache_ttl)
                 return results[:result_limit]
             except Exception as exc:
-                logger.warning("Overpass mirror failed at %s: %s", endpoint, exc)
+                logger.warning(
+                    "Overpass mirror failed at %s: %s",
+                    endpoint,
+                    safe_error_message(exc),
+                )
         return []
     except Exception as exc:
-        logger.warning("Nearby-brand enrichment failed: %s", exc)
+        logger.warning("Nearby-brand enrichment failed: %s", safe_error_message(exc))
         return []
 
 

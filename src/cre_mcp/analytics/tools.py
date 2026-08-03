@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from cre_mcp.source_rights.output import safe_error_message
+
 from .costseg import cost_seg_preview as _cost_seg_preview
 from .envelope import zoning_envelope as _zoning_envelope
 from .lp_exposure import lp_portfolio_exposure as _lp_portfolio_exposure
@@ -18,7 +20,11 @@ from .workflows import owner_report as _owner_report
 
 def _error(name: str, exc: Exception) -> dict[str, str]:
     message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
-    return {"error": f"{name}: {message or exc.__class__.__name__}"}
+    return {
+        "error": safe_error_message(
+            f"{name}: {message or exc.__class__.__name__}"
+        )
+    }
 
 
 def audit_seller_model(xlsx_path: str | Path | None) -> dict[str, Any]:

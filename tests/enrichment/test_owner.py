@@ -1,11 +1,13 @@
 """Owner normalization, classification, absentee detection, and caching."""
 
-from unittest.mock import AsyncMock, Mock
+import sqlite3
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from cre_mcp.cache import SQLiteCache
 from cre_mcp.config import CreConfig
+from cre_mcp.enrichment.arcgis import ArcgisParcelProvider
 from cre_mcp.enrichment.owner import (
     OwnerLookup,
     entity_type,
@@ -13,6 +15,7 @@ from cre_mcp.enrichment.owner import (
     normalize_owner_name,
 )
 from cre_mcp.models import GeoLevel, GeoRef, ParcelRecord
+from tests.conftest import write_cached_rights_registry
 
 
 def _geo() -> GeoRef:
@@ -181,3 +184,54 @@ async def test_owner_lookup_treats_missing_free_owner_name_as_weak_coverage(tmp_
 
     assert owner is not None and owner.name == "Complete Paid Owner LLC"
     paid.lookup.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_owner_cache_separates_parcel_only_from_sales_enrichment(tmp_path):
+    registry_path = write_cached_rights_registry(
+        tmp_path,
+        {"parcel.maricopa_04013", "sales.maricopa_04013"},
+    )
+    cache_path = tmp_path / "owner-rights.db"
+    shared = {
+        "_env_file": None,
+        "transport": "stdio",
+        "cache_db_path": cache_path,
+        "source_rights_registry_path": registry_path,
+    }
+    with_sales = CreConfig(
+        **shared,
+        source_rights_enabled={
+            "parcel.maricopa_04013": True,
+            "sales.maricopa_04013": True,
+        },
+    )
+    parcel_only = CreConfig(
+        **shared,
+        source_rights_enabled={"parcel.maricopa_04013": True},
+    )
+    geo = GeoRef(
+        level=GeoLevel.COUNTY,
+        state_fips="04",
+        county_fips="04013",
+        name="Maricopa County, AZ",
+    )
+    sale_parcel = _parcel(last_sale_price=850_000, last_sale_date="2025-01-10")
+    plain_parcel = _parcel(last_sale_price=None, last_sale_date=None)
+
+    first_fetch = AsyncMock(return_value=sale_parcel)
+    with patch.object(ArcgisParcelProvider, "lookup", new=first_fetch):
+        first = await OwnerLookup(with_sales).lookup(address="100 Main St", geo=geo)
+
+    second_fetch = AsyncMock(return_value=plain_parcel)
+    with patch.object(ArcgisParcelProvider, "lookup", new=second_fetch):
+        second = await OwnerLookup(parcel_only).lookup(address="100 Main St", geo=geo)
+
+    assert first is not None and first.parcels[0].last_sale_price == 850_000
+    assert second is not None and second.parcels[0].last_sale_price is None
+    first_fetch.assert_awaited_once()
+    second_fetch.assert_awaited_once()
+    with sqlite3.connect(cache_path) as connection:
+        keys = [row[0] for row in connection.execute("SELECT key FROM cache")]
+    assert any(":sales:" in key for key in keys)
+    assert any(":parcel:" in key for key in keys)

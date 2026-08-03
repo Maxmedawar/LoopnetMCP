@@ -140,18 +140,28 @@ def test_http_cli_flag_forces_http_without_binding():
 
 
 def test_proxy_is_scoped_to_scraper_policies():
-    config = _config(proxy_url="https://proxy-user:proxy-pass@example.test:8443")
+    config = _config(
+        proxy_url="https://proxy-user:proxy-pass@example.test:8443",
+        source_rights_enabled={
+            "listing.loopnet": True,
+            "market.census_acs": True,
+        },
+    )
     with patch("cre_mcp.http.fetch.AsyncSession") as session_class:
         client = FetchClient(config=config)
         client._get_client(client._policy_for_url("https://www.loopnet.com/search"))
         loopnet_kwargs = session_class.call_args.kwargs
-        client._get_client(client._policy_for_url("https://api.census.gov/data"))
+        client._get_client(
+            client._policy_for_url("https://api.census.gov/data/2024/acs/acs5")
+        )
         census_kwargs = session_class.call_args.kwargs
 
     assert loopnet_kwargs["proxy"] == (
         "https://proxy-user:proxy-pass@example.test:8443"
     )
+    assert loopnet_kwargs["allow_redirects"] is False
     assert "proxy" not in census_kwargs
+    assert census_kwargs["allow_redirects"] is False
 
 
 def test_browser_path_and_proxy_feed_nodriver_launch_options():

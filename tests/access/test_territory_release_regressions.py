@@ -118,6 +118,19 @@ _PERMIT_ROW_REQUEST_ESCAPES = (
     ),
 )
 
+
+def _without_provider_raw(value: Any) -> Any:
+    """Mirror the hosted source-rights contract for release-shape assertions."""
+    if isinstance(value, dict):
+        return {
+            key: _without_provider_raw(item)
+            for key, item in value.items()
+            if key != "raw"
+        }
+    if isinstance(value, list):
+        return [_without_provider_raw(item) for item in value]
+    return value
+
 _UNPERMITTED_UNSUPPORTED_ENVELOPES = (
     "single-mapping",
     "results-envelope",
@@ -1377,7 +1390,7 @@ async def test_find_deals_deep_refresh_is_validated_before_reranking(
                 per_source_counts={"fixture": 2},
             )
 
-        def get(self, source_name):
+        def get_authorized(self, source_name):
             assert source_name == "fixture"
             return source
 
@@ -3276,7 +3289,9 @@ async def test_warn_result_releases_complete_in_scope_event(
 
     result = await _call_warn_fixture(registry, audit, identity, payload)
 
-    assert result.data == payload
+    expected = dict(payload)
+    expected["request_url"] = "https://example.test/warn"
+    assert result.data == expected
 
 
 @pytest.mark.parametrize("context_fixture", _LIMITED_CONTEXT_FIXTURES)
@@ -3673,7 +3688,9 @@ async def test_every_property_bearing_tool_releases_in_scope_nested_record(
         payload=payload,
     )
 
-    assert json.dumps(result.data, sort_keys=True) == json.dumps(payload, sort_keys=True)
+    assert json.dumps(result.data, sort_keys=True) == json.dumps(
+        _without_provider_raw(payload), sort_keys=True
+    )
 
 
 @pytest.mark.parametrize("context_fixture", _LIMITED_CONTEXT_FIXTURES)
@@ -3765,7 +3782,9 @@ async def test_nested_deal_location_paths_release_when_all_are_in_scope(
         payload=payload,
     )
 
-    assert json.dumps(result.data, sort_keys=True) == json.dumps(payload, sort_keys=True)
+    assert json.dumps(result.data, sort_keys=True) == json.dumps(
+        _without_provider_raw(payload), sort_keys=True
+    )
 
 
 @pytest.mark.parametrize("tool_name", ("list_deals", "list_pipeline"))

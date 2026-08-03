@@ -13,6 +13,7 @@ from cre_mcp.access.result_models import (
     RestrictedStaleListingSignalsResult,
 )
 from cre_mcp.deals.store import DealStore
+from cre_mcp.source_rights.output import safe_error_message, sanitize_payload
 
 from .brief import overnight_brief
 from .queue import morning_action_queue
@@ -94,7 +95,7 @@ def _snapshot_change_property(
     ]
     if len(event_matches) != 1:
         raise ValueError("overnight change does not match exactly one stored event")
-    snapshots = store.list_snapshots(listing_key)
+    snapshots = store._list_snapshots_internal(listing_key)
     matches = [
         snapshot
         for snapshot in snapshots
@@ -328,12 +329,13 @@ def _restricted_stale_projection(
 
 def morning_queue(as_of: Any = None) -> dict[str, Any]:
     """Return today's transparent, convention-ranked action queue."""
-    logger.info("morning_queue called: as_of=%s", as_of)
+    logger.info("morning_queue called: as_of=%s", safe_error_message(as_of))
     try:
         return morning_action_queue(as_of)
     except Exception as exc:
-        logger.error("morning_queue error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("morning_queue error: %s", message)
+        return {"error": message}
 
 
 def overnight_changes(since_hours: float = 24) -> dict[str, Any]:
@@ -345,8 +347,9 @@ def overnight_changes(since_hours: float = 24) -> dict[str, Any]:
             return _restricted_overnight_projection(result)
         return result
     except Exception as exc:
-        logger.error("overnight_changes error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("overnight_changes error: %s", message)
+        return {"error": message}
 
 
 def flag_unattended(days: int = 7) -> dict[str, Any]:
@@ -355,8 +358,9 @@ def flag_unattended(days: int = 7) -> dict[str, Any]:
     try:
         return unattended_deals(days=days)
     except Exception as exc:
-        logger.error("flag_unattended error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("flag_unattended error: %s", message)
+        return {"error": message}
 
 
 def record_listing_snapshot(listing: dict[str, Any]) -> dict[str, Any]:
@@ -365,24 +369,32 @@ def record_listing_snapshot(listing: dict[str, Any]) -> dict[str, Any]:
     try:
         return record_snapshot(listing)
     except Exception as exc:
-        logger.error("record_listing_snapshot error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("record_listing_snapshot error: %s", message)
+        return {"error": message}
 
 
 def stale_listing_signals(listing_key: str) -> dict[str, Any]:
     """Return explicitly uncalibrated stale/negotiability signals for one listing."""
-    logger.info("stale_listing_signals called: listing_key=%s", listing_key)
+    safe_listing_key = safe_error_message(listing_key)
+    logger.info("stale_listing_signals called: listing_key=%s", safe_listing_key)
     try:
-        snapshots = SnapshotStore().list_snapshots(listing_key)
+        snapshot_store = SnapshotStore()
+        snapshots = (
+            snapshot_store._list_snapshots_internal(listing_key)
+            if _restricted_projection_required()
+            else snapshot_store.list_snapshots(listing_key)
+        )
         result = infer_stale_listing_signals(snapshots)
         if _restricted_projection_required():
             return _restricted_stale_projection(listing_key, snapshots, result)
         if result["listing_key"] is None:
             result["listing_key"] = listing_key
-        return result
+        return sanitize_payload(result)
     except Exception as exc:
-        logger.error("stale_listing_signals error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("stale_listing_signals error: %s", message)
+        return {"error": message}
 
 
 __all__ = [

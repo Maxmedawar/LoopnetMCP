@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from cre_mcp.access.context import local_context, use_context
 from cre_mcp.enrichment import nearby
 from cre_mcp.enrichment.nearby import (
     _haversine_m,
@@ -45,10 +46,15 @@ OVERPASS_SAMPLE = {
 
 
 @pytest.fixture(autouse=True)
-def _clear_nearby_cache():
+def _trusted_local_nearby_runtime(monkeypatch):
+    monkeypatch.setenv(
+        "CRE_SOURCE_RIGHTS_ENABLED",
+        '{"osm.overpass":true}',
+    )
     with nearby._CACHE_LOCK:
         nearby._CACHE.clear()
-    yield
+    with use_context(local_context()):
+        yield
     with nearby._CACHE_LOCK:
         nearby._CACHE.clear()
 
@@ -80,6 +86,7 @@ def test_nearby_brands_parses_nodes_way_centers_categories_and_distances():
     assert post.call_args.kwargs["headers"]["User-Agent"] == (
         "MedawarCRE/1.0 (max@efreedom.com)"
     )
+    assert post.call_args.kwargs["allow_redirects"] is False
     assert "nwr(around:400" in post.call_args.kwargs["data"]["data"]
 
 

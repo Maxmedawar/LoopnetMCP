@@ -24,7 +24,7 @@ def _env_aliases(field_name: str) -> AliasChoices:
 class SourceToggle(BaseModel):
     """Enable or disable one configured listing source."""
 
-    enabled: bool = True
+    enabled: bool = False
 
 
 class ProviderPlanMapping(BaseModel):
@@ -128,11 +128,11 @@ class CreConfig(BaseSettings):
     )
     sources: dict[str, SourceToggle] = Field(
         default_factory=lambda: {
-            "loopnet": SourceToggle(enabled=True),
-            "crexi": SourceToggle(enabled=True),
-            "hud_reo": SourceToggle(enabled=True),
-            "auction_com": SourceToggle(enabled=True),
-            "county": SourceToggle(enabled=True),
+            "loopnet": SourceToggle(enabled=False),
+            "crexi": SourceToggle(enabled=False),
+            "hud_reo": SourceToggle(enabled=False),
+            "auction_com": SourceToggle(enabled=False),
+            "county": SourceToggle(enabled=False),
         },
         validation_alias=_env_aliases("sources"),
     )
@@ -173,6 +173,10 @@ class CreConfig(BaseSettings):
         default=None,
         validation_alias=_env_aliases("regrid_api_key"),
     )
+    socrata_app_token: SecretStr | None = Field(
+        default=None,
+        validation_alias=_env_aliases("socrata_app_token"),
+    )
     cache_db_path: Path = Field(
         default=Path.home() / ".cache" / "cre_mcp" / "cache.db",
         validation_alias=_env_aliases("cache_db_path"),
@@ -184,6 +188,18 @@ class CreConfig(BaseSettings):
     access_audit_path: Path | None = Field(
         default=None,
         validation_alias=_env_aliases("access_audit_path"),
+    )
+    source_rights_registry_path: Path | None = Field(
+        default=None,
+        validation_alias=_env_aliases("source_rights_registry_path"),
+    )
+    source_rights_attestations_path: Path | None = Field(
+        default=None,
+        validation_alias=_env_aliases("source_rights_attestations_path"),
+    )
+    source_rights_enabled: dict[str, bool] = Field(
+        default_factory=dict,
+        validation_alias=_env_aliases("source_rights_enabled"),
     )
     stripe_webhook_secret: SecretStr | None = Field(
         default=None,

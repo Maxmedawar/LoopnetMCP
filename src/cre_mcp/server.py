@@ -162,6 +162,7 @@ def install_access_control(
         registry=registry,
         audit_log=audit_log,
         runtime_mode=runtime_mode,
+        config=config,
     )
 
 

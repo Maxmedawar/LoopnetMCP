@@ -4,7 +4,7 @@ import logging
 import re
 from typing import Any
 
-from cre_mcp.access.context import current_context
+from cre_mcp.access.context import current_context, current_runtime_config
 from cre_mcp.access.engine import structured_property_within_territories
 from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.eval.status import UNCALIBRATED_DISCLAIMER, is_score_calibrated
@@ -45,6 +45,11 @@ from cre_mcp.scoring.rubrics import thresholds as T
 from cre_mcp.sources.base import SearchQuery
 from cre_mcp.sources.loopnet.urls import extract_listing_id, resolve_property_type
 from cre_mcp.sources.registry import SourceRegistry
+from cre_mcp.source_rights.output import (
+    safe_error_message,
+    safe_source_reference,
+    sanitize_payload,
+)
 from cre_mcp.underwriting import UnderwritingAssumptions, underwrite_listing
 
 logger = logging.getLogger(__name__)
@@ -118,6 +123,9 @@ def _client_deal_payload(deal: Deal) -> dict[str, Any]:
 
 def _market_engine() -> MarketIntel:
     global _market_intel
+    runtime = current_runtime_config()
+    if runtime is not None:
+        return MarketIntel(runtime)
     if _market_intel is None:
         _market_intel = MarketIntel()
     return _market_intel
@@ -125,6 +133,9 @@ def _market_engine() -> MarketIntel:
 
 def _owner_engine() -> OwnerLookup:
     global _owner_lookup
+    runtime = current_runtime_config()
+    if runtime is not None:
+        return OwnerLookup(runtime)
     if _owner_lookup is None:
         _owner_lookup = OwnerLookup()
     return _owner_lookup
@@ -139,6 +150,9 @@ def _attribute_engine() -> AttributeEnricher:
 
 def _rent_engine() -> RentCompsService:
     global _rent_comps
+    runtime = current_runtime_config()
+    if runtime is not None:
+        return RentCompsService(runtime)
     if _rent_comps is None:
         _rent_comps = RentCompsService()
     return _rent_comps
@@ -160,13 +174,23 @@ async def _market_for(
     try:
         geo = await resolve(location)
     except Exception as exc:
-        logger.warning("Market intelligence unavailable for %s: %s", location, exc)
-        return None, str(exc)
+        message = safe_error_message(exc)
+        logger.warning(
+            "Market intelligence unavailable for %s: %s",
+            safe_error_message(location),
+            message,
+        )
+        return None, message
     try:
         return await _market_engine().get_market_pack(geo), None
     except Exception as exc:
-        logger.warning("Market intelligence unavailable for %s: %s", location, exc)
-        return None, str(exc)
+        message = safe_error_message(exc)
+        logger.warning(
+            "Market intelligence unavailable for %s: %s",
+            safe_error_message(location),
+            message,
+        )
+        return None, message
 
 
 def _geo_from_listing(listing: Listing) -> GeoRef | None:
@@ -200,8 +224,13 @@ async def _owner_for(
         owner = await _owner_engine().lookup(address=listing.address, geo=geo)
         return owner, None
     except Exception as exc:
-        logger.warning("Owner enrichment unavailable for %s: %s", listing.address, exc)
-        return None, str(exc)
+        message = safe_error_message(exc, source=listing.source)
+        logger.warning(
+            "Owner enrichment unavailable for %s: %s",
+            safe_error_message(listing.address, source=listing.source),
+            message,
+        )
+        return None, message
 
 
 def _base_attributes(listing: Listing) -> DealAttributes:
@@ -230,9 +259,14 @@ async def _attributes_for(
     try:
         attributes = await _attribute_engine().attributes_for_listing(lookup_listing)
     except Exception as exc:
-        logger.warning("Property attributes unavailable for %s: %s", listing.address, exc)
+        message = safe_error_message(exc, source=listing.source)
+        logger.warning(
+            "Property attributes unavailable for %s: %s",
+            safe_error_message(listing.address, source=listing.source),
+            message,
+        )
         attributes = _base_attributes(listing)
-        warnings["attributes"] = str(exc)
+        warnings["attributes"] = message
     if (
         lookup_listing.lat is not None
         and lookup_listing.lon is not None
@@ -246,8 +280,13 @@ async def _attributes_for(
             if traffic is not None:
                 attributes.traffic_aadt = traffic.value
         except Exception as exc:
-            logger.warning("Traffic enrichment unavailable for %s: %s", listing.address, exc)
-            warnings["traffic"] = str(exc)
+            message = safe_error_message(exc, source=listing.source)
+            logger.warning(
+                "Traffic enrichment unavailable for %s: %s",
+                safe_error_message(listing.address, source=listing.source),
+                message,
+            )
+            warnings["traffic"] = message
     return attributes, warnings
 
 
@@ -285,8 +324,13 @@ async def _rent_for(
             None,
         )
     except Exception as exc:
-        logger.warning("Rent comparables unavailable for %s: %s", listing.address, exc)
-        return None, str(exc)
+        message = safe_error_message(exc, source=listing.source)
+        logger.warning(
+            "Rent comparables unavailable for %s: %s",
+            safe_error_message(listing.address, source=listing.source),
+            message,
+        )
+        return None, message
 
 
 def _assumptions_for(
@@ -367,8 +411,8 @@ def _facts_for(listing: Listing) -> ListingFacts | None:
     except Exception as exc:
         logger.warning(
             "Listing-fact extraction unavailable for %s: %s",
-            listing.url,
-            exc,
+            safe_source_reference(listing.url, source=listing.source),
+            safe_error_message(exc, source=listing.source),
         )
         return None
 
@@ -403,16 +447,25 @@ async def _value_for(
         try:
             comps = await sale_comps(geo, subject)
         except Exception as exc:
-            logger.warning("County sale comps unavailable for %s: %s", listing.address, exc)
+            logger.warning(
+                "County sale comps unavailable for %s: %s",
+                safe_error_message(listing.address, source=listing.source),
+                safe_error_message(exc, source=listing.source),
+            )
     try:
         return comps, estimate_value(subject, comps, market)
     except Exception as exc:
-        logger.warning("Value estimate unavailable for %s: %s", listing.address, exc)
+        message = safe_error_message(exc, source=listing.source)
+        logger.warning(
+            "Value estimate unavailable for %s: %s",
+            safe_error_message(listing.address, source=listing.source),
+            message,
+        )
         return comps, ValueEstimate(
             value=None,
             method="none",
             confidence=0.0,
-            source=f"Value estimation failed non-fatally: {exc}",
+            source=f"Value estimation failed non-fatally: {message}",
         )
 
 
@@ -563,9 +616,13 @@ async def analyze_deal(
     Returns:
         A full Deal including listing, market data, underwriting, scores, and explanations.
     """
-    logger.info("analyze_deal called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "analyze_deal called: source=%s listing=%s",
+        safe_error_message(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
-        listing_source = registry.get(source)
+        listing_source = registry.get_authorized(source)
         ref = _input_ref(url_or_id, source)
         listing = await listing_source.get_detail(ref)
         _validate_restricted_listing(listing)
@@ -576,7 +633,11 @@ async def analyze_deal(
             try:
                 geo = await resolve(location)
             except Exception as exc:
-                logger.warning("Owner geography unavailable for %s: %s", location, exc)
+                logger.warning(
+                    "Owner geography unavailable for %s: %s",
+                    safe_error_message(location, source=listing.source),
+                    safe_error_message(exc, source=listing.source),
+                )
         owner, owner_error = await _owner_for(listing, geo)
         parcel = owner.parcels[0] if owner and owner.parcels else None
         attributes, attribute_warnings = await _attributes_for(listing, parcel)
@@ -611,10 +672,11 @@ async def analyze_deal(
             warnings["rent_comps"] = rent_error
         if warnings:
             payload["warnings"] = warnings
-        return payload
+        return sanitize_payload(payload)
     except Exception as exc:
-        logger.error("analyze_deal error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("analyze_deal error: %s", message)
+        return {"error": message}
 
 
 async def find_deals(
@@ -652,9 +714,9 @@ async def find_deals(
     """
     logger.info(
         "find_deals called: location=%s strategy=%s sources=%s deep=%s",
-        location,
-        strategy,
-        sources,
+        safe_error_message(location),
+        safe_error_message(strategy),
+        safe_error_message(sources),
         deep,
     )
     if limit <= 0:
@@ -694,7 +756,7 @@ async def find_deals(
             for deal in deals[:limit]:
                 listing = deal.listing
                 try:
-                    listing_source = registry.get(listing.source)
+                    listing_source = registry.get_authorized(listing.source)
                     detail = await listing_source.get_detail(_listing_ref(listing))
                 except Exception as exc:
                     key = f"detail:{listing.source}:{listing.source_id}"
@@ -731,7 +793,7 @@ async def find_deals(
                     )
                 except Exception as exc:
                     key = f"detail:{listing.source}:{listing.source_id}"
-                    errors[key] = str(exc)
+                    errors[key] = safe_error_message(exc, source=listing.source)
                     deepened.append(deal)
             deals = deepened + deals[limit:]
             deals.sort(key=_best_score, reverse=True)
@@ -739,20 +801,25 @@ async def find_deals(
                 deals = [deal for deal in deals if _best_score(deal) >= min_score]
 
         selected = deals[:limit]
-        return {
-            "query_location": location,
-            "strategy": strategy,
-            "deals": [_client_deal_payload(deal) for deal in selected],
-            "total_scored": total_scored,
-            "returned": len(selected),
-            "errors": errors,
-            "per_source_counts": aggregated.per_source_counts,
-            "deduped": aggregated.deduped,
-            **_score_calibration_metadata(selected[0].scores if selected else None),
-        }
+        return sanitize_payload(
+            {
+                "query_location": location,
+                "strategy": strategy,
+                "deals": [_client_deal_payload(deal) for deal in selected],
+                "total_scored": total_scored,
+                "returned": len(selected),
+                "errors": errors,
+                "per_source_counts": aggregated.per_source_counts,
+                "deduped": aggregated.deduped,
+                **_score_calibration_metadata(
+                    selected[0].scores if selected else None
+                ),
+            }
+        )
     except Exception as exc:
-        logger.error("find_deals error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("find_deals error: %s", message)
+        return {"error": message}
 
 
 def _distressed_score(deal: Deal) -> float:
@@ -784,8 +851,8 @@ async def find_distressed(
     """
     logger.info(
         "find_distressed called: location=%s types=%s",
-        location,
-        distress_types,
+        safe_error_message(location),
+        safe_error_message(distress_types),
     )
     if limit <= 0:
         return {"error": "limit must be greater than zero"}
@@ -804,8 +871,8 @@ async def find_distressed(
         except Exception as exc:
             logger.warning(
                 "Distressed query geo resolution unavailable for %s: %s",
-                location,
-                exc,
+                safe_error_message(location),
+                safe_error_message(exc),
             )
             geo = None
         query = SearchQuery(
@@ -841,17 +908,22 @@ async def find_distressed(
         if min_score is not None:
             deals = [deal for deal in deals if _distressed_score(deal) >= min_score]
         selected = deals[:limit]
-        return {
-            "query_location": location,
-            "strategy": "distressed",
-            "deals": [_client_deal_payload(deal) for deal in selected],
-            "total_scored": total_scored,
-            "returned": len(selected),
-            "errors": errors,
-            "per_source_counts": aggregated.per_source_counts,
-            "deduped": aggregated.deduped,
-            **_score_calibration_metadata(selected[0].scores if selected else None),
-        }
+        return sanitize_payload(
+            {
+                "query_location": location,
+                "strategy": "distressed",
+                "deals": [_client_deal_payload(deal) for deal in selected],
+                "total_scored": total_scored,
+                "returned": len(selected),
+                "errors": errors,
+                "per_source_counts": aggregated.per_source_counts,
+                "deduped": aggregated.deduped,
+                **_score_calibration_metadata(
+                    selected[0].scores if selected else None
+                ),
+            }
+        )
     except Exception as exc:
-        logger.error("find_distressed error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("find_distressed error: %s", message)
+        return {"error": message}

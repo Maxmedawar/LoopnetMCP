@@ -18,6 +18,15 @@ from cre_mcp.scraper.client import LoopnetClient
 TEST_URL = "https://www.loopnet.com/search/retail/austin-tx/for-sale/"
 
 
+def _browser_config(**overrides):
+    return LoopnetConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled={"listing.loopnet": True},
+        **overrides,
+    )
+
+
 @pytest.mark.parametrize(
     ("html", "reason"),
     [
@@ -46,7 +55,7 @@ def test_loopnet_block_reason_labels_interstitials(html, reason):
 
 @pytest.mark.asyncio
 async def test_navigation_timeout_resets_once_before_retry():
-    fetcher = BrowserFetcher()
+    fetcher = BrowserFetcher(config=_browser_config())
     timeout = browser_module._BrowserOperationTimeout(
         "loopnet_blocked: browser_navigation_timeout"
     )
@@ -63,7 +72,7 @@ async def test_navigation_timeout_resets_once_before_retry():
 
 @pytest.mark.asyncio
 async def test_second_navigation_timeout_fast_fails_with_labeled_reason():
-    fetcher = BrowserFetcher()
+    fetcher = BrowserFetcher(config=_browser_config())
     first = browser_module._BrowserOperationTimeout(
         "loopnet_blocked: browser_navigation_timeout after 10s"
     )
@@ -98,11 +107,14 @@ async def test_persistent_access_denied_page_fast_fails_and_closes_tab():
     page = AsyncMock()
     page.get_content.return_value = blocked_html
     page.close = AsyncMock()
+    page.add_handler = MagicMock()
+    page.send = AsyncMock()
     browser = MagicMock()
+    browser.tabs = [page]
     browser.get = AsyncMock(return_value=page)
 
     fetcher = BrowserFetcher(
-        config=LoopnetConfig(browser_challenge_wait_seconds=0.0)
+        config=_browser_config(browser_challenge_wait_seconds=0.0)
     )
     fetcher._browser = browser
     fetcher._warmed.add("www.loopnet.com")
@@ -118,7 +130,12 @@ async def test_persistent_access_denied_page_fast_fails_and_closes_tab():
 
 @pytest.mark.asyncio
 async def test_client_discards_blocked_browser_session():
-    client = LoopnetClient(config=LoopnetConfig(request_delay_seconds=0.0))
+    client = LoopnetClient(
+        config=LoopnetConfig(
+            request_delay_seconds=0.0,
+            source_rights_enabled={"listing.loopnet": True},
+        )
+    )
     browser = AsyncMock()
     browser.fetch.side_effect = BrowserFetchError(
         "loopnet_blocked: incomplete_page (39 bytes)"
@@ -128,7 +145,7 @@ async def test_client_discards_blocked_browser_session():
 
     with pytest.raises(
         FetchBlockedError,
-        match=r"loopnet_blocked: incomplete_page \(39 bytes\)",
+        match="loopnet_blocked: browser retrieval failed",
     ):
         await client._fetch_with_browser(TEST_URL, policy, TEST_URL)
 

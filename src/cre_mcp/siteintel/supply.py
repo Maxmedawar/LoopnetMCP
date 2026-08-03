@@ -33,7 +33,13 @@ CITY_CENTROIDS: dict[str, tuple[float, float]] = {
 SUPPLY_TYPE_MAPPINGS: dict[str, dict[str, Any]] = {
     "austin": {
         "dataset_id": "3syk-w9eu",
-        "type_fields": ("permit_type", "work_class", "description"),
+        "type_fields": (
+            "permit_type",
+            "permit_subtype",
+            "work_class",
+            "work_type",
+            "description",
+        ),
         "new_construction": ("new construction", "new"),
         "major_renovation": (
             "addition",
@@ -42,6 +48,7 @@ SUPPLY_TYPE_MAPPINGS: dict[str, dict[str, Any]] = {
             "alteration",
         ),
         "size_fields": (
+            "reported_area_sf",
             "total_new_addition_sqft",
             "new_addition_demo_floor_area",
             "remodel_total_sqft",
@@ -51,7 +58,13 @@ SUPPLY_TYPE_MAPPINGS: dict[str, dict[str, Any]] = {
     },
     "chicago": {
         "dataset_id": "ydr8-5enu",
-        "type_fields": ("permit_type", "work_description"),
+        "type_fields": (
+            "permit_type",
+            "permit_subtype",
+            "work_type",
+            "description",
+            "work_description",
+        ),
         "new_construction": ("permit new construction", "new construction"),
         "major_renovation": (
             "permit renovation alteration",
@@ -59,12 +72,18 @@ SUPPLY_TYPE_MAPPINGS: dict[str, dict[str, Any]] = {
             "alteration",
             "addition",
         ),
-        "size_fields": ("building_area", "square_feet"),
+        "size_fields": ("reported_area_sf", "building_area", "square_feet"),
         "size_unit": "square_feet",
     },
     "san_francisco": {
         "dataset_id": "i98e-djp9",
-        "type_fields": ("permit_type_definition", "permit_type", "description"),
+        "type_fields": (
+            "permit_type",
+            "permit_subtype",
+            "work_type",
+            "description",
+            "permit_type_definition",
+        ),
         "new_construction": ("new construction", "new construction wood frame"),
         "major_renovation": (
             "additions alterations or repairs",
@@ -72,12 +91,19 @@ SUPPLY_TYPE_MAPPINGS: dict[str, dict[str, Any]] = {
             "alteration",
             "renovation",
         ),
-        "size_fields": ("floor_area", "square_feet"),
+        "size_fields": ("reported_area_sf", "floor_area", "square_feet"),
         "size_unit": "square_feet",
     },
     "los_angeles": {
         "dataset_id": "pi9x-tg5x",
-        "type_fields": ("permit_type", "permit_sub_type", "work_desc"),
+        "type_fields": (
+            "permit_type",
+            "permit_subtype",
+            "work_type",
+            "description",
+            "permit_sub_type",
+            "work_desc",
+        ),
         "new_construction": ("bldg new", "new construction"),
         "major_renovation": (
             "bldg addition",
@@ -86,12 +112,22 @@ SUPPLY_TYPE_MAPPINGS: dict[str, dict[str, Any]] = {
             "alteration",
             "major renovation",
         ),
-        "size_fields": ("floor_area_l_a_building_code_definition",),
+        "size_fields": (
+            "reported_area_sf",
+            "floor_area_l_a_building_code_definition",
+        ),
         "size_unit": "square_feet",
     },
     "seattle": {
         "dataset_id": "76t5-zqzr",
-        "type_fields": ("permittypemapped", "permittypedesc", "description"),
+        "type_fields": (
+            "permit_type",
+            "permit_subtype",
+            "work_type",
+            "description",
+            "permittypemapped",
+            "permittypedesc",
+        ),
         "new_construction": ("new", "new construction"),
         "major_renovation": (
             "addition alteration",
@@ -99,7 +135,7 @@ SUPPLY_TYPE_MAPPINGS: dict[str, dict[str, Any]] = {
             "alteration",
             "renovation",
         ),
-        "size_fields": ("projectareasqft", "squarefeet"),
+        "size_fields": ("reported_area_sf", "projectareasqft", "squarefeet"),
         "size_unit": "square_feet",
     },
 }

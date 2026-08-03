@@ -20,6 +20,7 @@ from cre_mcp.control.structures import (
 )
 from cre_mcp.control.vacant import detect_vacant
 from cre_mcp.models.listings import Listing
+from cre_mcp.source_rights.output import safe_error_message, sanitize_payload
 
 
 def _restricted_projection_required() -> bool:
@@ -213,16 +214,19 @@ async def find_control_opportunities(
         )
         for rank, opportunity in enumerate(opportunities, start=1):
             opportunity["rank"] = rank
-        return {
-            "count": len(opportunities),
-            "opportunities": opportunities,
-            "methodology": (
-                "Heuristic control score: 55% vacancy evidence, 35% leading tenant "
-                "fit, and 10% lease-creation spread. Verify vacancy and tenant demand."
-            ),
-        }
+        return sanitize_payload(
+            {
+                "count": len(opportunities),
+                "opportunities": opportunities,
+                "methodology": (
+                    "Heuristic control score: 55% vacancy evidence, 35% leading "
+                    "tenant fit, and 10% lease-creation spread. Verify vacancy and "
+                    "tenant demand."
+                ),
+            }
+        )
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def match_tenants_to_site(
@@ -249,7 +253,7 @@ async def match_tenants_to_site(
         )
         return {"count": len(matches), "matches": matches}
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def evaluate_tenant_site_fit(
@@ -277,7 +281,7 @@ async def evaluate_tenant_site_fit(
             nearby_categories=nearby_categories,
         )
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def model_lease_creation_spread(
@@ -307,7 +311,7 @@ async def model_lease_creation_spread(
             execution_risk_haircut=execution_risk_haircut,
         )
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def recommend_control_structure(
@@ -328,7 +332,7 @@ async def recommend_control_structure(
         )
         return {"count": len(recommendations), "recommendations": recommendations}
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def build_tenant_pitch(
@@ -352,7 +356,7 @@ async def build_tenant_pitch(
             achievable_rent_psf=achievable_rent_psf,
         )
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 __all__ = [

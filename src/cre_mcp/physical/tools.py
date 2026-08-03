@@ -15,14 +15,16 @@ from cre_mcp.physical.code_exposure import ada_code_exposure as _ada_code_exposu
 from cre_mcp.physical.register import physical_risk_register as _physical_risk_register
 from cre_mcp.physical.rul import remaining_useful_life as _remaining_useful_life
 from cre_mcp.physical.vintage import vintage_risk_screen as _vintage_risk_screen
+from cre_mcp.source_rights.output import safe_error_message
 
 
 logger = logging.getLogger(__name__)
 
 
 def _error(operation: str, exc: Exception) -> dict[str, str]:
-    logger.error("%s error: %s", operation, exc)
-    return {"error": str(exc)}
+    message = safe_error_message(exc)
+    logger.error("%s error: %s", operation, message)
+    return {"error": message}
 
 
 def estimate_capex_from_findings(

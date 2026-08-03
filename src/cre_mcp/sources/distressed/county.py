@@ -8,6 +8,7 @@ from typing import Any
 from cre_mcp.http.arcgis import arcgis_query
 from cre_mcp.models import Listing, ListingRef, SourceCapabilities
 from cre_mcp.models.geo import GeoRef
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.sources.base import ListingSource, SearchQuery, SourceError
 
 logger = logging.getLogger(__name__)
@@ -212,7 +213,10 @@ class CountySource(ListingSource):
     async def search(self, query: SearchQuery) -> list[Listing]:
         config = _config_for(query)
         if config is None:
-            logger.info("No configured county distressed feed matches %s", query.location)
+            logger.info(
+                "No configured county distressed feed matches %s",
+                safe_source_reference(query.location),
+            )
             return []
         fields = ",".join(dict.fromkeys(config.field_map.values()))
         try:
@@ -223,7 +227,11 @@ class CountySource(ListingSource):
                 result_count=100,
             )
         except Exception as exc:
-            raise SourceError(self.name, str(exc), retryable=True) from exc
+            raise SourceError(
+                self.name,
+                safe_error_message(exc),
+                retryable=True,
+            ) from exc
         listings = [map_county_listing(item, config) for item in attributes]
         if query.property_type is not None:
             listings = [
@@ -249,7 +257,11 @@ class CountySource(ListingSource):
                 result_count=1,
             )
         except Exception as exc:
-            raise SourceError(self.name, str(exc), retryable=True) from exc
+            raise SourceError(
+                self.name,
+                safe_error_message(exc),
+                retryable=True,
+            ) from exc
         if not attributes:
             raise SourceError(self.name, f"County listing not found: {ref.source_id}")
         return map_county_listing(attributes[0], config)

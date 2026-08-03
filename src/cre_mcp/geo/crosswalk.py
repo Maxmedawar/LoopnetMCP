@@ -9,10 +9,13 @@ from typing import Any
 
 from pydantic import SecretStr
 
+from cre_mcp.access.context import resolve_runtime_config
 from cre_mcp.config import CreConfig
 from cre_mcp.geo.constants import ZIP_COUNTY_CBSA
 from cre_mcp.http.fetch import FetchClient, get_fetch_client
 from cre_mcp.market.base import AuthSpec, GovApiClient
+from cre_mcp.source_rights.gate import require_url
+from cre_mcp.source_rights.output import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,7 @@ class GeoCrosswalk:
         db_path: str | Path | None = None,
         hud_token: SecretStr | str | None = None,
     ):
-        self.config = config or CreConfig()
+        self.config = resolve_runtime_config(config)
         self.db_path = Path(db_path or self.config.cache_db_path).expanduser()
         token = hud_token if hud_token is not None else self.config.hud_api_token
         self._token = _secret_value(token)
@@ -102,6 +105,10 @@ class GeoCrosswalk:
                 [(zip_code, value, ratio, now) for value, ratio in rows],
             )
 
+    def _delete(self, table: str, zip_code: str) -> None:
+        with self._connect() as connection:
+            connection.execute(f"DELETE FROM {table} WHERE zip = ?", (zip_code,))
+
     @staticmethod
     def _results(payload: Any) -> list[dict[str, Any]]:
         if not isinstance(payload, dict):
@@ -118,6 +125,7 @@ class GeoCrosswalk:
         crosswalk_type: int,
         table: str,
         value_column: str,
+        cache_ttl_seconds: int,
     ) -> str | None:
         try:
             payload = await self.client.get(
@@ -133,18 +141,23 @@ class GeoCrosswalk:
                 try:
                     rows.append((str(value).zfill(5), float(ratio)))
                 except (TypeError, ValueError):
-                    logger.warning("Ignoring malformed HUD crosswalk row: %r", item)
+                    logger.warning("Ignoring malformed HUD crosswalk row")
             if rows:
-                await asyncio.to_thread(
-                    self._store,
-                    table,
-                    value_column,
-                    zip_code,
-                    rows,
-                )
+                if cache_ttl_seconds > 0:
+                    await asyncio.to_thread(
+                        self._store,
+                        table,
+                        value_column,
+                        zip_code,
+                        rows,
+                    )
                 return max(rows, key=lambda row: row[1])[0]
         except Exception as exc:
-            logger.warning("HUD crosswalk refresh failed for ZIP %s: %s", zip_code, exc)
+            logger.warning(
+                "HUD crosswalk refresh failed for ZIP %s: %s",
+                zip_code,
+                safe_error_message(exc),
+            )
         return None
 
     async def _resolve(
@@ -157,22 +170,42 @@ class GeoCrosswalk:
         value_column: str,
     ) -> str | None:
         zip_code = zip_code.strip()
-        cached = await asyncio.to_thread(
-            self._lookup, table, value_column, zip_code
-        )
-        if cached and time.time() - cached[1] < REFRESH_SECONDS:
-            return cached[0]
-        if self._token:
-            refreshed = await self._refresh(
-                zip_code,
-                crosswalk_type=crosswalk_type,
-                table=table,
-                value_column=value_column,
-            )
-            if refreshed:
-                return refreshed
         fallback = STATIC_CROSSWALK.get(zip_code)
-        return fallback[static_index] if fallback else (cached[0] if cached else None)
+        if not self._token:
+            return fallback[static_index] if fallback else None
+        record = require_url(
+            "https://www.huduser.gov/hudapi/public/usps",
+            method="GET",
+            config=self.config,
+        )
+        cache_ttl = (
+            record.operating_policy.persistent_cache_ttl_seconds
+            if record is not None
+            else 0
+        )
+        cached = None
+        if cache_ttl > 0:
+            cached = await asyncio.to_thread(
+                self._lookup, table, value_column, zip_code
+            )
+            if cached and time.time() - cached[1] < min(
+                REFRESH_SECONDS,
+                cache_ttl,
+            ):
+                return cached[0]
+            if cached:
+                await asyncio.to_thread(self._delete, table, zip_code)
+                cached = None
+        refreshed = await self._refresh(
+            zip_code,
+            crosswalk_type=crosswalk_type,
+            table=table,
+            value_column=value_column,
+            cache_ttl_seconds=cache_ttl,
+        )
+        if refreshed:
+            return refreshed
+        return fallback[static_index] if fallback else None
 
     async def zip_to_county(self, zip_code: str) -> str | None:
         """Return the county with the highest residential ratio for a ZIP."""

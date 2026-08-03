@@ -148,7 +148,11 @@ def mini_mcp(registry, audit, identity):
 
     @app.tool
     async def list_deals() -> dict:
-        return {"ok": True, "deals": []}
+        return {
+            "ok": True,
+            "deals": [],
+            "raw": {"authorization": "Bearer fixture-output-secret"},
+        }
 
     @app.tool
     async def totally_unclassified_tool() -> dict:
@@ -172,6 +176,7 @@ def real_server(registry, audit, identity, tmp_path, monkeypatch):
     monkeypatch.setenv("CRE_CACHE_DB_PATH", str(tmp_path / "cache.db"))
     monkeypatch.delenv("LOOPNET_CACHE_DB_PATH", raising=False)
     from cre_mcp.access.middleware import AccessMiddleware
+    from cre_mcp.config import CreConfig
     from cre_mcp.server import mcp as production_mcp
 
     saved_middleware = list(production_mcp.middleware)
@@ -185,6 +190,9 @@ def real_server(registry, audit, identity, tmp_path, monkeypatch):
         registry=registry,
         audit_log=audit,
         identity_resolver=lambda _mctx: identity["ctx"],
+        # Match production: the process-level config exists before the tenant
+        # context and must be copied onto a workspace path by the middleware.
+        config=CreConfig(_env_file=None),
     )
     yield production_mcp
     uninstall()

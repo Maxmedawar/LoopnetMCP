@@ -23,7 +23,11 @@ class _FakeSource:
 @pytest.fixture
 def captured(monkeypatch):
     box: dict = {}
-    monkeypatch.setattr(listing_tools.registry, "get", lambda name: _FakeSource(box))
+    monkeypatch.setattr(
+        listing_tools.registry,
+        "get_authorized",
+        lambda name: _FakeSource(box),
+    )
     return box
 
 

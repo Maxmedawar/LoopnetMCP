@@ -7,10 +7,13 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from cre_mcp.access.context import resolve_runtime_config
 from cre_mcp.cache.sqlite import SQLiteCache
 from cre_mcp.config import CreConfig
 from cre_mcp.http.arcgis import arcgis_query
 from cre_mcp.models.market import MetricValue
+from cre_mcp.source_rights.gate import require_url
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +192,8 @@ class TrafficProvider:
     ):
         self.state = state.upper().strip()
         self.endpoints = endpoints or STATE_AADT_ENDPOINTS
-        config = config or CreConfig()
+        config = resolve_runtime_config(config)
+        self.config = config
         self.cache = cache or SQLiteCache(
             config.cache_db_path,
             ttl_seconds=_CACHE_TTL_SECONDS,
@@ -206,14 +210,25 @@ class TrafficProvider:
         endpoint = self.endpoints.get(self.state)
         if endpoint is None or radius_m <= 0:
             return None
+        record = require_url(
+            endpoint.arcgis_url,
+            method="GET",
+            config=self.config,
+        )
+        cache_ttl = (
+            record.operating_policy.persistent_cache_ttl_seconds
+            if record is not None
+            else 0
+        )
         cache_key = (
             f"traffic:v1:{self.state}:{lat:.5f}:{lon:.5f}:{int(radius_m)}"
         )
-        cached = await self.cache.get(cache_key)
-        if isinstance(cached, dict) and cached.get("found") is False:
-            return None
-        if isinstance(cached, dict) and isinstance(cached.get("metric"), dict):
-            return MetricValue.model_validate(cached["metric"])
+        if cache_ttl > 0:
+            cached = await self.cache.get(cache_key)
+            if isinstance(cached, dict) and cached.get("found") is False:
+                return None
+            if isinstance(cached, dict) and isinstance(cached.get("metric"), dict):
+                return MetricValue.model_validate(cached["metric"])
 
         latitude_delta = radius_m / _METERS_PER_DEGREE_LAT
         longitude_scale = max(
@@ -274,7 +289,12 @@ class TrafficProvider:
                 continue
             candidates.append((distance, feature))
         if not candidates:
-            await self.cache.set(cache_key, {"found": False})
+            if cache_ttl > 0:
+                await self.cache.set(
+                    cache_key,
+                    {"found": False},
+                    ttl_seconds=min(_CACHE_TTL_SECONDS, cache_ttl),
+                )
             return None
 
         _, nearest = min(candidates, key=lambda item: item[0])
@@ -292,10 +312,12 @@ class TrafficProvider:
             as_of=str(year_value) if year_value not in (None, "") else None,
             source=source,
         )
-        await self.cache.set(
-            cache_key,
-            {"found": True, "metric": metric.model_dump(mode="json")},
-        )
+        if cache_ttl > 0:
+            await self.cache.set(
+                cache_key,
+                {"found": True, "metric": metric.model_dump(mode="json")},
+                ttl_seconds=min(_CACHE_TTL_SECONDS, cache_ttl),
+            )
         return metric
 
 
@@ -314,7 +336,11 @@ async def nearest_aadt(
             radius_m=radius_m,
         )
     except Exception as exc:
-        logger.warning("Traffic enrichment unavailable for %s: %s", state, exc)
+        logger.warning(
+            "Traffic enrichment unavailable for %s: %s",
+            safe_source_reference(state),
+            safe_error_message(exc),
+        )
         return None
 
 

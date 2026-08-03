@@ -1,3 +1,4 @@
+from cre_mcp.access.context import local_context, use_context
 from cre_mcp.control.pitch import build_tenant_pitch
 from cre_mcp.control.site_fit import (
     evaluate_tenant_site_fit,
@@ -107,8 +108,9 @@ async def test_control_screen_preserves_listing_raw_without_restricted_context()
         raw={"provider_marker": "must-survive-direct-call"},
     )
 
-    result = await find_control_opportunities(
-        [listing.model_dump(mode="json")]
-    )
+    with use_context(local_context()):
+        result = await find_control_opportunities(
+            [listing.model_dump(mode="json")]
+        )
 
     assert result["opportunities"][0]["listing"]["raw"] == listing.raw

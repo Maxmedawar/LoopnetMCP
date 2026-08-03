@@ -15,6 +15,7 @@ from cre_mcp.http.browser import (
 class FetchPolicy:
     host: str
     delay_seconds: float = 3.0
+    max_concurrency: int = 1
     max_retries: int = 3
     impersonate: str | None = "chrome136"
     warmup_url: str | None = None
@@ -24,6 +25,7 @@ class FetchPolicy:
     cache_namespace: str = "http"
     cache_ttl_seconds: int = 300
     detail_cache_ttl_seconds: int | None = None
+    persistent_cache_ttl_seconds: int | None = None
     persist: bool = False
     use_proxy: bool = False
 
@@ -178,8 +180,11 @@ def build_gov_policies(config: CreConfig | None = None) -> dict[str, FetchPolicy
             host="api.stlouisfed.org",
             delay_seconds=0.2,
             cache_namespace="fred",
-            cache_ttl_seconds=6 * 60 * 60,
-            **common,
+            cache_ttl_seconds=0,
+            max_retries=config.max_retries,
+            impersonate=None,
+            browser_fallback=False,
+            persist=False,
         ),
         "www.fhfa.gov": FetchPolicy(
             host="www.fhfa.gov",

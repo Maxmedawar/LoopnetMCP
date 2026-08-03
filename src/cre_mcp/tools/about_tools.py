@@ -10,6 +10,7 @@ from cre_mcp.positioning import (
     STANDARD_DISCLAIMER,
     assumptions_sheet,
 )
+from cre_mcp.source_rights.output import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +55,9 @@ async def deal_assumptions(inputs: dict | None = None) -> dict:
             "disclaimer": STANDARD_DISCLAIMER,
         }
     except Exception as exc:
-        logger.error("deal_assumptions error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("deal_assumptions error: %s", message)
+        return {"error": message}
 
 
 __all__ = ["capabilities", "deal_assumptions"]

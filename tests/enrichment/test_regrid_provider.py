@@ -11,6 +11,7 @@ from cre_mcp.config import CreConfig
 from cre_mcp.enrichment.base import ProviderUnavailable
 from cre_mcp.enrichment.providers.regrid import RegridProvider, map_regrid_parcel
 from cre_mcp.models import GeoLevel, GeoRef, Listing
+from tests.conftest import write_cached_rights_registry
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "regrid"
 
@@ -79,6 +80,11 @@ async def test_regrid_paid_result_is_cached_and_value_anchor_is_honestly_labeled
     config = CreConfig(
         regrid_api_key="fixture-token",
         cache_db_path=tmp_path / "paid.db",
+        source_rights_registry_path=write_cached_rights_registry(
+            tmp_path,
+            {"commercial.regrid"},
+        ),
+        source_rights_enabled={"commercial.regrid": True},
         _env_file=None,
     )
     first_fetch = AsyncMock()

@@ -18,9 +18,10 @@ def workspace_db_path(ctx: TenantContext | None, base: Path) -> Path:
     if ctx is None or ctx.trusted:
         return base
     base = Path(base).expanduser()
-    # Idempotence: never nest a workspace path inside itself.
-    if base.parent.name == ctx.workspace_id and base.parent.parent.name == WORKSPACES_DIRNAME:
-        return base
     if "/" in ctx.workspace_id or "\\" in ctx.workspace_id or ".." in ctx.workspace_id:
         raise ValueError(f"unsafe workspace id: {ctx.workspace_id!r}")
+    # Idempotence and safe rebasing: a config copied from one hosted request
+    # must never nest that workspace underneath the next workspace.
+    if base.parent.parent.name == WORKSPACES_DIRNAME:
+        base = base.parent.parent.parent / base.name
     return base.parent / WORKSPACES_DIRNAME / ctx.workspace_id / base.name

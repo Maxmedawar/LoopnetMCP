@@ -22,6 +22,7 @@ from cre_mcp.ledger.report import (
     lender_track_record as _lender_track_record,
 )
 from cre_mcp.ledger.store import get_ledger_store, new_id
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,11 @@ async def record_lender_quote(
     Returns:
         The stored quote record with its quote_id (needed to resolve it later).
     """
-    logger.info("record_lender_quote: deal=%s lender=%s", deal_id, lender)
+    logger.info(
+        "record_lender_quote: deal=%s lender=%s",
+        safe_source_reference(deal_id),
+        safe_source_reference(lender),
+    )
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
@@ -91,8 +96,9 @@ async def record_lender_quote(
             f"with quote_id={rec.quote_id} and the FINAL terms",
         }
     except Exception as exc:
-        logger.error("record_lender_quote error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("record_lender_quote error: %s", message)
+        return {"error": message}
 
 
 async def resolve_lender_quote(
@@ -118,7 +124,11 @@ async def resolve_lender_quote(
     Returns:
         The updated record including computed retrade deltas.
     """
-    logger.info("resolve_lender_quote: %s -> %s", quote_id, stage)
+    logger.info(
+        "resolve_lender_quote: %s -> %s",
+        safe_source_reference(quote_id),
+        safe_source_reference(stage),
+    )
     try:
         stage = (stage or "").strip().lower()
         if stage not in _QUOTE_STAGES - {"quoted"}:
@@ -131,11 +141,16 @@ async def resolve_lender_quote(
             final_recourse=final_recourse,
         )
         if updated is None:
-            return {"error": f"no quote with quote_id {quote_id!r}"}
+            return {
+                "error": safe_error_message(
+                    f"no quote with quote_id {quote_id!r}"
+                )
+            }
         return {"resolved": updated.model_dump(mode="json")}
     except Exception as exc:
-        logger.error("resolve_lender_quote error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("resolve_lender_quote error: %s", message)
+        return {"error": message}
 
 
 async def record_defect_outcome(
@@ -173,7 +188,11 @@ async def record_defect_outcome(
     Returns:
         The stored/updated defect record.
     """
-    logger.info("record_defect_outcome: deal=%s type=%s", deal_id, defect_type)
+    logger.info(
+        "record_defect_outcome: deal=%s type=%s",
+        safe_source_reference(deal_id),
+        safe_source_reference(defect_type),
+    )
     try:
         store = get_ledger_store()
         if defect_id:
@@ -188,7 +207,11 @@ async def record_defect_outcome(
                 dollar_impact=dollar_impact,
             )
             if updated is None:
-                return {"error": f"no defect with defect_id {defect_id!r}"}
+                return {
+                    "error": safe_error_message(
+                        f"no defect with defect_id {defect_id!r}"
+                    )
+                }
             return {"resolved": updated.model_dump(mode="json")}
 
         if not deal_id or not deal_id.strip():
@@ -215,8 +238,9 @@ async def record_defect_outcome(
             "the outcome (retrade/kill/cure/absorbed/no_impact) + dollar impact",
         }
     except Exception as exc:
-        logger.error("record_defect_outcome error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("record_defect_outcome error: %s", message)
+        return {"error": message}
 
 
 async def counterparty_track_record(
@@ -237,7 +261,9 @@ async def counterparty_track_record(
         Track record with sample size and honesty labels.
     """
     logger.info(
-        "counterparty_track_record: counterparty=%s deal=%s", counterparty, deal_id
+        "counterparty_track_record: counterparty=%s deal=%s",
+        safe_source_reference(counterparty or ""),
+        safe_source_reference(deal_id or ""),
     )
     try:
         if not counterparty and not deal_id:
@@ -245,8 +271,9 @@ async def counterparty_track_record(
         record = await _counterparty_track_record(counterparty, deal_id=deal_id)
         return record.model_dump(mode="json")
     except Exception as exc:
-        logger.error("counterparty_track_record error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("counterparty_track_record error: %s", message)
+        return {"error": message}
 
 
 async def lender_track_record(lender: str) -> dict:
@@ -262,14 +289,15 @@ async def lender_track_record(lender: str) -> dict:
     Returns:
         Aggregated quote-to-close history with honesty labels.
     """
-    logger.info("lender_track_record: %s", lender)
+    logger.info("lender_track_record: %s", safe_source_reference(lender))
     try:
         if not lender or not lender.strip():
             raise ValueError("lender is required")
         return await _lender_track_record(lender.strip())
     except Exception as exc:
-        logger.error("lender_track_record error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("lender_track_record error: %s", message)
+        return {"error": message}
 
 
 async def defect_track_record() -> dict:
@@ -286,5 +314,6 @@ async def defect_track_record() -> dict:
     try:
         return await _defect_outcome_stats()
     except Exception as exc:
-        logger.error("defect_track_record error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("defect_track_record error: %s", message)
+        return {"error": message}

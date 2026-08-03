@@ -10,11 +10,22 @@ into a verified NOI bridge lands in Phase 26.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
+import socket
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from cre_mcp.deals.store import get_deal_store
 from cre_mcp.ledger.capture import capture_reconciliation
+from cre_mcp.source_rights.attestations import (
+    DOCUMENT_PURPOSES,
+    require_external_document_attestation,
+)
+from cre_mcp.source_rights.gate import SourceRightsDeniedError
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.truth.classify import classify
 from cre_mcp.truth.extract import extract_claims
 from cre_mcp.truth.models import DocumentRecord, FieldClaim
@@ -23,7 +34,6 @@ from cre_mcp.truth.parsers import parse_bytes, sniff_ext
 from cre_mcp.truth.reconcile import resolve
 from cre_mcp.truth.sanitize import sanitize_text
 from cre_mcp.truth.store import get_truth_store
-from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +41,117 @@ MAX_BYTES = 50 * 1024 * 1024  # 50 MB hard cap on a single document
 ALLOWED_EXT = {"pdf", "xlsx", "csv"}
 
 
-def _fetch_bytes(url: str) -> bytes:
+@dataclass(frozen=True)
+class _ResolvedDocumentTarget:
+    host: str
+    port: int
+    address: str
+
+    @property
+    def curl_resolve_entry(self) -> str:
+        address = f"[{self.address}]" if ":" in self.address else self.address
+        return f"{self.host}:{self.port}:{address}"
+
+
+def _resolve_public_document_target(url: str) -> _ResolvedDocumentTarget:
+    """Resolve once, reject every non-global answer, and return a pinnable target."""
+    try:
+        parsed = urlsplit(url)
+        host = parsed.hostname
+        port = parsed.port or 443
+    except (TypeError, ValueError):
+        raise SourceRightsDeniedError(
+            "source-rights denied: document target must be public HTTPS"
+        ) from None
+    normalized_host = (host or "").casefold().rstrip(".")
+    if (
+        parsed.scheme.casefold() != "https"
+        or not normalized_host
+        or normalized_host == "localhost"
+        or normalized_host.endswith(".localhost")
+        or normalized_host.endswith(".local")
+        or normalized_host == "metadata.google.internal"
+    ):
+        raise SourceRightsDeniedError(
+            "source-rights denied: document target must be public HTTPS"
+        )
+    try:
+        answers = socket.getaddrinfo(
+            normalized_host,
+            port,
+            type=socket.SOCK_STREAM,
+            proto=socket.IPPROTO_TCP,
+        )
+        addresses = {
+            str(ipaddress.ip_address(answer[4][0]))
+            for answer in answers
+        }
+    except (OSError, ValueError):
+        raise SourceRightsDeniedError(
+            "source-rights denied: document target must be public HTTPS"
+        ) from None
+    if not addresses or any(
+        not ipaddress.ip_address(address).is_global for address in addresses
+    ):
+        raise SourceRightsDeniedError(
+            "source-rights denied: document target must be public HTTPS"
+        )
+    address = sorted(
+        addresses,
+        key=lambda value: (ipaddress.ip_address(value).version, value),
+    )[0]
+    return _ResolvedDocumentTarget(normalized_host, port, address)
+
+
+def _document_origin(url: str) -> str:
+    """Return a lineage-safe origin without userinfo, query, or fragment."""
+    try:
+        parsed = urlsplit(url)
+        host = parsed.hostname or "external-document"
+        port = parsed.port
+    except (TypeError, ValueError):
+        return "external-document"
+    netloc = host.casefold().rstrip(".")
+    if port is not None and not (parsed.scheme == "https" and port == 443):
+        netloc = f"{netloc}:{port}"
+    return urlunsplit((parsed.scheme.casefold(), netloc, parsed.path, "", ""))
+
+
+def _fetch_bytes(url: str, rights_attestation_id: str | None = None) -> bytes:
     """Download a scraped document body (Chrome-impersonating), honoring the cap."""
     from curl_cffi import requests as cffi
+    from curl_cffi.const import CurlOpt
 
-    resp = cffi.get(url, impersonate="chrome", timeout=45, allow_redirects=True)
-    resp.raise_for_status()
-    return resp.content
+    # The worker thread re-checks the exact workspace/actor/session/url binding at
+    # the socket boundary. asyncio.to_thread propagates the active ContextVar.
+    require_external_document_attestation(
+        url,
+        rights_attestation_id,
+        purposes=DOCUMENT_PURPOSES,
+    )
+    target = _resolve_public_document_target(url)
+    try:
+        with cffi.Session(
+            curl_options={CurlOpt.RESOLVE: [target.curl_resolve_entry]},
+            trust_env=False,
+            allow_redirects=False,
+        ) as session:
+            resp = session.get(
+                url,
+                impersonate="chrome",
+                timeout=45,
+                allow_redirects=False,
+            )
+            if 300 <= resp.status_code < 400:
+                raise SourceRightsDeniedError(
+                    "source-rights denied: external document redirect requires a new attestation"
+                )
+            resp.raise_for_status()
+            return resp.content
+    except SourceRightsDeniedError:
+        raise
+    except Exception:
+        raise RuntimeError("external document retrieval failed") from None
 
 
 async def ingest_document(
@@ -46,6 +160,8 @@ async def ingest_document(
     url: str | None = None,
     doc_kind: str | None = None,
     source_channel: str | None = None,
+    rights_attestation_id: str | None = None,
+    upload_binding_id: str | None = None,
 ) -> dict:
     """Ingest one deal document (uploaded file OR scraped URL) and extract its figures.
 
@@ -63,34 +179,60 @@ async def ingest_document(
         A summary with the content-addressed document_id, classified kind, parse
         status, extracted-claim count + preview, and any injection redactions.
     """
-    logger.info("ingest_document called: deal=%s path=%s url=%s", deal_id, path, url)
+    logger.info(
+        "ingest_document called: deal=%s path_supplied=%s url_supplied=%s",
+        safe_source_reference(deal_id),
+        bool(path),
+        bool(url),
+    )
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
         if bool(path) == bool(url):
             raise ValueError("provide exactly one of path or url")
 
+        if path and source_channel not in {None, "uploaded"}:
+            raise ValueError("source_channel must be 'uploaded' for a path")
+        if url and source_channel not in {None, "scraped"}:
+            raise ValueError("source_channel must be 'scraped' for a URL")
+
         if path:
+            from cre_mcp.source_rights.gate import is_hosted_execution
+
+            if is_hosted_execution():
+                raise SourceRightsDeniedError(
+                    "source-rights denied: hosted path ingestion requires a "
+                    "server-owned upload binding and durable upload repository"
+                )
             file_path = Path(path).expanduser()
             if not file_path.is_file():
                 raise ValueError(f"file not found: {path}")
             data = file_path.read_bytes()
             origin = file_path.name
-            channel = (source_channel or "uploaded").strip()
+            channel = "uploaded"
             ext_hint = file_path.suffix
         else:
-            data = await _to_thread_fetch(url)
-            origin = url
-            channel = (source_channel or "scraped").strip()
+            require_external_document_attestation(
+                url,  # type: ignore[arg-type]
+                rights_attestation_id,
+                purposes=DOCUMENT_PURPOSES,
+            )
+            from cre_mcp.source_rights.gate import is_hosted_execution
+
+            if is_hosted_execution():
+                raise SourceRightsDeniedError(
+                    "source-rights denied: hosted document ingestion requires an "
+                    "injected durable blob and metadata repository"
+                )
+            data = await _to_thread_fetch(url, rights_attestation_id)
+            origin = _document_origin(url)  # type: ignore[arg-type]
+            channel = "scraped"
             ext_hint = Path(url.split("?")[0]).suffix  # type: ignore[union-attr]
 
         if not data:
             raise ValueError("document is empty")
         if len(data) > MAX_BYTES:
             raise ValueError(f"document exceeds {MAX_BYTES // (1024 * 1024)} MB limit")
-        if channel not in {"uploaded", "scraped"}:
-            raise ValueError("source_channel must be 'uploaded' or 'scraped'")
-
         ext = sniff_ext(data, ext_hint)
         sha256 = hashlib.sha256(data).hexdigest()
         parsed = parse_bytes(data, ext_hint=ext_hint)
@@ -175,16 +317,29 @@ async def ingest_document(
             ),
         }
     except Exception as exc:
-        logger.error("ingest_document error: %s", exc)
-        return {"error": str(exc)}
+        logger.error("ingest_document failed: category=%s", type(exc).__name__)
+        if isinstance(exc, SourceRightsDeniedError):
+            message = safe_error_message(exc)
+        elif isinstance(exc, ValueError) and str(exc).startswith(
+            ("deal_id", "provide exactly", "source_channel")
+        ):
+            message = safe_error_message(exc)
+        elif url:
+            message = "external document ingestion failed"
+        else:
+            message = safe_error_message(exc)
+        return {"error": message}
 
 
-async def _to_thread_fetch(url: str | None) -> bytes:
+async def _to_thread_fetch(
+    url: str | None,
+    rights_attestation_id: str | None = None,
+) -> bytes:
     import asyncio
 
     if not url:
         raise ValueError("url is required")
-    return await asyncio.to_thread(_fetch_bytes, url)
+    return await asyncio.to_thread(_fetch_bytes, url, rights_attestation_id)
 
 
 async def list_deal_documents(deal_id: str) -> dict:
@@ -196,7 +351,10 @@ async def list_deal_documents(deal_id: str) -> dict:
     Returns:
         The ingested documents and the total number of extracted claims.
     """
-    logger.info("list_deal_documents called: deal=%s", deal_id)
+    logger.info(
+        "list_deal_documents called: deal=%s",
+        safe_source_reference(deal_id),
+    )
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
@@ -210,8 +368,9 @@ async def list_deal_documents(deal_id: str) -> dict:
             "documents": documents,
         }
     except Exception as exc:
-        logger.error("list_deal_documents error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("list_deal_documents error: %s", message)
+        return {"error": message}
 
 
 async def _load_claims(deal_id: str) -> list[FieldClaim]:
@@ -221,7 +380,11 @@ async def _load_claims(deal_id: str) -> list[FieldClaim]:
         try:
             claims.append(FieldClaim.model_validate(row))
         except Exception as exc:  # skip a corrupt row rather than fail the whole deal
-            logger.warning("skipping unparseable claim for %s: %s", deal_id, exc)
+            logger.warning(
+                "skipping unparseable claim for %s: %s",
+                safe_source_reference(deal_id),
+                safe_error_message(exc),
+            )
     return claims
 
 
@@ -255,7 +418,10 @@ async def reconcile_deal_docs(deal_id: str, counterparty: str | None = None) -> 
         The reconciliation: per-field resolved values with citations + confidence,
         every unresolved conflict, and how many claims were ledgered.
     """
-    logger.info("reconcile_deal_docs called: deal=%s", deal_id)
+    logger.info(
+        "reconcile_deal_docs called: deal=%s",
+        safe_source_reference(deal_id),
+    )
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
@@ -273,8 +439,9 @@ async def reconcile_deal_docs(deal_id: str, counterparty: str | None = None) -> 
         result["claims_ledgered"] = ledgered
         return result
     except Exception as exc:
-        logger.error("reconcile_deal_docs error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("reconcile_deal_docs error: %s", message)
+        return {"error": message}
 
 
 async def build_noi_bridge(deal_id: str, price: float | None = None) -> dict:
@@ -291,7 +458,10 @@ async def build_noi_bridge(deal_id: str, price: float | None = None) -> dict:
     Returns:
         The NOI bridge (three columns + dollar walk + unresolved conflicts).
     """
-    logger.info("build_noi_bridge called: deal=%s", deal_id)
+    logger.info(
+        "build_noi_bridge called: deal=%s",
+        safe_source_reference(deal_id),
+    )
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
@@ -303,8 +473,9 @@ async def build_noi_bridge(deal_id: str, price: float | None = None) -> dict:
         bridge = build_bridge(recon, price=resolved_price)
         return bridge.model_dump(mode="json")
     except Exception as exc:
-        logger.error("build_noi_bridge error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("build_noi_bridge error: %s", message)
+        return {"error": message}
 
 
 async def deal_truth_report(deal_id: str, price: float | None = None) -> dict:
@@ -321,7 +492,10 @@ async def deal_truth_report(deal_id: str, price: float | None = None) -> dict:
     Returns:
         The fatal-flaw report plus the NOI bridge it was derived from.
     """
-    logger.info("deal_truth_report called: deal=%s", deal_id)
+    logger.info(
+        "deal_truth_report called: deal=%s",
+        safe_source_reference(deal_id),
+    )
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
@@ -335,8 +509,9 @@ async def deal_truth_report(deal_id: str, price: float | None = None) -> dict:
         report = build_report(recon, bridge)
         return {"report": report.model_dump(mode="json"), "noi_bridge": bridge.model_dump(mode="json")}
     except Exception as exc:
-        logger.error("deal_truth_report error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("deal_truth_report error: %s", message)
+        return {"error": message}
 
 
 __all__ = [

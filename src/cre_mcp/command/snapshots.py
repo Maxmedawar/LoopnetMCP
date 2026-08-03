@@ -9,7 +9,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
+from cre_mcp.access.context import current_runtime_config
 from cre_mcp.config import CreConfig
+from cre_mcp.source_rights.output import sanitize_payload
 
 from ._db import resolve_db_path
 from ._time import as_datetime
@@ -65,7 +67,12 @@ class SnapshotStore:
         *,
         config: CreConfig | None = None,
     ) -> None:
-        self.db_path = resolve_db_path(db_path or config)
+        if isinstance(db_path, CreConfig):
+            selected_config = db_path
+        else:
+            selected_config = config or current_runtime_config() or CreConfig()
+        self._config = selected_config
+        self.db_path = resolve_db_path(db_path or selected_config)
 
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -94,32 +101,50 @@ class SnapshotStore:
         return connection
 
     def record_snapshot(self, listing: dict[str, Any]) -> dict[str, Any]:
-        """Persist one normalized snapshot while retaining the full raw payload."""
+        """Persist one normalized snapshot under the active raw-storage policy."""
         if not isinstance(listing, dict):
             raise ValueError("listing must be a dictionary")
-        listing_key = _listing_key(listing)
-        deal_id_value = listing.get("deal_id")
+        stored_listing = sanitize_payload(
+            listing,
+            purpose="storage",
+            config=self._config,
+        )
+        if not isinstance(stored_listing, dict):
+            raise ValueError("listing must resolve to a dictionary")
+        listing_key = _listing_key(stored_listing)
+        deal_id_value = stored_listing.get("deal_id")
         deal_id = str(deal_id_value).strip() if deal_id_value is not None else None
         deal_id = deal_id or None
         price = _first_number(
-            listing.get("price"),
-            listing.get("price_usd"),
-            listing.get("asking_price"),
+            stored_listing.get("price"),
+            stored_listing.get("price_usd"),
+            stored_listing.get("asking_price"),
         )
-        status_value = listing.get("status", listing.get("listing_status"))
+        status_value = stored_listing.get(
+            "status", stored_listing.get("listing_status")
+        )
         status = str(status_value).strip() if status_value is not None else None
         status = status or None
-        dom = _integer(listing.get("dom", listing.get("days_on_market")))
-        broker_value = listing.get("broker", listing.get("broker_name"))
+        dom = _integer(
+            stored_listing.get("dom", stored_listing.get("days_on_market"))
+        )
+        broker_value = stored_listing.get(
+            "broker", stored_listing.get("broker_name")
+        )
         broker = str(broker_value).strip() if broker_value is not None else None
         broker = broker or None
-        captured_value = listing.get("captured_at")
+        captured_value = stored_listing.get("captured_at")
         captured = (
             as_datetime(captured_value)
             if captured_value is not None
             else datetime.now(UTC)
         )
-        raw_json = json.dumps(listing, separators=(",", ":"), sort_keys=True, default=str)
+        raw_json = json.dumps(
+            stored_listing,
+            separators=(",", ":"),
+            sort_keys=True,
+            default=str,
+        )
         with self._connect() as connection:
             cursor = connection.execute(
                 """
@@ -139,7 +164,7 @@ class SnapshotStore:
                     captured.isoformat(),
                 ),
             )
-        return {
+        result = {
             "snapshot_id": int(cursor.lastrowid),
             "listing_key": listing_key,
             "deal_id": deal_id,
@@ -147,9 +172,14 @@ class SnapshotStore:
             "status": status,
             "dom": dom,
             "broker": broker,
-            "raw": dict(listing),
+            "raw": dict(stored_listing),
             "captured_at": captured.isoformat(),
         }
+        return sanitize_payload(
+            result,
+            source=stored_listing.get("source"),
+            config=self._config,
+        )
 
     @staticmethod
     def _decode(row: sqlite3.Row) -> dict[str, Any]:
@@ -165,8 +195,8 @@ class SnapshotStore:
             "captured_at": row["captured_at"],
         }
 
-    def list_snapshots(self, listing_key: str) -> list[dict[str, Any]]:
-        """Return one listing's snapshots in stable chronological order."""
+    def _list_snapshots_internal(self, listing_key: str) -> list[dict[str, Any]]:
+        """Return server-internal snapshots before customer-output sanitization."""
         normalized = listing_key.strip()
         if not normalized:
             raise ValueError("listing_key cannot be blank")
@@ -183,6 +213,22 @@ class SnapshotStore:
             ).fetchall()
         return [self._decode(row) for row in rows]
 
+    def list_snapshots(self, listing_key: str) -> list[dict[str, Any]]:
+        """Return one listing's sanitized snapshots in stable chronological order."""
+        snapshots = self._list_snapshots_internal(listing_key)
+        return [
+            sanitize_payload(
+                snapshot,
+                source=(
+                    snapshot["raw"].get("source")
+                    if isinstance(snapshot.get("raw"), dict)
+                    else None
+                ),
+                config=self._config,
+            )
+            for snapshot in snapshots
+        ]
+
     def listing_keys(self) -> list[str]:
         """Return all snapshotted listing keys deterministically."""
         with self._connect() as connection:
@@ -193,7 +239,7 @@ class SnapshotStore:
 
     def diff_snapshots(self, listing_key: str) -> list[dict[str, Any]]:
         """Return normalized change events between every consecutive snapshot."""
-        return changes_from_snapshots(self.list_snapshots(listing_key))
+        return changes_from_snapshots(self._list_snapshots_internal(listing_key))
 
 
 def changes_from_snapshots(

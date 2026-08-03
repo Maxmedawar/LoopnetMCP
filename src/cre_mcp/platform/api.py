@@ -89,7 +89,7 @@ class PlatformApi:
                 days=config.oauth_refresh_family_max_age_days
             ),
         )
-        self.repository = PlatformRepository(config.cache_db_path)
+        self.repository = PlatformRepository(config=config)
         self.entitlements = EntitlementStore(config.cache_db_path)
         self.admin = AdminControlStore(config.cache_db_path)
         self.provider_sync = ProviderSyncService(config)

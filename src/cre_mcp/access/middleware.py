@@ -22,9 +22,16 @@ from mcp.types import TextContent
 
 from cre_mcp.access.audit import AuditLog
 from cre_mcp.access.capabilities import ToolCapability
-from cre_mcp.access.context import TenantContext, local_context, use_context
+from cre_mcp.access.context import (
+    TenantContext,
+    local_context,
+    use_context,
+    use_runtime_config,
+)
 from cre_mcp.access.engine import AccessEngine, RESULT_TERRITORY_DENIAL
 from cre_mcp.access.registry import WorkspaceRegistry
+from cre_mcp.source_rights.gate import collect_authorized_sources
+from cre_mcp.source_rights.output import safe_error_message, sanitize_tool_result
 
 UNAUTHENTICATED = "(unauthenticated)"
 MAX_RESULT_JSON_DEPTH = 64
@@ -195,10 +202,12 @@ class AccessMiddleware(Middleware):
         identity_resolver: IdentityResolver | None = None,
         capabilities: dict[str, ToolCapability] | None = None,
         runtime_mode: Literal["stdio", "http"] | None = None,
+        config: Any | None = None,
     ) -> None:
         self.engine = AccessEngine(registry, capabilities)
         self.audit = audit_log
         self._resolve = identity_resolver or _default_resolver_for(runtime_mode)
+        self._config = config
 
     async def on_list_tools(self, context: MiddlewareContext, call_next) -> Any:
         ctx = self._resolve(context)
@@ -222,29 +231,30 @@ class AccessMiddleware(Middleware):
         args = context.message.arguments or {}
         decision, sanitized = self.engine.check_call(ctx, tool_name, args)
         workspace = ctx.workspace_id if ctx else UNAUTHENTICATED
+        safe_reason = safe_error_message(decision.reason, config=self._config)
 
         if decision.outcome == "denied":
             self.audit.record(
                 workspace_id=workspace,
                 tool=tool_name,
                 decision="denied",
-                reason=decision.reason,
+                reason=safe_reason,
             )
-            raise ToolError(decision.reason)
+            raise ToolError(safe_reason)
 
         if decision.outcome == "approval_required":
             self.audit.record(
                 workspace_id=workspace,
                 tool=tool_name,
                 decision="approval_required",
-                reason=decision.reason,
+                reason=safe_reason,
             )
             return ToolResult(
                 structured_content={
                     "approval_required": True,
                     "approval_id": decision.approval_id,
                     "tool": tool_name,
-                    "message": decision.reason,
+                    "message": safe_reason,
                 }
             )
 
@@ -253,22 +263,32 @@ class AccessMiddleware(Middleware):
             ctx,
             tool_name,
         )
+        authorized_sources: dict[str, object] = {}
         try:
-            with use_context(ctx):
+            with (
+                use_context(ctx),
+                use_runtime_config(self._config),
+                collect_authorized_sources() as collected_sources,
+            ):
                 result = await call_next(context)
-        except Exception:
-            if not requires_result_check:
+                authorized_sources = dict(collected_sources)
+        except Exception as exc:
+            if requires_result_check:
+                # Provider and tool exceptions are client-visible output. A
+                # restricted search cannot release their untyped messages because
+                # those strings may contain property data outside the territory.
+                self.audit.record(
+                    workspace_id=workspace,
+                    tool=tool_name,
+                    decision="denied",
+                    reason=RESULT_TERRITORY_DENIAL,
+                )
+                raise ToolError(RESULT_TERRITORY_DENIAL) from None
+            if ctx is not None and ctx.trusted:
                 raise
-            # Provider and tool exceptions are client-visible output. A
-            # restricted search cannot release their untyped messages because
-            # those strings may contain property data outside the territory.
-            self.audit.record(
-                workspace_id=workspace,
-                tool=tool_name,
-                decision="denied",
-                reason=RESULT_TERRITORY_DENIAL,
+            raise ToolError(
+                safe_error_message(exc, config=self._config)
             )
-            raise ToolError(RESULT_TERRITORY_DENIAL) from None
         if requires_result_check:
             result_decision = self.engine.check_result(
                 ctx,
@@ -284,11 +304,32 @@ class AccessMiddleware(Middleware):
                     reason=result_decision.reason,
                 )
                 raise ToolError(result_decision.reason)
+        try:
+            with use_context(ctx), use_runtime_config(self._config):
+                result = sanitize_tool_result(
+                    result,
+                    authorized_records=tuple(authorized_sources.values()),
+                    config=self._config,
+                )
+        except Exception as exc:
+            if requires_result_check:
+                self.audit.record(
+                    workspace_id=workspace,
+                    tool=tool_name,
+                    decision="denied",
+                    reason=RESULT_TERRITORY_DENIAL,
+                )
+                raise ToolError(RESULT_TERRITORY_DENIAL) from None
+            if ctx is not None and ctx.trusted:
+                raise
+            raise ToolError(
+                safe_error_message(exc, config=self._config)
+            ) from None
         self.audit.record(
             workspace_id=workspace,
             tool=tool_name,
             decision="allowed",
-            reason=decision.reason,
+            reason=safe_reason,
         )
         return result
 
@@ -301,6 +342,7 @@ def install_access(
     identity_resolver: IdentityResolver | None = None,
     capabilities: dict[str, ToolCapability] | None = None,
     runtime_mode: Literal["stdio", "http"] | None = None,
+    config: Any | None = None,
 ) -> Callable[[], None]:
     """Install access control on a FastMCP server; returns an uninstaller."""
     middleware = AccessMiddleware(
@@ -309,6 +351,7 @@ def install_access(
         identity_resolver=identity_resolver,
         capabilities=capabilities,
         runtime_mode=runtime_mode,
+        config=config,
     )
     mcp.add_middleware(middleware)
 

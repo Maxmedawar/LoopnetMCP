@@ -11,6 +11,8 @@ from cre_mcp.tools.listing_tools import (
 )
 from tests.conftest import load_fixture
 
+pytestmark = pytest.mark.usefixtures("legacy_loopnet_runtime")
+
 
 @pytest.mark.asyncio
 async def test_search_properties_top_level_keys():

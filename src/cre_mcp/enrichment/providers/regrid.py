@@ -13,6 +13,7 @@ from datetime import date
 from typing import Any
 from urllib.parse import urlencode
 
+from cre_mcp.access.context import resolve_runtime_config
 from cre_mcp.cache import SQLiteCache
 from cre_mcp.config import CreConfig
 from cre_mcp.enrichment.base import ProviderUnavailable
@@ -21,6 +22,7 @@ from cre_mcp.models.comps import CompsProviderResult, ValueEstimate
 from cre_mcp.models.enrichment import ParcelRecord
 from cre_mcp.models.geo import GeoRef
 from cre_mcp.models.listings import Listing
+from cre_mcp.source_rights.gate import require_url
 
 _BASE_URL = "https://app.regrid.com/api/v2/parcels"
 _PARCEL_CACHE_TTL = 365 * 24 * 60 * 60
@@ -126,7 +128,7 @@ class RegridProvider:
         fetch: FetchClient | None = None,
         cache: SQLiteCache | None = None,
     ):
-        self.config = config or CreConfig()
+        self.config = resolve_runtime_config(config)
         self.fetch = fetch or get_fetch_client()
         self.cache = cache or SQLiteCache(self.config.cache_db_path)
 
@@ -155,13 +157,25 @@ class RegridProvider:
         geo: GeoRef | None,
     ) -> ParcelRecord | None:
         """Return one paid Regrid record only after explicit key opt-in."""
-        token = self._api_key()
         if not address and not apn:
             return None
+        token = self._api_key()
+        request_path = "apn" if apn else "address"
+        record = require_url(
+            f"{_BASE_URL}/{request_path}",
+            method="GET",
+            config=self.config,
+        )
+        cache_ttl = (
+            record.operating_policy.persistent_cache_ttl_seconds
+            if record is not None
+            else 0
+        )
         cache_key = self._cache_key(address, apn, geo.county_fips if geo else None)
-        cached = await self.cache.get(cache_key)
-        if cached is not None:
-            return None if cached.get("missing") else ParcelRecord.model_validate(cached)
+        if cache_ttl > 0:
+            cached = await self.cache.get(cache_key)
+            if cached is not None:
+                return None if cached.get("missing") else ParcelRecord.model_validate(cached)
 
         if apn:
             endpoint = "apn"
@@ -182,11 +196,12 @@ class RegridProvider:
         )
         rows = _features(payload)
         parcel = map_regrid_parcel(rows[0]) if rows else None
-        await self.cache.set(
-            cache_key,
-            parcel.model_dump(mode="json") if parcel else {"missing": True},
-            ttl_seconds=_PARCEL_CACHE_TTL,
-        )
+        if cache_ttl > 0:
+            await self.cache.set(
+                cache_key,
+                parcel.model_dump(mode="json") if parcel else {"missing": True},
+                ttl_seconds=min(_PARCEL_CACHE_TTL, cache_ttl),
+            )
         return parcel
 
     async def get_comps(

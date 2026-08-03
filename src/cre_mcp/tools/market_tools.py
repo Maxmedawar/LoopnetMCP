@@ -5,7 +5,11 @@ import logging
 import re
 from typing import Any
 
-from cre_mcp.access.context import current_context
+from cre_mcp.access.context import (
+    current_context,
+    current_runtime_config,
+    resolve_runtime_config,
+)
 from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.access.territory import canonical_property_from_full_address
 from cre_mcp.comps.avm import estimate_value
@@ -23,6 +27,7 @@ from cre_mcp.models import Deal, GeoRef, Listing, ParcelRecord, SaleComp, ValueE
 from cre_mcp.models.market import MarketPack
 from cre_mcp.scoring.rubrics import thresholds as T
 from cre_mcp.sources.dedupe import normalize_address
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.tools.deal_tools import analyze_deal
 
 logger = logging.getLogger(__name__)
@@ -42,6 +47,9 @@ def _restricted_projection_required() -> bool:
 
 def _engine() -> MarketIntel:
     global _intel
+    runtime = current_runtime_config()
+    if runtime is not None:
+        return MarketIntel(runtime)
     if _intel is None:
         _intel = MarketIntel()
     return _intel
@@ -49,6 +57,9 @@ def _engine() -> MarketIntel:
 
 def _rent_engine() -> RentCompsService:
     global _rent_comps
+    runtime = current_runtime_config()
+    if runtime is not None:
+        return RentCompsService(runtime)
     if _rent_comps is None:
         _rent_comps = RentCompsService()
     return _rent_comps
@@ -56,6 +67,9 @@ def _rent_engine() -> RentCompsService:
 
 def _owner_engine() -> OwnerLookup:
     global _owner_lookup
+    runtime = current_runtime_config()
+    if runtime is not None:
+        return OwnerLookup(runtime)
     if _owner_lookup is None:
         _owner_lookup = OwnerLookup()
     return _owner_lookup
@@ -105,14 +119,16 @@ async def market_intel(location: str) -> dict:
     Returns:
         A partial MarketPack with per-metric provenance, coverage, score, and confidence.
     """
-    logger.info("market_intel called: location=%s", location)
+    safe_location = safe_source_reference(location)
+    logger.info("market_intel called: location=%s", safe_location)
     try:
         geo = await resolve(location)
         pack = await _engine().get_market_pack(geo)
         return _serialize(pack)
     except Exception as exc:
-        logger.error("market_intel error for %s: %s", location, exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("market_intel error for %s: %s", safe_location, message)
+        return {"error": message}
 
 
 async def compare_markets(locations: list[str]) -> dict:
@@ -124,7 +140,10 @@ async def compare_markets(locations: list[str]) -> dict:
     Returns:
         Ranked market intelligence results plus per-location resolution errors.
     """
-    logger.info("compare_markets called: locations=%s", locations)
+    logger.info(
+        "compare_markets called: locations=%s",
+        [safe_source_reference(location) for location in locations],
+    )
     if not locations:
         return {"error": "At least one location is required"}
     results = await asyncio.gather(*(market_intel(location) for location in locations))
@@ -156,11 +175,12 @@ async def get_rent_comparables(
     Returns:
         Coverage-aware ZORI, Census ACS, HUD FMR, and optional RentCast data.
     """
+    safe_location = safe_source_reference(location)
     logger.info(
         "get_rent_comparables called: location=%s bedrooms=%s property_type=%s",
-        location,
+        safe_location,
         bedrooms,
-        property_type,
+        safe_source_reference(property_type or ""),
     )
     if bedrooms is not None and bedrooms < 0:
         return {"error": "bedrooms must be zero or greater"}
@@ -174,8 +194,13 @@ async def get_rent_comparables(
         )
         return comps.model_dump(mode="json")
     except Exception as exc:
-        logger.error("get_rent_comparables error for %s: %s", location, exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error(
+            "get_rent_comparables error for %s: %s",
+            safe_location,
+            message,
+        )
+        return {"error": message}
 
 
 def _is_address(value: str) -> bool:
@@ -228,12 +253,20 @@ async def _address_comps(
     try:
         market = await _engine().get_market_pack(geo)
     except Exception as exc:
-        logger.warning("Market context unavailable for comps at %s: %s", address, exc)
+        logger.warning(
+            "Market context unavailable for comps at %s: %s",
+            safe_source_reference(address),
+            safe_error_message(exc),
+        )
         market = None
     try:
         comps = await sale_comps(geo, subject)
     except Exception as exc:
-        logger.warning("County sale comps unavailable for %s: %s", address, exc)
+        logger.warning(
+            "County sale comps unavailable for %s: %s",
+            safe_source_reference(address),
+            safe_error_message(exc),
+        )
         comps = []
     estimate = estimate_value(subject, comps, market)
     return await _paid_fallback(subject, geo, market, estimate, comps)
@@ -261,7 +294,11 @@ async def _paid_fallback(
     """Use an explicitly enabled paid source only after weak/empty free coverage."""
     if _free_comps_are_strong(estimate, comps):
         return subject, estimate, comps
-    selected = providers if providers is not None else _paid_comps_providers(CreConfig())
+    selected = (
+        providers
+        if providers is not None
+        else _paid_comps_providers(resolve_runtime_config())
+    )
     for provider in selected:
         try:
             result = await provider.get_comps(subject, geo)
@@ -271,7 +308,7 @@ async def _paid_fallback(
             logger.warning(
                 "Opt-in paid comps provider %s failed non-fatally: %s",
                 type(provider).__name__,
-                exc,
+                safe_error_message(exc),
             )
             continue
         paid_estimate = result.value_estimate
@@ -334,7 +371,12 @@ async def get_comps(
         Value estimate, comps used, confidence/error band, and plain-English context.
         ATTOM/Regrid are considered only when explicitly keyed and free coverage is weak.
     """
-    logger.info("get_comps called: source=%s subject=%s", source, url_or_id)
+    safe_subject = safe_source_reference(url_or_id, source=source)
+    logger.info(
+        "get_comps called: source=%s subject=%s",
+        safe_source_reference(source),
+        safe_subject,
+    )
     try:
         if _is_address(url_or_id):
             subject, value_estimate, comps = await _address_comps(url_or_id)
@@ -353,7 +395,7 @@ async def get_comps(
             paid_providers = (
                 []
                 if _free_comps_are_strong(value_estimate, comps)
-                else _paid_comps_providers(CreConfig())
+                else _paid_comps_providers(resolve_runtime_config())
             )
             if paid_providers:
                 geo = None
@@ -364,8 +406,8 @@ async def get_comps(
                 except Exception as exc:
                     logger.warning(
                         "Paid comps geography unavailable for %s: %s",
-                        subject.address,
-                        exc,
+                        safe_source_reference(subject.address or ""),
+                        safe_error_message(exc),
                     )
                 subject, value_estimate, comps = await _paid_fallback(
                     subject,
@@ -413,8 +455,9 @@ async def get_comps(
             ),
         }
     except Exception as exc:
-        logger.error("get_comps error for %s: %s", url_or_id, exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("get_comps error for %s: %s", safe_subject, message)
+        return {"error": message}
 
 
 def _location_for_subject(subject: Listing) -> str:

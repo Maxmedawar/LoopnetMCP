@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from cre_mcp.config import CreConfig
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.truth.models import DocumentRecord, FieldClaim
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,8 @@ class TruthStore:
     """Async façade over durable truth tables + a content-addressed blob store."""
 
     def __init__(self, config: CreConfig | None = None) -> None:
-        resolved = (config or CreConfig()).cache_db_path
+        self._config = config or CreConfig()
+        resolved = self._config.cache_db_path
         self.db_path = Path(resolved).expanduser()
         self.blob_dir = self.db_path.parent / "documents"
 
@@ -131,7 +133,11 @@ class TruthStore:
         try:
             return await asyncio.to_thread(self._save_document, record, blob, claims, ext)
         except Exception as exc:
-            logger.error("truth document save failed for %s: %s", record.deal_id, exc)
+            logger.error(
+                "truth document save failed for %s: %s",
+                safe_source_reference(record.deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     def _list_documents(self, deal_id: str) -> list[dict]:
@@ -170,7 +176,11 @@ class TruthStore:
         try:
             return await asyncio.to_thread(self._list_documents, deal_id)
         except Exception as exc:
-            logger.error("truth document list failed for %s: %s", deal_id, exc)
+            logger.error(
+                "truth document list failed for %s: %s",
+                safe_source_reference(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return []
 
     def _get_claims(self, deal_id: str) -> list[dict]:
@@ -186,7 +196,11 @@ class TruthStore:
         try:
             return await asyncio.to_thread(self._get_claims, deal_id)
         except Exception as exc:
-            logger.error("truth claim read failed for %s: %s", deal_id, exc)
+            logger.error(
+                "truth claim read failed for %s: %s",
+                safe_source_reference(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return []
 
 

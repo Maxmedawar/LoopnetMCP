@@ -13,6 +13,7 @@ from cre_mcp.deals.store import get_deal_store
 from cre_mcp.execution.debt import size_debt as size_context_debt
 from cre_mcp.execution.guardrails import capital_guardrail
 from cre_mcp.models import Deal, DealContext, InvestorRecord
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.tools.deal_tools import analyze_deal
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,11 @@ async def add_investor(
     Returns:
         Investor record plus the mandatory securities-attorney hard gate.
     """
-    logger.info("add_investor called: name=%s relationship=%s", name, relationship)
+    logger.info(
+        "add_investor called: name=%s relationship=%s",
+        safe_source_reference(name),
+        safe_source_reference(relationship),
+    )
     try:
         store = get_deal_store()
         investor_id = await store.add_investor(
@@ -76,8 +81,9 @@ async def add_investor(
         )
         return result
     except Exception as exc:
-        logger.error("add_investor error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("add_investor error: %s", message)
+        return {"error": message}
 
 
 async def list_investors() -> dict:
@@ -102,8 +108,9 @@ async def list_investors() -> dict:
             ),
         }
     except Exception as exc:
-        logger.error("list_investors error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("list_investors error: %s", message)
+        return {"error": message}
 
 
 async def record_commitment(
@@ -121,7 +128,11 @@ async def record_commitment(
     Returns:
         Commitment record explicitly separated from accepting funds.
     """
-    logger.info("record_commitment called: deal=%s investor=%s", deal_id, investor_id)
+    logger.info(
+        "record_commitment called: deal=%s investor=%s",
+        safe_source_reference(deal_id),
+        investor_id,
+    )
     try:
         store = get_deal_store()
         if await store.get_deal(deal_id) is None:
@@ -143,8 +154,9 @@ async def record_commitment(
             ),
         }
     except Exception as exc:
-        logger.error("record_commitment error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("record_commitment error: %s", message)
+        return {"error": message}
 
 
 async def check_solicitation(
@@ -162,12 +174,16 @@ async def check_solicitation(
     Returns:
         Fail-closed ComplianceCheck; only explicit allowlisted actions can pass preliminary gates.
     """
-    logger.info("check_solicitation called: mode=%s", mode)
+    logger.info(
+        "check_solicitation called: mode=%s",
+        safe_source_reference(mode),
+    )
     try:
         return screen_solicitation(mode, action).model_dump(mode="json")
     except Exception as exc:
-        logger.error("check_solicitation error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("check_solicitation error: %s", message)
+        return {"error": message}
 
 
 async def model_waterfall(
@@ -203,7 +219,11 @@ async def model_waterfall(
     Returns:
         WaterfallResult with yearly allocations, LP IRR/multiple, promote, assumptions, and gate.
     """
-    logger.info("model_waterfall called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "model_waterfall called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         structure: dict[str, Any] = {
@@ -240,8 +260,9 @@ async def model_waterfall(
                 structure[key] = value
         return calculate_waterfall(ctx, structure).model_dump(mode="json")
     except Exception as exc:
-        logger.error("model_waterfall error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("model_waterfall error: %s", message)
+        return {"error": message}
 
 
 async def draft_ppm(
@@ -269,7 +290,11 @@ async def draft_ppm(
     Returns:
         Clearly stamped DRAFT PPM skeleton with risks and hard gate.
     """
-    logger.info("draft_ppm called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "draft_ppm called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         compliance = screen_solicitation(mode, "prepare_private_draft")
         ctx = await _deal_context(url_or_id, source)
@@ -285,8 +310,9 @@ async def draft_ppm(
         draft["preliminary_compliance_check"] = compliance.model_dump(mode="json")
         return draft
     except Exception as exc:
-        logger.error("draft_ppm error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("draft_ppm error: %s", message)
+        return {"error": message}
 
 
 async def draft_form_d(
@@ -314,7 +340,11 @@ async def draft_form_d(
     Returns:
         Clearly stamped DRAFT Form D intake organizer with hard gate.
     """
-    logger.info("draft_form_d called: issuer=%s mode=%s", issuer_name, mode)
+    logger.info(
+        "draft_form_d called: issuer=%s mode=%s",
+        safe_source_reference(issuer_name),
+        safe_source_reference(mode),
+    )
     try:
         compliance = screen_solicitation(mode, "prepare_form_d_data")
         if offering_amount <= 0:
@@ -339,8 +369,9 @@ async def draft_form_d(
         draft["preliminary_compliance_check"] = compliance.model_dump(mode="json")
         return draft
     except Exception as exc:
-        logger.error("draft_form_d error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("draft_form_d error: %s", message)
+        return {"error": message}
 
 
 __all__ = [

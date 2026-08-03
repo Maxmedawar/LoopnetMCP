@@ -16,6 +16,7 @@ from cre_mcp.arbitrage.proposals import (
     draft_subtenant_outreach as compose_subtenant_outreach,
 )
 from cre_mcp.control.tenants import TENANTS, match_site
+from cre_mcp.source_rights.output import safe_error_message
 
 
 def _number(value: Any) -> float | None:
@@ -87,7 +88,7 @@ async def analyze_master_lease(
             personal_guarantee=personal_guarantee,
         )
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def find_arbitrage_opportunities(
@@ -104,7 +105,7 @@ async def find_arbitrage_opportunities(
         summary = dict(getattr(opportunities, "screening_summary", {}))
         return {**summary, "count": len(opportunities), "opportunities": opportunities}
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def draft_master_lease_proposal(
@@ -130,7 +131,7 @@ async def draft_master_lease_proposal(
             guaranteed=guaranteed,
         )
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def draft_subtenant_outreach(
@@ -164,7 +165,7 @@ async def draft_subtenant_outreach(
             drive_thru=drive_thru,
         )
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def master_lease_playbook(
@@ -357,7 +358,7 @@ async def master_lease_playbook(
             "risk_flags": economics["risk_flags"],
         }
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 __all__ = [

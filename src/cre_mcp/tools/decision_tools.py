@@ -4,6 +4,7 @@ from typing import Any
 
 from cre_mcp.decision.frontier import decision_frontier as _build_decision_frontier
 from cre_mcp.decision.profile import normalize_buyer
+from cre_mcp.source_rights.output import safe_error_message
 
 
 async def set_buyer_profile(profile: dict[str, Any]) -> dict[str, Any]:
@@ -22,7 +23,7 @@ async def set_buyer_profile(profile: dict[str, Any]) -> dict[str, Any]:
         normalized = normalize_buyer(profile or {})
         return {"buyer_profile": normalized.model_dump()}
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def decision_frontier(
@@ -35,7 +36,7 @@ async def decision_frontier(
     try:
         return _build_decision_frontier(deal, buyer, structures)
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 __all__ = ["decision_frontier", "set_buyer_profile"]

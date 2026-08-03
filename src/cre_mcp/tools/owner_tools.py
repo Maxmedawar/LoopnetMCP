@@ -2,10 +2,15 @@
 
 import logging
 
-from cre_mcp.access.context import current_context
+from cre_mcp.access.context import current_context, current_runtime_config
 from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.enrichment.owner import OwnerLookup
 from cre_mcp.models import OwnerRecord
+from cre_mcp.source_rights.output import (
+    safe_error_message,
+    safe_source_reference,
+    sanitize_payload,
+)
 
 logger = logging.getLogger(__name__)
 _lookup: OwnerLookup | None = None
@@ -13,6 +18,9 @@ _lookup: OwnerLookup | None = None
 
 def _engine() -> OwnerLookup:
     global _lookup
+    runtime = current_runtime_config()
+    if runtime is not None:
+        return OwnerLookup(runtime)
     if _lookup is None:
         _lookup = OwnerLookup()
     return _lookup
@@ -63,18 +71,21 @@ async def owner_lookup(
     """
     logger.info(
         "owner_lookup called: address=%s apn=%s county=%s",
-        address,
-        apn,
-        county,
+        safe_source_reference(address or ""),
+        safe_source_reference(apn or ""),
+        safe_source_reference(county or ""),
     )
     try:
         owner = await _engine().lookup(address=address, apn=apn, county=county)
         if owner is None:
             return {"error": "No parcel record found in the enabled provider chain"}
-        return _restricted_owner_projection(owner).model_dump(mode="json")
+        return sanitize_payload(
+            _restricted_owner_projection(owner).model_dump(mode="json")
+        )
     except Exception as exc:
-        logger.error("owner_lookup error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("owner_lookup error: %s", message)
+        return {"error": message}
 
 
 __all__ = ["owner_lookup"]

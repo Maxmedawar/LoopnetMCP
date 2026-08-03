@@ -7,6 +7,8 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from cre_mcp.source_rights.output import safe_error_message
+
 from .bankimport import import_bank_csv, match_receipts
 from .billing import (
     MANUAL_KINDS,
@@ -31,7 +33,7 @@ def _error(tool_name: str, exc: Exception) -> dict[str, str]:
     """Turn all implementation failures into a stable MCP-friendly result."""
 
     message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
-    message = message or exc.__class__.__name__
+    message = safe_error_message(message or exc.__class__.__name__)
     logger.error("%s error: %s", tool_name, message)
     return {"error": message}
 

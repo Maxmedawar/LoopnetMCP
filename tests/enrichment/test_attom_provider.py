@@ -16,6 +16,7 @@ from cre_mcp.enrichment.providers.attom import (
     map_attom_parcel,
 )
 from cre_mcp.models import GeoLevel, GeoRef, Listing
+from tests.conftest import write_cached_rights_registry
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "attom"
 
@@ -95,6 +96,11 @@ async def test_attom_paid_results_are_persisted_and_second_instance_skips_networ
     config = CreConfig(
         attom_api_key="fixture-key",
         cache_db_path=tmp_path / "paid.db",
+        source_rights_registry_path=write_cached_rights_registry(
+            tmp_path,
+            {"commercial.attom"},
+        ),
+        source_rights_enabled={"commercial.attom": True},
         _env_file=None,
     )
     first_fetch = AsyncMock()

@@ -16,6 +16,7 @@ from cre_mcp.sources.crexi.mapping import (
     build_search_body,
     map_asset,
 )
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +85,13 @@ class CrexiSource(ListingSource):
             )
 
         listings: list[Listing] = []
-        for asset in assets:
+        for index, asset in enumerate(assets):
             if not isinstance(asset, dict):
-                logger.debug("Ignoring non-object Crexi search item: %r", asset)
+                logger.debug(
+                    "Ignoring non-object Crexi search item at index=%d type=%s",
+                    index,
+                    type(asset).__name__,
+                )
                 continue
             listing = map_asset(asset)
             if _matches_numeric_filters(listing, query):
@@ -140,7 +145,7 @@ class CrexiSource(ListingSource):
             except Exception as exc:
                 logger.warning(
                     "Crexi broker recovery failed non-fatally for %s: %s",
-                    ref.source_id,
-                    exc,
+                    safe_source_reference(ref.source_id, source="crexi"),
+                    safe_error_message(exc, source="crexi"),
                 )
         return listing

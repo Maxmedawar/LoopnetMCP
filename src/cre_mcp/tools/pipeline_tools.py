@@ -11,6 +11,7 @@ from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.deals.store import PIPELINE_STAGES, DealStore, get_deal_store
 from cre_mcp.models import Listing
 from cre_mcp.scoring.rubrics import RUBRIC_REGISTRY
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.tools.deal_tools import analyze_deal, find_deals
 
 logger = logging.getLogger(__name__)
@@ -106,9 +107,9 @@ async def add_to_pipeline(
     """
     logger.info(
         "add_to_pipeline called: source=%s listing=%s stage=%s",
-        source,
-        url_or_id,
-        stage,
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+        safe_source_reference(stage),
     )
     try:
         DealStore._validate_stage(stage)
@@ -140,8 +141,9 @@ async def add_to_pipeline(
             "strategy": strategy,
         }
     except Exception as exc:
-        logger.error("add_to_pipeline error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("add_to_pipeline error: %s", message)
+        return {"error": message}
 
 
 async def update_deal_stage(
@@ -160,7 +162,11 @@ async def update_deal_stage(
     Returns:
         The updated pipeline row, or an error dictionary.
     """
-    logger.info("update_deal_stage called: deal=%s stage=%s", deal_id, stage)
+    logger.info(
+        "update_deal_stage called: deal=%s stage=%s",
+        safe_source_reference(deal_id),
+        safe_source_reference(stage),
+    )
     try:
         store = get_deal_store()
         if not await store.update_stage(deal_id, stage, note):
@@ -173,8 +179,9 @@ async def update_deal_stage(
             raise RuntimeError(f"updated deal could not be read: {deal_id}")
         return row
     except Exception as exc:
-        logger.error("update_deal_stage error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("update_deal_stage error: %s", message)
+        return {"error": message}
 
 
 async def assign_deal(
@@ -198,7 +205,11 @@ async def assign_deal(
     Returns:
         The updated accountability view of the deal.
     """
-    logger.info("assign_deal: %s owner=%s", deal_id, owner)
+    logger.info(
+        "assign_deal: %s owner=%s",
+        safe_source_reference(deal_id),
+        safe_source_reference(owner or ""),
+    )
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
@@ -216,8 +227,9 @@ async def assign_deal(
             return {"error": f"no pipeline deal with deal_id {deal_id!r} — save it first"}
         return {"assigned": updated}
     except Exception as exc:
-        logger.error("assign_deal error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("assign_deal error: %s", message)
+        return {"error": message}
 
 
 async def unassigned_deals() -> dict:
@@ -239,8 +251,9 @@ async def unassigned_deals() -> dict:
             "next_action_due=...)",
         }
     except Exception as exc:
-        logger.error("unassigned_deals error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("unassigned_deals error: %s", message)
+        return {"error": message}
 
 
 async def list_pipeline(stage: str | None = None) -> dict:
@@ -252,7 +265,7 @@ async def list_pipeline(stage: str | None = None) -> dict:
     Returns:
         A consistent object containing pipeline rows and count.
     """
-    logger.info("list_pipeline called: stage=%s", stage)
+    logger.info("list_pipeline called: stage=%s", safe_source_reference(stage or ""))
     try:
         deals = await get_deal_store().list_pipeline(stage)
         ctx = current_context()
@@ -275,8 +288,9 @@ async def list_pipeline(stage: str | None = None) -> dict:
             "count": len(deals),
         }
     except Exception as exc:
-        logger.error("list_pipeline error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("list_pipeline error: %s", message)
+        return {"error": message}
 
 
 async def save_search(
@@ -308,7 +322,11 @@ async def save_search(
     Returns:
         Saved-search id and query plus the pull-alert hosting disclosure.
     """
-    logger.info("save_search called: name=%s location=%s", name, location)
+    logger.info(
+        "save_search called: name=%s location=%s",
+        safe_source_reference(name),
+        safe_source_reference(location),
+    )
     try:
         if not name.strip():
             raise ValueError("name cannot be blank")
@@ -345,8 +363,9 @@ async def save_search(
             "hosting_note": ALERT_HOSTING_NOTE,
         }
     except Exception as exc:
-        logger.error("save_search error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("save_search error: %s", message)
+        return {"error": message}
 
 
 async def list_searches() -> dict:
@@ -365,8 +384,9 @@ async def list_searches() -> dict:
             "hosting_note": ALERT_HOSTING_NOTE,
         }
     except Exception as exc:
-        logger.error("list_searches error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("list_searches error: %s", message)
+        return {"error": message}
 
 
 async def check_alerts(search_id: int | None = None) -> dict:
@@ -378,7 +398,10 @@ async def check_alerts(search_id: int | None = None) -> dict:
     Returns:
         Only newly seen deals at/above each search's score floor, with pull-mode disclosure.
     """
-    logger.info("check_alerts called: search_id=%s", search_id)
+    logger.info(
+        "check_alerts called: search_id=%s",
+        safe_source_reference(search_id),
+    )
     try:
         store = get_deal_store()
         if search_id is not None:
@@ -492,8 +515,9 @@ async def check_alerts(search_id: int | None = None) -> dict:
             "hosting_note": ALERT_HOSTING_NOTE,
         }
     except Exception as exc:
-        logger.error("check_alerts error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("check_alerts error: %s", message)
+        return {"error": message}
 
 
 __all__ = [

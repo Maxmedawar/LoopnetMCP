@@ -7,6 +7,7 @@ import logging
 
 from cre_mcp.enrichment.nearby import nearby_brands as _nearby_brands
 from cre_mcp.enrichment.nearby import trade_area_anchors as _trade_area_anchors
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,9 @@ async def nearby_brands(
         )
         return {"brands": results, "count": len(results), "radius_m": radius_m}
     except Exception as exc:
-        logger.error("nearby_brands error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("nearby_brands error: %s", message)
+        return {"error": message}
 
 
 async def trade_area_anchors(
@@ -71,7 +73,7 @@ async def trade_area_anchors(
         lat,
         lon,
         radius_m,
-        subject_category,
+        safe_source_reference(subject_category or ""),
     )
     try:
         return await asyncio.to_thread(
@@ -82,8 +84,9 @@ async def trade_area_anchors(
             subject_category,
         )
     except Exception as exc:
-        logger.error("trade_area_anchors error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("trade_area_anchors error: %s", message)
+        return {"error": message}
 
 
 __all__ = ["nearby_brands", "trade_area_anchors"]

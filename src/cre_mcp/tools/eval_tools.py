@@ -8,6 +8,7 @@ import logging
 from cre_mcp.deals.store import get_deal_store
 from cre_mcp.eval.backtest import backtest, load_csv
 from cre_mcp.eval.status import set_score_calibrated
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,10 @@ async def record_deal_outcome(
     Returns:
         The persisted score/outcome row or an error dictionary.
     """
-    logger.info("record_deal_outcome called: deal=%s", deal_id)
+    logger.info(
+        "record_deal_outcome called: deal=%s",
+        safe_source_reference(deal_id),
+    )
     try:
         store = get_deal_store()
         saved = await store.record_outcome(
@@ -73,8 +77,9 @@ async def record_deal_outcome(
             ),
         }
     except Exception as exc:
-        logger.error("record_deal_outcome error: %s", exc)
-        return {"error": str(exc)}
+        message = safe_error_message(exc)
+        logger.error("record_deal_outcome error: %s", message)
+        return {"error": message}
 
 
 async def backtest_score(dataset_path: str | None = None) -> dict:
@@ -88,7 +93,10 @@ async def backtest_score(dataset_path: str | None = None) -> dict:
         CalibrationReport with grade hit rates, Brier loss, rank discrimination,
         Wilson confidence intervals, calibration status, and caveats.
     """
-    logger.info("backtest_score called: dataset=%s", dataset_path or "DealStore")
+    logger.info(
+        "backtest_score called: dataset=%s",
+        safe_source_reference(dataset_path or "DealStore"),
+    )
     try:
         if dataset_path is not None:
             rows = await asyncio.to_thread(load_csv, dataset_path)
@@ -98,9 +106,10 @@ async def backtest_score(dataset_path: str | None = None) -> dict:
         set_score_calibrated(report.calibrated)
         return report.model_dump(mode="json")
     except Exception as exc:
-        logger.error("backtest_score error: %s", exc)
+        message = safe_error_message(exc)
+        logger.error("backtest_score error: %s", message)
         set_score_calibrated(False)
-        return {"error": str(exc)}
+        return {"error": message}
 
 
 __all__ = ["backtest_score", "record_deal_outcome"]

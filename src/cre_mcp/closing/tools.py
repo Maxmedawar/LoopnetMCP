@@ -6,6 +6,8 @@ import logging
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from cre_mcp.source_rights.output import safe_error_message
+
 from .command_center import closing_day as _closing_day
 from .funding import verify_funding_package as _verify_funding_package
 from .obligations_extract import (
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def _error(tool_name: str, exc: Exception) -> dict[str, str]:
     message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
-    message = message or exc.__class__.__name__
+    message = safe_error_message(message or exc.__class__.__name__)
     logger.error("%s error: %s", tool_name, message)
     return {"error": message}
 

@@ -47,7 +47,7 @@ async def test_analyze_deal_score_confidence_rises_with_parcel_record():
     source = Mock(capabilities=SourceCapabilities(detail_is_expensive=True))
     source.get_detail = AsyncMock(return_value=listing)
     fake_registry = Mock()
-    fake_registry.get.return_value = source
+    fake_registry.get_authorized.return_value = source
     market_engine = Mock()
     market_engine.get_market_pack = AsyncMock(return_value=_market())
     parcel = ParcelRecord(

@@ -11,9 +11,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
+from cre_mcp.access.context import current_runtime_config
 from cre_mcp.config import CreConfig
 from cre_mcp.models.execution import DDItem
 from cre_mcp.models.listings import Listing
+from cre_mcp.source_rights.output import (
+    safe_error_message,
+    safe_source_reference,
+    sanitize_listing,
+    sanitize_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +50,15 @@ class DealStore:
         config: CreConfig | None = None,
     ) -> None:
         if isinstance(db_path, CreConfig):
-            resolved = db_path.cache_db_path
+            selected_config = db_path
         else:
-            resolved = db_path or (config or CreConfig()).cache_db_path
+            selected_config = config or current_runtime_config() or CreConfig()
+        self._config = selected_config
+        resolved = (
+            selected_config.cache_db_path
+            if isinstance(db_path, CreConfig)
+            else db_path or selected_config.cache_db_path
+        )
         self.db_path = Path(resolved).expanduser()
 
     def _connect(self) -> sqlite3.Connection:
@@ -272,6 +285,11 @@ class DealStore:
         grade: str | None,
         strategy: str | None,
     ) -> str:
+        listing = sanitize_listing(
+            listing,
+            purpose="storage",
+            config=self._config,
+        )
         deal_id = self.deal_id_for(listing)
         now = self._now()
         payload = listing.model_dump_json()
@@ -321,7 +339,16 @@ class DealStore:
                 strategy,
             )
         except Exception as exc:
-            logger.error("deal store save failed for %s:%s: %s", listing.source, listing.source_id, exc)
+            logger.error(
+                "deal store save failed for %s:%s: %s",
+                safe_error_message(listing.source, config=self._config),
+                safe_source_reference(
+                    listing.source_id,
+                    source=listing.source,
+                    config=self._config,
+                ),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     @staticmethod
@@ -371,9 +398,14 @@ class DealStore:
     async def get_deal(self, deal_id: str) -> dict[str, Any] | None:
         """Return a stored deal plus its current diligence items."""
         try:
-            return await asyncio.to_thread(self._get_deal, deal_id)
+            result = await asyncio.to_thread(self._get_deal, deal_id)
+            return sanitize_payload(result, config=self._config)
         except Exception as exc:
-            logger.error("deal store read failed for %s: %s", deal_id, exc)
+            logger.error(
+                "deal store read failed for %s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     @staticmethod
@@ -500,7 +532,11 @@ class DealStore:
         except ValueError:
             raise
         except Exception as exc:
-            logger.error("outcome persistence failed for %s: %s", normalized_id, exc)
+            logger.error(
+                "outcome persistence failed for %s: %s",
+                safe_error_message(normalized_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return False
 
     def _get_outcomes(self) -> list[dict[str, Any]]:
@@ -546,7 +582,10 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._get_outcomes)
         except Exception as exc:
-            logger.error("outcome read failed: %s", exc)
+            logger.error(
+                "outcome read failed: %s",
+                safe_error_message(exc, config=self._config),
+            )
             return []
 
     def _save_dd_items(self, deal_id: str, items: Iterable[DDItem]) -> bool:
@@ -603,7 +642,11 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._save_dd_items, deal_id, materialized)
         except Exception as exc:
-            logger.error("diligence persistence failed for %s: %s", deal_id, exc)
+            logger.error(
+                "diligence persistence failed for %s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return False
 
     def _get_dd_items(self, deal_id: str) -> list[dict[str, Any]]:
@@ -623,7 +666,11 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._get_dd_items, deal_id)
         except Exception as exc:
-            logger.error("diligence read failed for %s: %s", deal_id, exc)
+            logger.error(
+                "diligence read failed for %s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return []
 
     def _save_ops_events(
@@ -712,7 +759,11 @@ class DealStore:
         except ValueError:
             raise
         except Exception as exc:
-            logger.error("operating-calendar persistence failed for %s: %s", deal_id, exc)
+            logger.error(
+                "operating-calendar persistence failed for %s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return False
 
     def _get_ops_events(self, deal_id: str) -> list[dict[str, Any]]:
@@ -740,7 +791,11 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._get_ops_events, deal_id)
         except Exception as exc:
-            logger.error("operating-calendar read failed for %s: %s", deal_id, exc)
+            logger.error(
+                "operating-calendar read failed for %s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return []
 
     def _set_ops_event_status(self, deal_id: str, key: str, status: str) -> bool:
@@ -831,7 +886,12 @@ class DealStore:
         except ValueError:
             raise
         except Exception as exc:
-            logger.error("diligence status update failed for %s/%s: %s", deal_id, key, exc)
+            logger.error(
+                "diligence status update failed for %s/%s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(key, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return False
 
     @staticmethod
@@ -973,7 +1033,11 @@ class DealStore:
         except ValueError:
             raise
         except Exception as exc:
-            logger.error("pipeline update failed for %s: %s", deal_id, exc)
+            logger.error(
+                "pipeline update failed for %s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return False
 
     def _list_pipeline(self, stage: str | None) -> list[dict[str, Any]]:
@@ -1040,11 +1104,15 @@ class DealStore:
         """Return pipeline rows, optionally filtered to one validated stage."""
         normalized = self._validate_stage(stage) if stage is not None else None
         try:
-            return await asyncio.to_thread(self._list_pipeline, normalized)
+            result = await asyncio.to_thread(self._list_pipeline, normalized)
+            return sanitize_payload(result, config=self._config)
         except ValueError:
             raise
         except Exception as exc:
-            logger.error("pipeline list failed: %s", exc)
+            logger.error(
+                "pipeline list failed: %s",
+                safe_error_message(exc, config=self._config),
+            )
             return []
 
     def _save_search(
@@ -1083,7 +1151,11 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._save_search, name, query, min_score)
         except Exception as exc:
-            logger.error("saved search create failed for %s: %s", name, exc)
+            logger.error(
+                "saved search create failed for %s: %s",
+                safe_error_message(name, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     @staticmethod
@@ -1117,7 +1189,11 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._get_search, search_id)
         except Exception as exc:
-            logger.error("saved search read failed for %s: %s", search_id, exc)
+            logger.error(
+                "saved search read failed for %s: %s",
+                safe_error_message(search_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     def _list_searches(self) -> list[dict[str, Any]]:
@@ -1139,7 +1215,10 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._list_searches)
         except Exception as exc:
-            logger.error("saved search list failed: %s", exc)
+            logger.error(
+                "saved search list failed: %s",
+                safe_error_message(exc, config=self._config),
+            )
             return []
 
     def _seen_keys(self, search_id: int) -> set[str]:
@@ -1155,7 +1234,11 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._seen_keys, search_id)
         except Exception as exc:
-            logger.error("seen-match read failed for search %s: %s", search_id, exc)
+            logger.error(
+                "seen-match read failed for search %s: %s",
+                safe_error_message(search_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return set()
 
     def _record_seen(self, search_id: int, keys: Iterable[str]) -> int:
@@ -1186,7 +1269,11 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._record_seen, search_id, materialized)
         except Exception as exc:
-            logger.error("seen-match write failed for search %s: %s", search_id, exc)
+            logger.error(
+                "seen-match write failed for search %s: %s",
+                safe_error_message(search_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return 0
 
     @staticmethod
@@ -1268,7 +1355,11 @@ class DealStore:
                 contact,
             )
         except Exception as exc:
-            logger.error("investor create failed for %s: %s", normalized_name, exc)
+            logger.error(
+                "investor create failed for %s: %s",
+                safe_error_message(normalized_name, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     @staticmethod
@@ -1339,7 +1430,10 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._list_investors)
         except Exception as exc:
-            logger.error("investor list failed: %s", exc)
+            logger.error(
+                "investor list failed: %s",
+                safe_error_message(exc, config=self._config),
+            )
             return []
 
     async def get_investor(self, investor_id: int) -> dict[str, Any] | None:
@@ -1418,9 +1512,9 @@ class DealStore:
         except Exception as exc:
             logger.error(
                 "commitment write failed for deal %s/investor %s: %s",
-                deal_id,
-                investor_id,
-                exc,
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(investor_id, config=self._config),
+                safe_error_message(exc, config=self._config),
             )
             return None
 
@@ -1495,7 +1589,11 @@ class DealStore:
                 exchange_deadline,
             )
         except Exception as exc:
-            logger.error("exchange create failed for %s: %s", relinquished_deal_id, exc)
+            logger.error(
+                "exchange create failed for %s: %s",
+                safe_error_message(relinquished_deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     def _get_exchange_record(self, exchange_id: int) -> dict[str, Any] | None:
@@ -1543,7 +1641,11 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._get_exchange_record, exchange_id)
         except Exception as exc:
-            logger.error("exchange read failed for %s: %s", exchange_id, exc)
+            logger.error(
+                "exchange read failed for %s: %s",
+                safe_error_message(exchange_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     def _add_exchange_replacement(
@@ -1599,9 +1701,9 @@ class DealStore:
         except Exception as exc:
             logger.error(
                 "replacement identification write failed for exchange %s/deal %s: %s",
-                exchange_id,
-                deal_id,
-                exc,
+                safe_error_message(exchange_id, config=self._config),
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
             )
             return False
 
@@ -1651,9 +1753,13 @@ class DealStore:
     async def list_deals(self) -> list[dict[str, Any]]:
         """Return compact persisted-deal summaries, newest first."""
         try:
-            return await asyncio.to_thread(self._list_deals)
+            result = await asyncio.to_thread(self._list_deals)
+            return sanitize_payload(result, config=self._config)
         except Exception as exc:
-            logger.error("deal store list failed: %s", exc)
+            logger.error(
+                "deal store list failed: %s",
+                safe_error_message(exc, config=self._config),
+            )
             return []
 
     # --- Shadow-IC + deal-event timeline (Phase 30 memory layer) ---
@@ -1714,11 +1820,30 @@ class DealStore:
         can be measured honestly.
         """
         try:
+            system = sanitize_payload(
+                system,
+                purpose="storage",
+                config=self._config,
+            )
+            expert = sanitize_payload(
+                expert,
+                purpose="storage",
+                config=self._config,
+            )
             return await asyncio.to_thread(
-                self._record_ic_decision, deal_id, system_verdict, system, expert_verdict, expert
+                self._record_ic_decision,
+                deal_id,
+                system_verdict,
+                system,
+                expert_verdict,
+                expert,
             )
         except Exception as exc:
-            logger.error("ic decision write failed for %s: %s", deal_id, exc)
+            logger.error(
+                "ic decision write failed for %s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     def _log_event(
@@ -1756,11 +1881,20 @@ class DealStore:
         if not event_type or not event_type.strip():
             raise ValueError("event_type is required")
         try:
+            detail = sanitize_payload(
+                detail,
+                purpose="storage",
+                config=self._config,
+            )
             return await asyncio.to_thread(
                 self._log_event, deal_id, event_type.strip(), detail, event_ts
             )
         except Exception as exc:
-            logger.error("deal event write failed for %s: %s", deal_id, exc)
+            logger.error(
+                "deal event write failed for %s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
             return None
 
     def _get_timeline(self, deal_id: str) -> dict[str, Any]:
@@ -1809,10 +1943,18 @@ class DealStore:
     async def get_deal_timeline(self, deal_id: str) -> dict[str, Any]:
         """Return a deal's full event timeline plus its recorded IC decisions."""
         try:
-            return await asyncio.to_thread(self._get_timeline, deal_id)
+            result = await asyncio.to_thread(self._get_timeline, deal_id)
+            return sanitize_payload(result, config=self._config)
         except Exception as exc:
-            logger.error("deal timeline read failed for %s: %s", deal_id, exc)
-            return {"deal_id": deal_id, "events": [], "ic_decisions": []}
+            logger.error(
+                "deal timeline read failed for %s: %s",
+                safe_error_message(deal_id, config=self._config),
+                safe_error_message(exc, config=self._config),
+            )
+            return sanitize_payload(
+                {"deal_id": deal_id, "events": [], "ic_decisions": []},
+                config=self._config,
+            )
 
     def _ic_scorecard(self) -> dict[str, Any]:
         _GO = {"proceed", "proceed_with_conditions"}
@@ -1857,13 +1999,14 @@ class DealStore:
         try:
             return await asyncio.to_thread(self._ic_scorecard)
         except Exception as exc:
-            logger.error("ic scorecard failed: %s", exc)
-            return {"error": str(exc)}
+            message = safe_error_message(exc, config=self._config)
+            logger.error("ic scorecard failed: %s", message)
+            return {"error": message}
 
 
 def get_deal_store(config: CreConfig | None = None) -> DealStore:
     """Build a lightweight store façade over the configured shared database."""
-    return DealStore(config=config or CreConfig())
+    return DealStore(config=config)
 
 
 __all__ = [

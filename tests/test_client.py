@@ -22,7 +22,12 @@ SAMPLE_HTML = "<html><body><h1>Test</h1></body></html>"
 
 def _fast_config(**overrides) -> LoopnetConfig:
     """Config with no rate-limit delay and fast retries for tests."""
-    defaults = {"request_delay_seconds": 0.0, "max_retries": 3, "timeout_seconds": 5.0}
+    defaults = {
+        "request_delay_seconds": 0.0,
+        "max_retries": 3,
+        "timeout_seconds": 5.0,
+        "source_rights_enabled": {"listing.loopnet": True},
+    }
     defaults.update(overrides)
     return LoopnetConfig(**defaults)
 
@@ -50,9 +55,14 @@ async def test_fetch_success():
 async def test_fetch_cache_hit():
     cache = TTLCache()
     cache.set(TEST_URL, SAMPLE_HTML)
-    async with LoopnetClient(config=_fast_config(), cache=cache) as client:
-        result = await client.fetch(TEST_URL)
+    with patch("cre_mcp.scraper.client.AsyncSession") as MockSession:
+        mock_session = MockSession.return_value
+        mock_session.get = AsyncMock(return_value=MockResponse(200, SAMPLE_HTML))
+        mock_session.close = AsyncMock()
+        async with LoopnetClient(config=_fast_config(), cache=cache) as client:
+            result = await client.fetch(TEST_URL)
     assert result == SAMPLE_HTML
+    mock_session.get.assert_awaited_once()
 
 
 @pytest.mark.asyncio

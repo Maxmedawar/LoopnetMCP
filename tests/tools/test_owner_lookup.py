@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from cre_mcp.access.context import local_context, use_context
 from cre_mcp.models import OwnerRecord, ParcelRecord
 from cre_mcp.server import mcp
 from cre_mcp.tools.owner_tools import owner_lookup
@@ -37,7 +38,10 @@ def _owner() -> OwnerRecord:
 async def test_owner_lookup_returns_normalized_owner_record():
     engine = Mock()
     engine.lookup = AsyncMock(return_value=_owner())
-    with patch("cre_mcp.tools.owner_tools._engine", return_value=engine):
+    with (
+        patch("cre_mcp.tools.owner_tools._engine", return_value=engine),
+        use_context(local_context()),
+    ):
         result = await owner_lookup(
             address="100 A S Elm St",
             county="Guilford County, NC",

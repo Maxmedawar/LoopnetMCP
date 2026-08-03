@@ -1,0 +1,952 @@
+{
+  "schema_version": 1,
+  "defaults": {
+    "source_kind": "automated",
+    "method": "documented or observed HTTP API/download",
+    "methods": ["GET"],
+    "enabled_by_default": false,
+    "rights_state": "UNKNOWN",
+    "hosted_cloud_allowed": false,
+    "trusted_local_only": true,
+    "official_evidence_urls": [],
+    "evidence_verified_on": null,
+    "evidence_status": "pending",
+    "signed_contract_required": false,
+    "contract_proof_present": false,
+    "required_proofs": ["exact primary rights evidence", "hosted delivery proof"],
+    "allowances": {
+      "commercial_display": false,
+      "derived_analytics": false,
+      "ai_ml_use": false,
+      "raw_retention": false,
+      "redistribution": false
+    },
+    "disclosures": {
+      "attribution": [],
+      "disclaimer": [],
+      "delivery_proven": false
+    },
+    "robots_policy": "unverified; no hosted automation",
+    "api_policy": "unverified; no hosted automation",
+    "operating_policy": {
+      "delay_seconds": 1.0,
+      "max_concurrency": 1,
+      "memory_cache_ttl_seconds": 0,
+      "persistent_cache_ttl_seconds": 0,
+      "raw_retention_ttl_seconds": 0
+    },
+    "query_credentials": ["access_token", "api-key", "api_key", "apikey", "app_token", "key", "token"],
+    "raw_storage_allowed": false,
+    "raw_output_allowed": false,
+    "adapter_names": [],
+    "adapter_paths": [],
+    "url_rules": [],
+    "egress_managed_by": null,
+    "notes": "Deny-first inventory record. A feature toggle is not rights approval."
+  },
+  "sources": [
+    {
+      "source_id": "listing.loopnet",
+      "owner": "CoStar Group / LoopNet",
+      "dataset": "LoopNet commercial property listing pages",
+      "method": "automated page retrieval with browser fallback",
+      "rights_state": "PROHIBITED",
+      "adapter_names": ["loopnet"],
+      "adapter_paths": [
+        "cre_mcp.sources.loopnet",
+        "cre_mcp.scraper.client",
+        "cre_mcp.scraper.browser"
+      ],
+      "url_rules": [{"host": "www.loopnet.com", "path_prefix": "/"}],
+      "required_proofs": ["written permission covering scraping, extraction, database creation, hosted display, and retention"],
+      "robots_policy": "automated scraping prohibited absent written permission",
+      "api_policy": "no approved hosted API/data license on file",
+      "notes": "Hard block: scraping, data extraction, and database creation are prohibited absent written permission."
+    },
+    {
+      "source_id": "listing.crexi",
+      "owner": "Crexi",
+      "dataset": "Crexi universal-search and asset JSON services",
+      "method": "automated private JSON endpoint retrieval with browser fallback",
+      "methods": ["GET", "POST", "OPTIONS"],
+      "rights_state": "PROHIBITED",
+      "adapter_names": ["crexi"],
+      "adapter_paths": ["cre_mcp.sources.crexi", "cre_mcp.http.browser"],
+      "url_rules": [
+        {"host": "api.crexi.com", "path_prefix": "/"},
+        {"host": "www.crexi.com", "path_prefix": "/"}
+      ],
+      "required_proofs": ["written authorization for automated collection and hosted use"],
+      "robots_policy": "unauthorized automated gathering prohibited",
+      "api_policy": "private/undocumented endpoint; no approved hosted contract on file",
+      "notes": "Hard block: automated scraping and unauthorized automated gathering are prohibited."
+    },
+    {
+      "source_id": "listing.auction_com",
+      "owner": "Auction.com",
+      "dataset": "Auction.com pages and GraphQL listing service",
+      "method": "automated GraphQL/page retrieval with anti-bot fallback",
+      "methods": ["GET", "POST", "OPTIONS"],
+      "rights_state": "PROHIBITED",
+      "adapter_names": ["auction_com"],
+      "adapter_paths": [
+        "cre_mcp.sources.distressed.auctioncom",
+        "cre_mcp.http.browser"
+      ],
+      "url_rules": [
+        {"host": "www.auction.com", "path_prefix": "/"},
+        {"host": "graph.auction.com", "path_prefix": "/"}
+      ],
+      "required_proofs": ["written permission covering scraping, monitoring, copying, circumvention, retention, and hosted display"],
+      "robots_policy": "scraping, monitoring, copying, and circumvention prohibited",
+      "api_policy": "no approved hosted GraphQL license on file",
+      "notes": "Hard block."
+    },
+    {
+      "source_id": "listing.hud_reo",
+      "owner": "U.S. Department of Housing and Urban Development",
+      "dataset": "FHA single-family REO ArcGIS layer",
+      "adapter_names": ["hud_reo"],
+      "adapter_paths": ["cre_mcp.sources.distressed.hud_reo"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/VTyQ9soqVukalItT/arcgis/rest/services/SF_REO/FeatureServer/0"}],
+      "official_evidence_urls": ["https://services.arcgis.com/VTyQ9soqVukalItT/arcgis/rest/services/SF_REO/FeatureServer/0"],
+      "notes": "Blocked pending exact layer license, display, retention, and redistribution evidence."
+    },
+    {
+      "source_id": "listing.county_distressed",
+      "owner": "Configured county governments",
+      "dataset": "County foreclosure and tax-sale adapter",
+      "adapter_names": ["county"],
+      "adapter_paths": ["cre_mcp.sources.distressed.county"],
+      "egress_managed_by": "exact listing.county_distressed.* layer records",
+      "notes": "Umbrella adapter record. Exact layer records follow and remain blocked."
+    },
+    {
+      "source_id": "listing.county_distressed.guilford",
+      "owner": "Guilford County, North Carolina",
+      "dataset": "ForeclosuresPublic FeatureServer",
+      "adapter_paths": ["cre_mcp.sources.distressed.county:37081"],
+      "url_rules": [{"host": "gcgis.guilfordcountync.gov", "path_prefix": "/arcgis/rest/services/Foreclosure/ForeclosuresPublic/FeatureServer/0"}],
+      "official_evidence_urls": ["https://gcgis.guilfordcountync.gov/arcgis/rest/services/Foreclosure/ForeclosuresPublic/FeatureServer/0"]
+    },
+    {
+      "source_id": "listing.county_distressed.yavapai",
+      "owner": "Yavapai County, Arizona",
+      "dataset": "Tax Sale map FeatureServer",
+      "adapter_paths": ["cre_mcp.sources.distressed.county:04025"],
+      "url_rules": [{"host": "services1.arcgis.com", "path_prefix": "/BajuNXbtZNiBKFkx/arcgis/rest/services/Tax_Sale_map_Manual_Load_for_Tax_Sale/FeatureServer/0"}],
+      "official_evidence_urls": ["https://services1.arcgis.com/BajuNXbtZNiBKFkx/arcgis/rest/services/Tax_Sale_map_Manual_Load_for_Tax_Sale/FeatureServer/0"]
+    },
+    {
+      "source_id": "listing.county_distressed.douglas",
+      "owner": "Douglas County, Colorado",
+      "dataset": "Tax Sale List Locations FeatureServer",
+      "adapter_paths": ["cre_mcp.sources.distressed.county:08035"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/seTexOicoRXDvRsJ/arcgis/rest/services/Tax_Sale_List_Locations/FeatureServer/0"}],
+      "official_evidence_urls": ["https://services.arcgis.com/seTexOicoRXDvRsJ/arcgis/rest/services/Tax_Sale_List_Locations/FeatureServer/0"]
+    },
+    {
+      "source_id": "geo.census_geocoder",
+      "owner": "U.S. Census Bureau",
+      "dataset": "Census Geocoding Services",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.geo.resolver"],
+      "url_rules": [{"host": "geocoding.geo.census.gov", "path_prefix": "/geocoder/"}],
+      "required_proofs": ["non-reidentification control", "prominent non-endorsement notice delivery", "exact API policy evidence"],
+      "disclosures": {
+        "attribution": ["U.S. Census Bureau"],
+        "disclaimer": ["No Census Bureau endorsement is implied."],
+        "delivery_proven": false
+      },
+      "api_policy": "conditional; delivery proof absent"
+    },
+    {
+      "source_id": "geo.hud_usps_crosswalk",
+      "owner": "HUD USER / U.S. Postal Service",
+      "dataset": "HUD USPS ZIP crosswalk",
+      "rights_state": "CONTRACT_REQUIRED",
+      "signed_contract_required": true,
+      "adapter_paths": ["cre_mcp.geo.crosswalk"],
+      "url_rules": [{"host": "www.huduser.gov", "path_prefix": "/hudapi/public/usps"}],
+      "official_evidence_urls": ["https://www.huduser.gov/portal/usps/sublicense_agreement.html"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["executed sublicense", "security-condition implementation", "proprietary-notice delivery proof", "active HUD token evidence"],
+      "disclosures": {
+        "attribution": ["HUD USPS ZIP crosswalk; retain required proprietary notices."],
+        "disclaimer": [],
+        "delivery_proven": false
+      },
+      "api_policy": "sublicense/security conditions apply",
+      "notes": "Not generic public-domain data."
+    },
+    {
+      "source_id": "market.census_acs",
+      "owner": "U.S. Census Bureau",
+      "dataset": "American Community Survey 5-year API",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.market.census:acs5_profile"],
+      "url_rules": [{"host": "api.census.gov", "path_prefix": "/data/"}],
+      "required_proofs": ["non-reidentification control", "prominent non-endorsement notice delivery", "exact dataset/API policy evidence"],
+      "disclosures": {
+        "attribution": ["U.S. Census Bureau, American Community Survey; include access date."],
+        "disclaimer": ["No Census Bureau endorsement is implied."],
+        "delivery_proven": false
+      },
+      "api_policy": "conditional; delivery proof absent"
+    },
+    {
+      "source_id": "market.census_bps",
+      "owner": "U.S. Census Bureau",
+      "dataset": "Building Permits Survey county annual files",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.market.census:building_permits"],
+      "url_rules": [{"host": "www2.census.gov", "path_prefix": "/econ/bps/County/"}],
+      "required_proofs": ["non-reidentification control", "prominent non-endorsement notice delivery", "exact file rights evidence"],
+      "disclosures": {
+        "attribution": ["U.S. Census Bureau, Building Permits Survey; include access date."],
+        "disclaimer": ["No Census Bureau endorsement is implied."],
+        "delivery_proven": false
+      }
+    },
+    {
+      "source_id": "market.bls_qcew_laus",
+      "owner": "U.S. Bureau of Labor Statistics",
+      "dataset": "QCEW and LAUS series through BLS Public Data API",
+      "method": "BLS Public Data API POST",
+      "methods": ["POST"],
+      "rights_state": "CONDITIONAL",
+      "adapter_names": ["bls"],
+      "adapter_paths": ["cre_mcp.market.bls"],
+      "url_rules": [{"host": "api.bls.gov", "path_prefix": "/publicAPI/v2/timeseries/data/"}],
+      "required_proofs": ["access-date citation delivery", "required BLS quality disclaimer delivery", "rate-compliance proof"],
+      "disclosures": {
+        "attribution": ["U.S. Bureau of Labor Statistics; include the date accessed."],
+        "disclaimer": ["Required BLS quality disclaimer must accompany delivered data."],
+        "delivery_proven": false
+      },
+      "api_policy": "conditional on rate and disclosure compliance"
+    },
+    {
+      "source_id": "market.fred",
+      "owner": "Federal Reserve Bank of St. Louis",
+      "dataset": "FRED series observations",
+      "rights_state": "PROHIBITED",
+      "adapter_names": ["fred"],
+      "adapter_paths": ["cre_mcp.market.fred"],
+      "url_rules": [{"host": "api.stlouisfed.org", "path_prefix": "/fred/"}],
+      "required_proofs": ["new terms expressly permitting this ML/AI, storage, cache, and archive use"],
+      "query_credentials": ["api_key"],
+      "api_policy": "current terms prohibit ML/AI use and storage/cache/archive",
+      "notes": "Hard block and zero cache."
+    },
+    {
+      "source_id": "market.fhfa_hpi",
+      "owner": "Federal Housing Finance Agency",
+      "dataset": "All-Transactions state HPI quarterly CSV",
+      "rights_state": "CONDITIONAL",
+      "adapter_names": ["fhfa"],
+      "adapter_paths": ["cre_mcp.market.fhfa"],
+      "url_rules": [{"host": "www.fhfa.gov", "path_prefix": "/hpi/download/quarterly_datasets/"}],
+      "official_evidence_urls": ["https://www.fhfa.gov/about/fhfa-policies/api-terms-of-service"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["prominent exact FHFA non-endorsement notice delivery", "fixed call-limit compliance proof"],
+      "allowances": {
+        "commercial_display": true,
+        "derived_analytics": true,
+        "ai_ml_use": false,
+        "raw_retention": false,
+        "redistribution": false
+      },
+      "disclosures": {
+        "attribution": ["Federal Housing Finance Agency"],
+        "disclaimer": ["Exact FHFA non-endorsement notice required by the API terms."],
+        "delivery_proven": false
+      },
+      "api_policy": "search/display/analyze/retrieve permitted only with required notice and call limits"
+    },
+    {
+      "source_id": "market.hud_fmr",
+      "owner": "U.S. Department of Housing and Urban Development",
+      "dataset": "HUD Fair Market Rent and income-limit API",
+      "rights_state": "UNKNOWN",
+      "adapter_names": ["hud"],
+      "adapter_paths": ["cre_mcp.market.hud"],
+      "url_rules": [
+        {"host": "www.huduser.gov", "path_prefix": "/hudapi/public/fmr/"},
+        {"host": "www.huduser.gov", "path_prefix": "/hudapi/public/il/"}
+      ],
+      "required_proofs": ["exact HUD API terms", "active token evidence", "commercial display/analytics/retention permissions"],
+      "query_credentials": ["token"]
+    },
+    {
+      "source_id": "market.bea_regional",
+      "owner": "U.S. Bureau of Economic Analysis",
+      "dataset": "Regional CAGDP1 data through BEA API",
+      "rights_state": "UNKNOWN",
+      "adapter_names": ["bea"],
+      "adapter_paths": ["cre_mcp.market.bea"],
+      "url_rules": [{"host": "apps.bea.gov", "path_prefix": "/api/data/"}],
+      "required_proofs": ["exact BEA API/data-use evidence", "required attribution/disclaimer delivery", "active key and rate proof"],
+      "query_credentials": ["UserID"]
+    },
+    {
+      "source_id": "market.irs_soi_migration",
+      "owner": "Internal Revenue Service",
+      "dataset": "SOI county inflow/outflow migration CSV files",
+      "rights_state": "CONDITIONAL",
+      "adapter_names": ["irs"],
+      "adapter_paths": ["cre_mcp.market.irs_soi"],
+      "url_rules": [
+        {"host": "www.irs.gov", "path_prefix": "/pub/irs-soi/countyinflow2223.csv"},
+        {"host": "www.irs.gov", "path_prefix": "/pub/irs-soi/countyoutflow2223.csv"}
+      ],
+      "official_evidence_urls": ["https://www.irs.gov/statistics/soi-tax-stats-migration-data"],
+      "required_proofs": ["exact dataset-specific public-domain/third-party verification", "hosted display/analytics/retention evidence"],
+      "notes": "Federal material is generally reusable, but this exact dataset has not been verified."
+    },
+    {
+      "source_id": "market.zillow_zori",
+      "owner": "Zillow Group",
+      "dataset": "Zillow Observed Rent Index research downloads",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.market.rent_comps:ZillowZoriProvider"],
+      "url_rules": [{"host": "files.zillowstatic.com", "path_prefix": "/research/public_csvs/zori/"}],
+      "official_evidence_urls": ["https://www.zillow.com/research/data/", "https://www.zillow.com/corporate/terms-of-use/"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["exact research-download license", "per-page attribution delivery proof", "derivative aggregate authorization"],
+      "disclosures": {
+        "attribution": ["Zillow Research ZORI with required per-page attribution."],
+        "disclaimer": [],
+        "delivery_proven": false
+      },
+      "api_policy": "research download is distinct from Zillow Public Data API; no silent cross-authorization"
+    },
+    {
+      "source_id": "market.rentcast",
+      "owner": "RentCast",
+      "dataset": "RentCast property and rent-estimate API",
+      "method": "contract API with header credential",
+      "rights_state": "CONTRACT_REQUIRED",
+      "signed_contract_required": true,
+      "adapter_names": ["rentcast"],
+      "adapter_paths": ["cre_mcp.market.rent_comps:RentCastProvider"],
+      "url_rules": [{"host": "api.rentcast.io", "path_prefix": "/v1/"}],
+      "official_evidence_urls": ["https://www.rentcast.io/terms-api"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["active subscription", "API-key evidence", "accepted terms record", "fixed product-tier rate configuration"],
+      "allowances": {
+        "commercial_display": true,
+        "derived_analytics": true,
+        "ai_ml_use": false,
+        "raw_retention": true,
+        "redistribution": true
+      },
+      "query_credentials": ["X-Api-Key"],
+      "api_policy": "contract/subscription/law/throttle/confidentiality/third-party conditions apply",
+      "notes": "Recorded allowances are contract-dependent and are not active permission."
+    },
+    {
+      "source_id": "commercial.attom",
+      "owner": "ATTOM Data Solutions",
+      "dataset": "ATTOM Property API",
+      "method": "developer API with header credential",
+      "rights_state": "CONTRACT_REQUIRED",
+      "signed_contract_required": true,
+      "adapter_names": ["attom"],
+      "adapter_paths": ["cre_mcp.enrichment.providers.attom"],
+      "url_rules": [{"host": "api.gateway.attomdata.com", "path_prefix": "/propertyapi/"}],
+      "official_evidence_urls": ["https://api.developer.attomdata.com/legal"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["product-specific data license", "active key evidence", "licensed database-enhancement/display/distribution scope"],
+      "operating_policy": {
+        "delay_seconds": 1.0,
+        "max_concurrency": 1,
+        "memory_cache_ttl_seconds": 0,
+        "persistent_cache_ttl_seconds": 0,
+        "raw_retention_ttl_seconds": 0
+      },
+      "query_credentials": ["apikey"],
+      "api_policy": "evaluation-only absent data license; database enhancement/distribution prohibited; cache maximum 24h",
+      "notes": "Blocked despite the published 24h ceiling because no product license is proven."
+    },
+    {
+      "source_id": "commercial.regrid",
+      "owner": "Regrid",
+      "dataset": "Regrid parcel API v2",
+      "rights_state": "CONTRACT_REQUIRED",
+      "signed_contract_required": true,
+      "adapter_names": ["regrid"],
+      "adapter_paths": ["cre_mcp.enrichment.providers.regrid"],
+      "url_rules": [{"host": "app.regrid.com", "path_prefix": "/api/v2/parcels"}],
+      "official_evidence_urls": ["https://regrid.com/terms/api"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["active contract", "API-key evidence", "exact integration/search/use/storage/output permissions"],
+      "query_credentials": ["token"],
+      "api_policy": "contract-bound use during subscription",
+      "notes": "Current adapter places token in query; cache/log redaction is mandatory."
+    },
+    {
+      "source_id": "osm.overpass",
+      "source_kind": "direct_adapter",
+      "owner": "OpenStreetMap contributors / Overpass operators",
+      "dataset": "OpenStreetMap branded points of interest through Overpass mirrors",
+      "method": "direct and shared-client Overpass POST",
+      "methods": ["POST"],
+      "adapter_names": ["overpass"],
+      "adapter_paths": ["cre_mcp.enrichment.nearby", "cre_mcp.enrichment.attributes"],
+      "url_rules": [
+        {"host": "overpass-api.de", "path_prefix": "/api/interpreter"},
+        {"host": "lz4.overpass-api.de", "path_prefix": "/api/interpreter"},
+        {"host": "overpass.private.coffee", "path_prefix": "/api/interpreter"},
+        {"host": "overpass.kumi.systems", "path_prefix": "/api/interpreter"}
+      ],
+      "official_evidence_urls": ["https://www.openstreetmap.org/copyright"],
+      "required_proofs": ["ODbL attribution and derived-database analysis", "mirror-specific policy evidence", "output attribution delivery proof", "fixed rate policy"],
+      "disclosures": {
+        "attribution": ["© OpenStreetMap contributors; link to OpenStreetMap copyright and ODbL."],
+        "disclaimer": [],
+        "delivery_proven": false
+      },
+      "api_policy": "mirror policies and ODbL obligations not fully encoded"
+    },
+    {
+      "source_id": "environment.epa_frs",
+      "owner": "U.S. Environmental Protection Agency",
+      "dataset": "Facility Registry Service REST",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.envscreen.federal:FRS"],
+      "url_rules": [{"host": "frs-public.epa.gov", "path_prefix": "/ords/frs_public2/"}],
+      "official_evidence_urls": ["https://www.epa.gov/data/application-programming-interface-api"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["exact FRS metadata/license record", "current api.data.gov key/rate rules", "output provenance proof"],
+      "api_policy": "public/open-data API, but dataset-specific conditions remain unproven"
+    },
+    {
+      "source_id": "environment.epa_echo",
+      "owner": "U.S. Environmental Protection Agency",
+      "dataset": "ECHO facility and QID REST services",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.envscreen.federal:ECHO"],
+      "url_rules": [{"host": "echodata.epa.gov", "path_prefix": "/echo/"}],
+      "official_evidence_urls": ["https://www.epa.gov/data/application-programming-interface-api"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["exact ECHO metadata/license record", "current api.data.gov key/rate rules", "output provenance proof", "bounded concurrency proof"],
+      "api_policy": "public/open-data API, but dataset-specific conditions remain unproven",
+      "notes": "Current screen can fan out many calls; hosted concurrency remains blocked."
+    },
+    {
+      "source_id": "hazard.fema_nfhl",
+      "owner": "Federal Emergency Management Agency",
+      "dataset": "National Flood Hazard Layer MapServer layer 28",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.envscreen.hazards:FEMA_NFHL"],
+      "url_rules": [{"host": "hazards.fema.gov", "path_prefix": "/arcgis/rest/services/public/NFHL/"}],
+      "official_evidence_urls": ["https://www.fema.gov/about/reports-and-data/openfema"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["exact NFHL dataset terms", "rate/attribution evidence", "output disclaimer proof"],
+      "api_policy": "OpenFEMA is open data subject to published terms; exact NFHL conditions not encoded"
+    },
+    {
+      "source_id": "hazard.usfs_whp",
+      "owner": "U.S. Forest Service",
+      "dataset": "Wildfire Hazard Potential image services",
+      "adapter_paths": ["cre_mcp.envscreen.hazards:USFS_WHP"],
+      "url_rules": [
+        {"host": "apps.fs.usda.gov", "path_prefix": "/fsgisx01/rest/services/RDW_Wildfire/"},
+        {"host": "imagery.geoplatform.gov", "path_prefix": "/iipp/rest/services/Fire_Aviation/"}
+      ],
+      "required_proofs": ["exact image-service dataset license/metadata", "rate and display evidence"]
+    },
+    {
+      "source_id": "hazard.usgs_designmaps",
+      "owner": "U.S. Geological Survey",
+      "dataset": "ASCE 7-22 Design Maps web service",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.envscreen.hazards:USGS_DESIGN"],
+      "url_rules": [{"host": "earthquake.usgs.gov", "path_prefix": "/ws/designmaps/"}],
+      "official_evidence_urls": ["https://www.usgs.gov/data-management/data-licensing"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["exact Design Maps dataset metadata/license review", "collaborator/third-party restriction review", "output provenance proof"],
+      "api_policy": "dataset-specific review required"
+    },
+    {
+      "source_id": "hazard.usgs_earthquakes",
+      "owner": "U.S. Geological Survey",
+      "dataset": "Earthquake Catalog FDSN event service",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.envscreen.hazards:USGS_QUAKE"],
+      "url_rules": [{"host": "earthquake.usgs.gov", "path_prefix": "/fdsnws/event/"}],
+      "official_evidence_urls": ["https://www.usgs.gov/data-management/data-licensing"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["exact Earthquake Catalog metadata/license review", "collaborator/third-party restriction review", "output provenance proof"],
+      "api_policy": "dataset-specific review required"
+    },
+    {
+      "source_id": "regulatory.finra_brokercheck",
+      "owner": "FINRA",
+      "dataset": "BrokerCheck search service",
+      "rights_state": "CONTRACT_REQUIRED",
+      "adapter_paths": ["cre_mcp.verifyreg.finra:BrokerCheck"],
+      "url_rules": [{"host": "api.brokercheck.finra.org", "path_prefix": "/search/"}],
+      "official_evidence_urls": ["https://www.finra.org/investors/investing/working-with-investment-professional/about-brokercheck/permitted-uses"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["approved MedawarCRE purpose within enumerated uses", "attribution/link/currentness/error-correction delivery proof", "redistribution approval"],
+      "disclosures": {
+        "attribution": ["FINRA BrokerCheck with required link and currentness statement."],
+        "disclaimer": ["BrokerCheck errors and corrections must be handled under FINRA requirements."],
+        "delivery_proven": false
+      },
+      "api_policy": "compilation/data mining limited to enumerated investor-protection, academic, compliance, or regulatory uses"
+    },
+    {
+      "source_id": "regulatory.sec_iapd",
+      "owner": "U.S. Securities and Exchange Commission",
+      "dataset": "Investment Adviser Public Disclosure search service",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.verifyreg.finra:IAPD"],
+      "url_rules": [{"host": "api.adviserinfo.sec.gov", "path_prefix": "/search/"}],
+      "official_evidence_urls": ["https://www.sec.gov/about/developer-resources"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["declared identifying user agent", "aggregate hard maximum 10 requests/second", "exact IAPD API rights evidence", "output provenance proof"],
+      "api_policy": "SEC fair-access controls must be encoded; current endpoint is undocumented"
+    },
+    {
+      "source_id": "regulatory.sec_edgar",
+      "source_kind": "link_only",
+      "owner": "U.S. Securities and Exchange Commission",
+      "dataset": "EDGAR filing citations embedded in tenant facts",
+      "method": "link-only citation; no automated adapter in this phase",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.control.tenants"],
+      "url_rules": [{"host": "www.sec.gov", "path_prefix": "/Archives/edgar/"}],
+      "official_evidence_urls": ["https://www.sec.gov/about/developer-resources"],
+      "evidence_verified_on": "2026-08-01",
+      "required_proofs": ["identifying user agent and aggregate 10 requests/second if automated retrieval is added", "provenance delivery proof"],
+      "api_policy": "link-only record does not authorize automated EDGAR retrieval"
+    },
+    {
+      "source_id": "regulatory.co_real_estate",
+      "owner": "Colorado Department of Regulatory Agencies",
+      "dataset": "Real-estate license Socrata dataset 4zse-6bnw",
+      "adapter_paths": ["cre_mcp.verifyreg.stateboards:CO_REAL_ESTATE"],
+      "url_rules": [{"host": "data.colorado.gov", "path_prefix": "/resource/4zse-6bnw.json"}],
+      "official_evidence_urls": ["https://data.colorado.gov/resource/4zse-6bnw.json"]
+    },
+    {
+      "source_id": "regulatory.co_professions",
+      "owner": "Colorado Department of Regulatory Agencies",
+      "dataset": "All-professions license Socrata dataset 7s5z-vewr",
+      "adapter_paths": ["cre_mcp.verifyreg.stateboards:CO_ALL_PROFESSIONS"],
+      "url_rules": [{"host": "data.colorado.gov", "path_prefix": "/resource/7s5z-vewr.json"}],
+      "official_evidence_urls": ["https://data.colorado.gov/resource/7s5z-vewr.json"]
+    },
+    {
+      "source_id": "regulatory.tx_tdlr",
+      "owner": "Texas Department of Licensing and Regulation",
+      "dataset": "TDLR license Socrata dataset 7358-krk7",
+      "adapter_paths": ["cre_mcp.verifyreg.stateboards:TX_TDLR"],
+      "url_rules": [{"host": "data.texas.gov", "path_prefix": "/resource/7358-krk7.json"}],
+      "official_evidence_urls": ["https://data.texas.gov/resource/7358-krk7.json"]
+    },
+    {
+      "source_id": "business.texas_comptroller",
+      "owner": "Texas Comptroller of Public Accounts",
+      "dataset": "Franchise-tax entity search",
+      "adapter_paths": ["cre_mcp.execution.contacts:TexasComptroller"],
+      "url_rules": [{"host": "comptroller.texas.gov", "path_prefix": "/data-search/franchise-tax"}],
+      "official_evidence_urls": ["https://comptroller.texas.gov/data-search/franchise-tax"]
+    },
+    {
+      "source_id": "commercial.realestateapi_skiptrace",
+      "owner": "RealEstateAPI",
+      "dataset": "SkipTrace v2 API",
+      "method": "commercial POST API with header credential",
+      "methods": ["POST"],
+      "rights_state": "CONTRACT_REQUIRED",
+      "signed_contract_required": true,
+      "adapter_paths": ["cre_mcp.execution.contacts:SkipTrace"],
+      "url_rules": [{"host": "api.realestateapi.com", "path_prefix": "/v2/SkipTrace"}],
+      "required_proofs": ["active contract/subscription", "API-key evidence", "permitted purpose", "privacy and retention controls", "output rights"],
+      "query_credentials": ["x-api-key"]
+    },
+    {
+      "source_id": "employment.texas_warn",
+      "owner": "Texas Workforce Commission",
+      "dataset": "WARN notices Socrata dataset 8w53-c4f6",
+      "adapter_paths": ["cre_mcp.siteintel.employers"],
+      "url_rules": [{"host": "data.texas.gov", "path_prefix": "/resource/8w53-c4f6.json"}],
+      "official_evidence_urls": ["https://data.texas.gov/api/views/8w53-c4f6"],
+      "required_proofs": ["exact dataset license/metadata", "Socrata API policy", "commercial analytics/display/retention evidence"]
+    },
+    {
+      "source_id": "employment.bls_ce_embedded",
+      "source_kind": "embedded",
+      "owner": "U.S. Bureau of Labor Statistics",
+      "dataset": "Current Employment Statistics facts embedded in leakage model",
+      "method": "embedded facts with source link; no runtime retrieval",
+      "rights_state": "CONDITIONAL",
+      "adapter_paths": ["cre_mcp.siteintel.leakage"],
+      "official_evidence_urls": ["https://www.bls.gov/news.release/cesan.nr0.htm"],
+      "required_proofs": ["access-date citation review", "required BLS quality disclaimer delivery for embedded output"],
+      "disclosures": {
+        "attribution": ["U.S. Bureau of Labor Statistics; include access date."],
+        "disclaimer": ["Required BLS quality disclaimer must accompany delivered data."],
+        "delivery_proven": false
+      }
+    },
+    {
+      "source_id": "documents.external_url",
+      "source_kind": "external_document",
+      "owner": "Per-document rights holder",
+      "dataset": "Arbitrary externally hosted deal documents",
+      "method": "attested URL download",
+      "rights_state": "CONTRACT_REQUIRED",
+      "adapter_names": ["external_document"],
+      "adapter_paths": ["cre_mcp.tools.truth_tools"],
+      "required_proofs": ["server-side workspace/actor/session/URL-hash/evidence-bound attestation", "allowed retrieval/storage/output purposes", "unexpired admin approval"],
+      "api_policy": "per-document attestation required; URL alone is never permission"
+    },
+    {
+      "source_id": "links.professional_registries",
+      "source_kind": "link_only",
+      "owner": "NMLS, ASC, and state licensing registries",
+      "dataset": "Professional-registry deep links",
+      "method": "link-only user navigation",
+      "adapter_paths": ["cre_mcp.verifyreg.registry"],
+      "required_proofs": ["exact registry approval before any automated adapter is introduced"],
+      "api_policy": "link-only; no automated retrieval authorization"
+    },
+    {
+      "source_id": "embedded.tenant_site_requirements",
+      "source_kind": "embedded",
+      "owner": "Named tenant/franchisor/issuer sources",
+      "dataset": "Tenant site-selection and development facts",
+      "method": "curated embedded facts with citations",
+      "adapter_paths": ["cre_mcp.control.tenants"],
+      "required_proofs": ["record-by-record currency, copyright, and delivery review before hosted use"],
+      "api_policy": "embedded facts are not permission to scrape the linked sources"
+    },
+    {
+      "source_id": "embedded.regulatory_facts",
+      "source_kind": "embedded",
+      "owner": "Federal, state, and municipal authorities",
+      "dataset": "Embedded tax, landlord-tenant, zoning, energy, and compliance facts",
+      "method": "curated embedded facts with citations",
+      "adapter_paths": ["cre_mcp.analytics.regburden", "cre_mcp.compliance", "cre_mcp.taxecon"],
+      "required_proofs": ["record-by-record currency and source-rights review before hosted delivery"],
+      "api_policy": "embedded citations are not automated-fetch permission"
+    },
+    {
+      "source_id": "zoning.austin",
+      "owner": "City of Austin",
+      "dataset": "Zoning_1 MapServer layer 0",
+      "adapter_paths": ["cre_mcp.zoning.providers:austin"],
+      "url_rules": [{"host": "maps.austintexas.gov", "path_prefix": "/gis/rest/Shared/Zoning_1/MapServer/0"}]
+    },
+    {
+      "source_id": "zoning.phoenix",
+      "owner": "City of Phoenix",
+      "dataset": "Zoning and ZoningOverlays MapServers",
+      "adapter_paths": ["cre_mcp.zoning.providers:phoenix"],
+      "url_rules": [{"host": "maps.phoenix.gov", "path_prefix": "/pub/rest/services/Public/Zoning"}]
+    },
+    {
+      "source_id": "zoning.denver",
+      "owner": "City and County of Denver",
+      "dataset": "Denver zoning MapServer",
+      "adapter_paths": ["cre_mcp.zoning.providers:denver"],
+      "url_rules": [{"host": "denvergov.org", "path_prefix": "/maps/data/Zoning/MapServer/1"}]
+    },
+    {
+      "source_id": "zoning.dallas",
+      "owner": "City of Dallas",
+      "dataset": "Dallas zoning MapServer",
+      "adapter_paths": ["cre_mcp.zoning.providers:dallas"],
+      "url_rules": [{"host": "gis.dallascityhall.com", "path_prefix": "/arcgis/rest/services/sdc_public/Zoning/MapServer/1"}]
+    },
+    {
+      "source_id": "zoning.atlanta",
+      "owner": "City of Atlanta",
+      "dataset": "LandUsePlanning MapServer zoning and overlay layers",
+      "adapter_paths": ["cre_mcp.zoning.providers:atlanta"],
+      "url_rules": [{"host": "gis.atlantaga.gov", "path_prefix": "/dpcd/rest/services/LandUsePlanning/"}]
+    },
+    {
+      "source_id": "zoning.las_vegas_city",
+      "owner": "City of Las Vegas",
+      "dataset": "City zoning FeatureServer layer 5",
+      "adapter_paths": ["cre_mcp.zoning.providers:las_vegas_city"],
+      "url_rules": [{"host": "services1.arcgis.com", "path_prefix": "/F1v0ufATbBQScMtY/ArcGIS/rest/services/ZONING/FeatureServer/5"}]
+    },
+    {
+      "source_id": "zoning.clark_county",
+      "owner": "Clark County, Nevada",
+      "dataset": "Planning and Zoning MapServer layer 11",
+      "adapter_paths": ["cre_mcp.zoning.providers:clark_county"],
+      "url_rules": [{"host": "maps.clarkcountynv.gov", "path_prefix": "/arcgis/rest/services/OpenData/PlanningandZoning/MapServer/11"}]
+    },
+    {
+      "source_id": "zoning.new_york_city",
+      "owner": "City of New York",
+      "dataset": "PLUTO Socrata dataset 64uk-42ks",
+      "adapter_paths": ["cre_mcp.zoning.providers:new_york_city"],
+      "url_rules": [{"host": "data.cityofnewyork.us", "path_prefix": "/resource/64uk-42ks.json"}]
+    },
+    {
+      "source_id": "zoning.san_francisco",
+      "owner": "City and County of San Francisco",
+      "dataset": "PlanningData zoning MapServer layer 3",
+      "adapter_paths": ["cre_mcp.zoning.providers:san_francisco"],
+      "url_rules": [{"host": "sfplanninggis.org", "path_prefix": "/arcgiswa/rest/services/PlanningData/MapServer/3", "schemes": ["http"]}],
+      "notes": "HTTP-only endpoint remains blocked; transport security is also unresolved."
+    },
+    {
+      "source_id": "zoning.seattle",
+      "owner": "City of Seattle",
+      "dataset": "Current Land Use Zoning Detail Socrata dataset n8h3-r7is",
+      "adapter_paths": ["cre_mcp.zoning.providers:seattle"],
+      "url_rules": [{"host": "data.seattle.gov", "path_prefix": "/resource/n8h3-r7is.json"}]
+    },
+    {
+      "source_id": "zoning.houston_link",
+      "source_kind": "link_only",
+      "owner": "City of Houston",
+      "dataset": "No-zoning explanatory links and COHGIS discovery portal",
+      "method": "link-only; no zoning data query",
+      "adapter_paths": ["cre_mcp.zoning.providers:houston"],
+      "required_proofs": ["exact dataset rights before any COHGIS automated adapter is introduced"]
+    },
+    {
+      "source_id": "permits.austin",
+      "owner": "City of Austin",
+      "dataset": "Issued Construction Permits Socrata 3syk-w9eu",
+      "adapter_paths": ["cre_mcp.zoning.permits:austin"],
+      "url_rules": [{"host": "data.austintexas.gov", "path_prefix": "/resource/3syk-w9eu.json"}]
+    },
+    {
+      "source_id": "permits.chicago",
+      "owner": "City of Chicago",
+      "dataset": "Building Permits Socrata ydr8-5enu",
+      "adapter_paths": ["cre_mcp.zoning.permits:chicago"],
+      "url_rules": [{"host": "data.cityofchicago.org", "path_prefix": "/resource/ydr8-5enu.json"}]
+    },
+    {
+      "source_id": "permits.san_francisco",
+      "owner": "City and County of San Francisco",
+      "dataset": "Building Permits Socrata i98e-djp9",
+      "adapter_paths": ["cre_mcp.zoning.permits:san_francisco"],
+      "url_rules": [{"host": "data.sfgov.org", "path_prefix": "/resource/i98e-djp9.json"}]
+    },
+    {
+      "source_id": "permits.los_angeles",
+      "owner": "City of Los Angeles",
+      "dataset": "Building and Safety Permits Socrata pi9x-tg5x",
+      "adapter_paths": ["cre_mcp.zoning.permits:los_angeles"],
+      "url_rules": [{"host": "data.lacity.org", "path_prefix": "/resource/pi9x-tg5x.json"}]
+    },
+    {
+      "source_id": "permits.seattle",
+      "owner": "City of Seattle",
+      "dataset": "Building Permits Socrata 76t5-zqzr",
+      "adapter_paths": ["cre_mcp.zoning.permits:seattle"],
+      "url_rules": [{"host": "data.seattle.gov", "path_prefix": "/resource/76t5-zqzr.json"}]
+    },
+    {
+      "source_id": "traffic.ncdot",
+      "owner": "North Carolina Department of Transportation",
+      "dataset": "2024 AADT Stations FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.traffic:NC"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/NuWFvHYDMVmmxMeM/arcgis/rest/services/NCDOT__2024_AADT_Stations_published_September_2025/FeatureServer/0"}]
+    },
+    {
+      "source_id": "traffic.adot",
+      "owner": "Arizona Department of Transportation",
+      "dataset": "2024 AADT FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.traffic:AZ"],
+      "url_rules": [{"host": "services6.arcgis.com", "path_prefix": "/clPWQMwZfdWn4MQZ/arcgis/rest/services/ADOT_2024_Average_Annual_Daily_Traffic_(AADT)/FeatureServer/0"}]
+    },
+    {
+      "source_id": "traffic.codot",
+      "owner": "Colorado Department of Transportation",
+      "dataset": "Open-data AADT FeatureServer layer 13",
+      "adapter_paths": ["cre_mcp.enrichment.traffic:CO"],
+      "url_rules": [{"host": "dtdapps.codot.gov", "path_prefix": "/server/rest/services/Webapps/open_data_sde/FeatureServer/13"}]
+    },
+    {
+      "source_id": "traffic.txdot",
+      "owner": "Texas Department of Transportation",
+      "dataset": "AADT Annuals FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.traffic:TX"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/KTcxiTD9dsQw4r7Z/arcgis/rest/services/TxDOT_AADT_Annuals_(Public_View)/FeatureServer/0"}]
+    },
+    {
+      "source_id": "traffic.fdot",
+      "owner": "Florida Department of Transportation",
+      "dataset": "RCI AADT FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.traffic:FL"],
+      "url_rules": [{"host": "gis.fdot.gov", "path_prefix": "/arcgis/rest/services/RCI_Layers/FeatureServer/0"}]
+    },
+    {
+      "source_id": "traffic.caltrans",
+      "owner": "California Department of Transportation",
+      "dataset": "Traffic AADT FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.traffic:CA"],
+      "url_rules": [{"host": "caltrans-gis.dot.ca.gov", "path_prefix": "/arcgis/rest/services/CHhighway/Traffic_AADT/FeatureServer/0"}]
+    },
+    {
+      "source_id": "traffic.ndot",
+      "owner": "Nevada Department of Transportation",
+      "dataset": "FY2025 AADT FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.traffic:NV"],
+      "url_rules": [{"host": "services9.arcgis.com", "path_prefix": "/eNX73FDxjlKFtCtH/arcgis/rest/services/NDOT_FY2025_Streetlight_AADT_LOTTR/FeatureServer/1"}]
+    },
+    {
+      "source_id": "traffic.gdot",
+      "owner": "Georgia Department of Transportation",
+      "dataset": "GDOT AADT FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.traffic:GA"],
+      "url_rules": [{"host": "services2.arcgis.com", "path_prefix": "/IxVN2oUE9EYLSnPE/arcgis/rest/services/GDOT_AADT/FeatureServer/1"}]
+    },
+    {
+      "source_id": "parcel.travis_48453",
+      "owner": "Travis Central Appraisal District",
+      "dataset": "Travis County parcels FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:48453"],
+      "url_rules": [{"host": "taxmaps.traviscountytx.gov", "path_prefix": "/arcgis/rest/services/Parcels/FeatureServer/0"}]
+    },
+    {
+      "source_id": "parcel.harris_48201",
+      "owner": "Harris County Appraisal District",
+      "dataset": "Harris County parcels FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:48201"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/su8ic9KbA7PYVxPS/ArcGIS/rest/services/Harris_County_Parcels/FeatureServer/1"}]
+    },
+    {
+      "source_id": "parcel.dallas_48113",
+      "owner": "Dallas Central Appraisal District",
+      "dataset": "Dallas tax parcels FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:48113"],
+      "url_rules": [{"host": "services2.arcgis.com", "path_prefix": "/rwnOSbfKSwyTBcwN/arcgis/rest/services/DallasTaxParcels/FeatureServer/0"}]
+    },
+    {
+      "source_id": "parcel.bexar_48029",
+      "owner": "Bexar Appraisal District",
+      "dataset": "BCAD parcels FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:48029"],
+      "url_rules": [{"host": "gis.sara-tx.org", "path_prefix": "/ags1/rest/services/FW_Bexar/BCAD_Parcels_PROD/FeatureServer/0"}]
+    },
+    {
+      "source_id": "parcel.maricopa_04013",
+      "owner": "Maricopa County Assessor",
+      "dataset": "Parcels view FeatureServer (also used for sale fields)",
+      "adapter_paths": ["cre_mcp.enrichment.counties:04013"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/ykpntM6e3tHvzKRJ/arcgis/rest/services/Parcels_view/FeatureServer/0"}]
+    },
+    {
+      "source_id": "parcel.clark_32003",
+      "owner": "Clark County Assessor",
+      "dataset": "AOExtract parcels FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:32003"],
+      "url_rules": [{"host": "services1.arcgis.com", "path_prefix": "/F1v0ufATbBQScMtY/arcgis/rest/services/AOExtract_New/FeatureServer/10"}]
+    },
+    {
+      "source_id": "parcel.miami_dade_12086",
+      "owner": "Miami-Dade County",
+      "dataset": "ParcelsView FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:12086"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/8Pc9XBTAsYuxx9Ny/arcgis/rest/services/ParcelsView_gdb/FeatureServer/0"}]
+    },
+    {
+      "source_id": "parcel.broward_12011",
+      "owner": "Broward County Property Appraiser",
+      "dataset": "Parcel tax-roll FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:12011"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/JMAJrTsHNLrSsWf5/arcgis/rest/services/PARCEL_POLY_BCPA_TAXROLL/FeatureServer/0"}]
+    },
+    {
+      "source_id": "parcel.fulton_13121",
+      "owner": "Fulton County, Georgia",
+      "dataset": "Tyler tax parcels MapServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:13121"],
+      "url_rules": [{"host": "gismaps.fultoncountyga.gov", "path_prefix": "/arcgispub2/rest/services/Tax/Tyler_TaxParcels/MapServer/0"}]
+    },
+    {
+      "source_id": "parcel.mecklenburg_37119",
+      "owner": "Mecklenburg County, North Carolina",
+      "dataset": "CLTEx property MapServer layer 4",
+      "adapter_paths": ["cre_mcp.enrichment.counties:37119"],
+      "url_rules": [{"host": "gis.charlottenc.gov", "path_prefix": "/arcgis/rest/services/CLT_Ex/CLTEx_MoreInfo/MapServer/4"}]
+    },
+    {
+      "source_id": "parcel.guilford_37081",
+      "owner": "Guilford County, North Carolina",
+      "dataset": "Publishing parcels FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:37081"],
+      "url_rules": [{"host": "gcgis.guilfordcountync.gov", "path_prefix": "/arcgis/rest/services/Tax/PublishingParcelsSpatialView_FeatureToPointWGS84/FeatureServer/0"}]
+    },
+    {
+      "source_id": "parcel.yavapai_04025",
+      "owner": "Yavapai County Assessor",
+      "dataset": "Parcels WGS84 FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:04025"],
+      "url_rules": [{"host": "services1.arcgis.com", "path_prefix": "/BajuNXbtZNiBKFkx/ArcGIS/rest/services/Parcels_WGS84/FeatureServer/0"}]
+    },
+    {
+      "source_id": "parcel.douglas_08035",
+      "owner": "Douglas County, Colorado",
+      "dataset": "Parcels Enriched FeatureServer",
+      "adapter_paths": ["cre_mcp.enrichment.counties:08035"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/seTexOicoRXDvRsJ/ArcGIS/rest/services/Parcels_Enriched/FeatureServer/0"}]
+    },
+    {
+      "source_id": "sales.maricopa_04013",
+      "owner": "Maricopa County Assessor",
+      "dataset": "Parcel sale fields from Parcels view FeatureServer",
+      "adapter_paths": ["cre_mcp.comps.records:04013"],
+      "egress_managed_by": "parcel.maricopa_04013",
+      "notes": "Uses the same URL as parcel.maricopa_04013; URL classification resolves to that stricter deny record."
+    },
+    {
+      "source_id": "sales.clark_32003",
+      "owner": "Clark County Assessor",
+      "dataset": "CC parcels sale FeatureServer",
+      "adapter_paths": ["cre_mcp.comps.records:32003"],
+      "url_rules": [{"host": "services1.arcgis.com", "path_prefix": "/F1v0ufATbBQScMtY/arcgis/rest/services/CC_PARCELS_SHP/FeatureServer/1"}]
+    },
+    {
+      "source_id": "sales.guilford_37081",
+      "owner": "Guilford County, North Carolina",
+      "dataset": "Cadastral sale FeatureServer",
+      "adapter_paths": ["cre_mcp.comps.records:37081"],
+      "url_rules": [{"host": "gcgis.guilfordcountync.gov", "path_prefix": "/arcgis/rest/services/Tax/GCCadastral_FeatureToPointWGS84/FeatureServer/0"}]
+    },
+    {
+      "source_id": "sales.yavapai_04025",
+      "owner": "Yavapai County Assessor",
+      "dataset": "Recent Sales 5 years FeatureServer",
+      "adapter_paths": ["cre_mcp.comps.records:04025"],
+      "url_rules": [{"host": "services1.arcgis.com", "path_prefix": "/BajuNXbtZNiBKFkx/ArcGIS/rest/services/ASR_Recent_Sales_5_years/FeatureServer/5"}]
+    },
+    {
+      "source_id": "sales.king_53033",
+      "owner": "King County, Washington",
+      "dataset": "Parcel Sales 3 Year FeatureServer",
+      "adapter_paths": ["cre_mcp.comps.records:53033"],
+      "url_rules": [{"host": "services.arcgis.com", "path_prefix": "/Ej0PsM5Aw677QF1W/arcgis/rest/services/PARCEL_SALES3YR_AREA_287/FeatureServer/0"}]
+    },
+    {
+      "source_id": "sales.wake_37183",
+      "owner": "Wake County, North Carolina",
+      "dataset": "Property Parcels MapServer sale fields",
+      "adapter_paths": ["cre_mcp.comps.records:37183"],
+      "url_rules": [{"host": "maps.wakegov.com", "path_prefix": "/arcgis/rest/services/Property/Parcels/MapServer/0"}]
+    },
+    {
+      "source_id": "sales.franklin_39049",
+      "owner": "Franklin County, Ohio",
+      "dataset": "Real Estate Sales Information FeatureServer",
+      "adapter_paths": ["cre_mcp.comps.records:39049"],
+      "url_rules": [{"host": "gis.franklincountyohio.gov", "path_prefix": "/hosting/rest/services/RealEstate/Sales_Information/FeatureServer/0"}]
+    }
+  ]
+}

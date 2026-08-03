@@ -18,14 +18,16 @@ from cre_mcp.construction.tracking import record_tracking_item as _record_tracki
 from cre_mcp.construction.tracking import track_items as _track_items
 from cre_mcp.construction.ve_percent import percent_complete as _percent_complete
 from cre_mcp.construction.ve_percent import ve_option as _ve_option
+from cre_mcp.source_rights.output import safe_error_message
 
 
 logger = logging.getLogger(__name__)
 
 
 def _error(operation: str, exc: Exception) -> dict[str, str]:
-    logger.error("%s error: %s", operation, exc)
-    return {"error": str(exc)}
+    message = safe_error_message(exc)
+    logger.error("%s error: %s", operation, message)
+    return {"error": message}
 
 
 def development_budget(

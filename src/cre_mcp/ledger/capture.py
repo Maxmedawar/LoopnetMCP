@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 
 from cre_mcp.ledger.models import ClaimOutcomeRecord
 from cre_mcp.ledger.store import get_ledger_store
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.truth.models import DocKind
 from cre_mcp.truth.reconcile import SOURCE_AUTHORITY, Reconciliation
 
@@ -115,6 +116,10 @@ async def capture_reconciliation(
         if not records:
             return 0
         return await get_ledger_store().record_claims(records)
-    except Exception:  # pragma: no cover - defensive: ledger failure is never fatal
-        logger.exception("claim-ledger capture failed for deal %s", recon.deal_id)
+    except Exception as exc:  # pragma: no cover - ledger failure is never fatal
+        logger.error(
+            "claim-ledger capture failed for deal %s: %s",
+            safe_source_reference(recon.deal_id),
+            safe_error_message(exc),
+        )
         return 0

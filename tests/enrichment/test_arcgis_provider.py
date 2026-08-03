@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from cre_mcp.config import CreConfig
 from cre_mcp.enrichment.arcgis import ArcgisParcelProvider
 from cre_mcp.enrichment.counties import COUNTY_PARCEL_ENDPOINTS
 from cre_mcp.models import GeoLevel, GeoRef
@@ -29,12 +30,11 @@ async def test_address_query_maps_live_guilford_feature():
         "PACKAGE_SALE_PRICE": 2_450_000,
         "PACKAGE_SALE_DATE": 1648684800000,
     }
-    provider = ArcgisParcelProvider(COUNTY_PARCEL_ENDPOINTS["37081"])
-
-    with patch(
+    with patch("cre_mcp.enrichment.arcgis.require_source"), patch(
         "cre_mcp.enrichment.arcgis.arcgis_query",
         new=AsyncMock(side_effect=[[attributes], [sale]]),
     ) as query:
+        provider = ArcgisParcelProvider(COUNTY_PARCEL_ENDPOINTS["37081"])
         parcel = await provider.lookup(
             "100 A S Elm Street, Greensboro, NC 27401",
             None,
@@ -59,12 +59,11 @@ async def test_address_query_maps_live_guilford_feature():
 @pytest.mark.asyncio
 async def test_apn_query_maps_live_yavapai_feature():
     attributes = json.loads((FIXTURES / "yavapai_parcel.json").read_text())
-    provider = ArcgisParcelProvider(COUNTY_PARCEL_ENDPOINTS["04025"])
-
-    with patch(
+    with patch("cre_mcp.enrichment.arcgis.require_source"), patch(
         "cre_mcp.enrichment.arcgis.arcgis_query",
         new=AsyncMock(side_effect=[[attributes], []]),
     ) as query:
+        provider = ArcgisParcelProvider(COUNTY_PARCEL_ENDPOINTS["04025"])
         parcel = await provider.lookup(None, "1320514277023", _geo("04025", "04"))
 
     assert parcel is not None
@@ -107,3 +106,60 @@ async def test_travis_address_query_matches_live_owner_fixture_with_contains_pre
     assert query.await_args.kwargs["where"] == (
         "UPPER(situs_address) LIKE '%9606 OLD MANOR%'"
     )
+
+
+@pytest.mark.asyncio
+async def test_maricopa_parcel_only_neither_fetches_nor_retains_sale_fields():
+    attributes = json.loads((FIXTURES / "metro_parcels.json").read_text())["04013"]
+    runtime = CreConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled={"parcel.maricopa_04013": True},
+    )
+    provider = ArcgisParcelProvider(
+        COUNTY_PARCEL_ENDPOINTS["04013"],
+        runtime_config=runtime,
+    )
+
+    with patch(
+        "cre_mcp.enrichment.arcgis.arcgis_query",
+        new=AsyncMock(return_value=[attributes]),
+    ) as query:
+        parcel = await provider.lookup(None, "304-31-091", _geo("04013", "04"))
+
+    assert parcel is not None
+    assert parcel.last_sale_price is None
+    assert parcel.last_sale_date is None
+    assert "SALE_PRICE" not in query.await_args.kwargs["out_fields"]
+    assert "SALE_DATE" not in query.await_args.kwargs["out_fields"]
+    assert "SALE_PRICE" not in parcel.raw
+    assert "SALE_DATE" not in parcel.raw
+    query.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_maricopa_sale_fields_are_included_only_with_both_toggles():
+    attributes = json.loads((FIXTURES / "metro_parcels.json").read_text())["04013"]
+    runtime = CreConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled={
+            "parcel.maricopa_04013": True,
+            "sales.maricopa_04013": True,
+        },
+    )
+    provider = ArcgisParcelProvider(
+        COUNTY_PARCEL_ENDPOINTS["04013"],
+        runtime_config=runtime,
+    )
+
+    with patch(
+        "cre_mcp.enrichment.arcgis.arcgis_query",
+        new=AsyncMock(side_effect=[[attributes], []]),
+    ) as query:
+        parcel = await provider.lookup(None, "304-31-091", _geo("04013", "04"))
+
+    assert parcel is not None
+    assert parcel.last_sale_price == 103_846
+    assert "SALE_PRICE" in query.await_args_list[0].kwargs["out_fields"]
+    assert "SALE_DATE" in query.await_args_list[0].kwargs["out_fields"]

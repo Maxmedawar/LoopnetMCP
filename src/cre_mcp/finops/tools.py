@@ -15,6 +15,7 @@ from cre_mcp.access.context import current_context
 from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.access.result_models import RestrictedLenderMatchResult
 from cre_mcp.config import CreConfig
+from cre_mcp.source_rights.output import safe_error_message
 
 from .assumable_detect import detect_assumable as _detect_assumable
 from .cashneeds import cash_requirements as _cash_requirements
@@ -153,7 +154,7 @@ def _restricted_lender_match_projection(
 
 def _error(tool_name: str, exc: Exception) -> dict[str, str]:
     message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
-    message = message or exc.__class__.__name__
+    message = safe_error_message(message or exc.__class__.__name__)
     logger.error("%s error: %s", tool_name, message)
     return {"error": message}
 

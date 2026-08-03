@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from cre_mcp.source_rights.output import safe_error_message
+
 from ..graph.motivation import (
     TRIGGER_BASE_SEVERITY,
     MotivationSignal,
@@ -49,7 +51,7 @@ async def owner_motivation(
             )
         return result.model_dump(mode="json")
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def record_trigger_event(
@@ -82,7 +84,7 @@ async def record_trigger_event(
         )
         return score_motivation([signal]).model_dump(mode="json")
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}
 
 
 async def find_motivated_owners(
@@ -101,4 +103,4 @@ async def find_motivated_owners(
         ranked.sort(key=lambda item: item.engagement_probability, reverse=True)
         return [item.model_dump(mode="json") for item in ranked]
     except Exception as exc:
-        return {"error": str(exc)}
+        return {"error": safe_error_message(exc)}

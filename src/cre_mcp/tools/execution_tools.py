@@ -18,9 +18,16 @@ from cre_mcp.execution.offer import recommend_offer as recommend_context_offer
 from cre_mcp.execution.outreach import draft_outreach as compose_outreach
 from cre_mcp.execution.qualify import qualify_me as screen_buyer
 from cre_mcp.models import Deal, DealContext
+from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.tools.deal_tools import analyze_deal
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_failure(operation: str, exc: Exception) -> dict[str, str]:
+    message = safe_error_message(exc)
+    logger.error("%s error: %s", operation, message)
+    return {"error": message}
 
 
 async def _deal_context(
@@ -77,16 +84,15 @@ async def recommend_offer(
     """
     logger.info(
         "recommend_offer called: source=%s listing=%s strategy=%s",
-        source,
-        url_or_id,
-        strategy,
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+        safe_source_reference(strategy or ""),
     )
     try:
         ctx = await _deal_context(url_or_id, source, strategy)
         return recommend_context_offer(ctx).model_dump(mode="json")
     except Exception as exc:
-        logger.error("recommend_offer error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("recommend_offer", exc)
 
 
 async def generate_loi(
@@ -114,7 +120,11 @@ async def generate_loi(
     Returns:
         A non-binding LoiDraft with markdown, term explanations, and attorney flags.
     """
-    logger.info("generate_loi called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "generate_loi called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         recommendation = recommend_context_offer(ctx)
@@ -135,8 +145,7 @@ async def generate_loi(
                 terms[key] = value
         return draft_loi(ctx, terms).model_dump(mode="json")
     except Exception as exc:
-        logger.error("generate_loi error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("generate_loi", exc)
 
 
 async def find_contact(
@@ -152,7 +161,11 @@ async def find_contact(
     Returns:
         A source-labeled ContactInfo package; paid skip-trace is optional.
     """
-    logger.info("find_contact called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "find_contact called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         payload = (await assemble_contact(ctx)).model_dump(mode="json")
@@ -177,8 +190,7 @@ async def find_contact(
             }
         return payload
     except Exception as exc:
-        logger.error("find_contact error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("find_contact", exc)
 
 
 async def draft_outreach(
@@ -200,10 +212,10 @@ async def draft_outreach(
     """
     logger.info(
         "draft_outreach called: source=%s listing=%s channel=%s angle=%s",
-        source,
-        url_or_id,
-        channel,
-        angle,
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+        safe_source_reference(channel),
+        safe_source_reference(angle or ""),
     )
     try:
         ctx = await _deal_context(url_or_id, source)
@@ -211,8 +223,7 @@ async def draft_outreach(
             await compose_outreach(ctx, channel=channel, angle=angle)  # type: ignore[arg-type]
         ).model_dump(mode="json")
     except Exception as exc:
-        logger.error("draft_outreach error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("draft_outreach", exc)
 
 
 async def handle_counter(
@@ -230,13 +241,16 @@ async def handle_counter(
     Returns:
         CounterAdvice with parsed meaning, verdict, reply, and explicit red flags.
     """
-    logger.info("handle_counter called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "handle_counter called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         return coach_counter(ctx, counter_text).model_dump(mode="json")
     except Exception as exc:
-        logger.error("handle_counter error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("handle_counter", exc)
 
 
 async def financing_options(
@@ -252,13 +266,16 @@ async def financing_options(
     Returns:
         Ranked eligible and ineligible FinancingOptions with FRED-anchored estimates.
     """
-    logger.info("financing_options called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "financing_options called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         return [option.model_dump(mode="json") for option in screen_financing(ctx)]
     except Exception as exc:
-        logger.error("financing_options error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("financing_options", exc)
 
 
 async def qualify_me(
@@ -282,7 +299,11 @@ async def qualify_me(
     Returns:
         QualifyResult with cash-to-close, explicit gates, gaps, and guidance.
     """
-    logger.info("qualify_me called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "qualify_me called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         result = screen_buyer(
@@ -296,8 +317,7 @@ async def qualify_me(
         )
         return result.model_dump(mode="json", by_alias=True)
     except Exception as exc:
-        logger.error("qualify_me error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("qualify_me", exc)
 
 
 async def size_debt(
@@ -325,9 +345,9 @@ async def size_debt(
     """
     logger.info(
         "size_debt called: source=%s listing=%s scenario=%s",
-        source,
-        url_or_id,
-        scenario,
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+        safe_source_reference(scenario),
     )
     try:
         ctx = await _deal_context(url_or_id, source)
@@ -340,8 +360,7 @@ async def size_debt(
             min_dscr=min_dscr,
         ).model_dump(mode="json")
     except Exception as exc:
-        logger.error("size_debt error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("size_debt", exc)
 
 
 async def due_diligence_plan(
@@ -363,8 +382,8 @@ async def due_diligence_plan(
     """
     logger.info(
         "due_diligence_plan called: source=%s listing=%s dd_days=%s",
-        source,
-        url_or_id,
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
         dd_days,
     )
     try:
@@ -377,8 +396,7 @@ async def due_diligence_plan(
         )
         return plan.model_dump(mode="json")
     except Exception as exc:
-        logger.error("due_diligence_plan error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("due_diligence_plan", exc)
 
 
 async def closing_plan(
@@ -396,13 +414,17 @@ async def closing_plan(
     Returns:
         ClosingPlan with ordered professional gates and the wire-fraud protocol.
     """
-    logger.info("closing_plan called: source=%s listing=%s state=%s", source, url_or_id, state)
+    logger.info(
+        "closing_plan called: source=%s listing=%s state=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+        safe_source_reference(state or ""),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         return build_closing_plan(ctx, state=state).model_dump(mode="json")
     except Exception as exc:
-        logger.error("closing_plan error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("closing_plan", exc)
 
 
 async def save_deal(
@@ -418,7 +440,11 @@ async def save_deal(
     Returns:
         The stable source-qualified deal_id, or an error dictionary.
     """
-    logger.info("save_deal called: source=%s listing=%s", source, url_or_id)
+    logger.info(
+        "save_deal called: source=%s listing=%s",
+        safe_source_reference(source),
+        safe_source_reference(url_or_id, source=source),
+    )
     try:
         ctx = await _deal_context(url_or_id, source)
         deal_id = await get_deal_store().save_deal(ctx.listing)
@@ -426,8 +452,7 @@ async def save_deal(
             raise RuntimeError("deal could not be persisted; check the SQLite path and logs")
         return {"deal_id": deal_id}
     except Exception as exc:
-        logger.error("save_deal error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("save_deal", exc)
 
 
 async def list_deals() -> dict:
@@ -448,8 +473,7 @@ async def list_deals() -> dict:
             deals = [{**deal, "last_note": None} for deal in deals]
         return {"deals": deals, "count": len(deals)}
     except Exception as exc:
-        logger.error("list_deals error: %s", exc)
-        return {"error": str(exc)}
+        return _safe_failure("list_deals", exc)
 
 
 __all__ = [

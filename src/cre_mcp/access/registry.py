@@ -116,6 +116,8 @@ class WorkspaceRegistry:
             active=grant["active"],
             trusted=False,
             display_name=grant.get("display_name", ""),
+            actor_id=f"key:{_digest(key)}",
+            session_id=f"key:{_digest(key)}",
         )
 
     # -- approvals --------------------------------------------------------

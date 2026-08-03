@@ -28,11 +28,12 @@ async def test_sqlite_set_get_expiry_and_eviction(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_persistent_policy_second_client_skips_network(tmp_path):
+async def test_registry_zero_ttl_prevents_persistent_census_cache(tmp_path):
     config = CreConfig(
         cache_db_path=tmp_path / "cache.db",
         request_delay_seconds=0,
         max_retries=1,
+        source_rights_enabled={"market.census_acs": True},
     )
     persistent = SQLiteCache(config.cache_db_path)
     geo = GeoRef(
@@ -60,6 +61,11 @@ async def test_persistent_policy_second_client_skips_network(tmp_path):
         session.get.assert_awaited_once()
 
     with patch("cre_mcp.http.fetch.AsyncSession") as session_class:
+        session = session_class.return_value
+        session.get = AsyncMock(
+            return_value=MockResponse(200, load_fixture("census/acs5_profile.json"))
+        )
+        session.close = AsyncMock()
         async with FetchClient(
             config=config,
             cache=TTLCache(),
@@ -69,4 +75,4 @@ async def test_persistent_policy_second_client_skips_network(tmp_path):
                 geo, 2024
             )
             assert metrics["population"].value == 1_330_015
-        session_class.assert_not_called()
+        session.get.assert_awaited_once()

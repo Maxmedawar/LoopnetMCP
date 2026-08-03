@@ -17,33 +17,44 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
 def _client(cache=None, persistent_cache=None) -> FetchClient:
     client = FetchClient(
-        config=CreConfig(request_delay_seconds=0, max_retries=1),
+        config=CreConfig(
+            request_delay_seconds=0,
+            max_retries=1,
+            source_rights_enabled={
+                "listing.crexi": True,
+                "listing.auction_com": True,
+                "osm.overpass": True,
+            },
+        ),
         cache=cache,
         persistent_cache=persistent_cache,
     )
     client._warmed_up_hosts.add("api.crexi.com")
+    client._enforce_rate_limit = AsyncMock()
     return client
 
 
 @pytest.mark.asyncio
-async def test_post_json_decodes_and_caches_by_stable_body_hash():
+async def test_post_json_decodes_without_cache_when_registry_ttl_is_zero():
     with patch("cre_mcp.http.fetch.AsyncSession") as session_class:
         session = session_class.return_value
         session.post = AsyncMock(
             side_effect=[
                 MockResponse(200, '{"data":[{"id":1}]}'),
                 MockResponse(200, '{"data":[{"id":2}]}'),
+                MockResponse(200, '{"data":[{"id":3}]}'),
             ]
         )
         session.close = AsyncMock()
         async with _client(cache=TTLCache()) as client:
             first = await client.post_json(CREXI_URL, {"count": 1, "offset": 0})
-            cached = await client.post_json(CREXI_URL, {"offset": 0, "count": 1})
+            repeated = await client.post_json(CREXI_URL, {"offset": 0, "count": 1})
             second = await client.post_json(CREXI_URL, {"count": 1, "offset": 1})
 
-    assert first == cached == {"data": [{"id": 1}]}
-    assert second == {"data": [{"id": 2}]}
-    assert session.post.await_count == 2
+    assert first == {"data": [{"id": 1}]}
+    assert repeated == {"data": [{"id": 2}]}
+    assert second == {"data": [{"id": 3}]}
+    assert session.post.await_count == 3
 
 
 @pytest.mark.asyncio
@@ -73,11 +84,13 @@ async def test_post_form_json_uses_form_body_headers_and_cache():
             )
 
     assert first == cached == {"elements": []}
-    session.post.assert_awaited_once_with(
+    assert session.post.await_count == 2
+    session.post.assert_awaited_with(
         OVERPASS_URL,
         data={"data": "[out:json];node(1);out;"},
         headers=headers,
     )
+    persistent.get.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -104,11 +117,11 @@ def test_crexi_policy_has_cloudflare_headers_and_cache_windows():
     }
     assert policy.browser_fallback is True
     assert policy.cache_namespace == "crexi"
-    assert policy.cache_ttl_seconds == 15 * 60
-    assert policy.detail_cache_ttl_seconds == 2 * 60 * 60
+    assert policy.cache_ttl_seconds == 0
+    assert policy.detail_cache_ttl_seconds == 0
 
 
-def test_auctioncom_policy_has_antibot_fallback_and_persistent_cache():
+def test_auctioncom_policy_has_antibot_fallback_but_no_raw_cache():
     client = _client()
     policy = client._policy_for_url(AUCTIONCOM_URL)
 
@@ -116,7 +129,9 @@ def test_auctioncom_policy_has_antibot_fallback_and_persistent_cache():
     assert policy.warmup_url == "https://www.auction.com/"
     assert policy.browser_fallback is True
     assert policy.cache_namespace == "auction-com"
-    assert policy.persist is True
+    assert policy.cache_ttl_seconds == 0
+    assert policy.persistent_cache_ttl_seconds == 0
+    assert policy.persist is False
 
 
 @pytest.mark.asyncio

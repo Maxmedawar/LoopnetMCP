@@ -74,7 +74,7 @@ async def test_analyze_distressed_deal_returns_asset_and_distressed_scores():
     source = Mock()
     source.get_detail = AsyncMock(return_value=_listing())
     fake_registry = Mock()
-    fake_registry.get.return_value = source
+    fake_registry.get_authorized.return_value = source
     with patch("cre_mcp.tools.deal_tools.registry", fake_registry), patch(
         "cre_mcp.tools.deal_tools._market_for",
         new=AsyncMock(return_value=(None, None)),
