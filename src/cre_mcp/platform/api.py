@@ -1,14 +1,17 @@
 """Authenticated customer-facing HTTP routes for the cloud platform."""
 from __future__ import annotations
 import asyncio
+import hmac
+import sqlite3
 from dataclasses import asdict, is_dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from pydantic import BaseModel
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 from cre_mcp.access.profiles import Profile
 from cre_mcp.config import CreConfig
@@ -22,6 +25,15 @@ from cre_mcp.platform.admin import (
     AdminValidationError,
 )
 from cre_mcp.platform.authority import AuthorityOutcome, AuthorityResolver
+from cre_mcp.platform.auth import OAuthSessionStore
+from cre_mcp.platform.connection import (
+    BrowserSessionStore,
+    ClerkHumanIdentityVerifier,
+    HumanIdentityStore,
+    HumanIdentityVerifier,
+    PendingAuthorization,
+    PendingAuthorizationStore,
+)
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
 from cre_mcp.platform.providers.core import (
@@ -73,10 +85,33 @@ def _error(
         headers=headers,
     )
 
+
+def _oauth_error(status: int, code: str, description: str) -> JSONResponse:
+    return JSONResponse(
+        {"error": code, "error_description": description},
+        status_code=status,
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
+
+
+OAUTH_PUBLIC_SCOPES = frozenset({"mcp:tools", "deals:read", "deals:write"})
+AUTHORITY_SELECTORS = frozenset(
+    {"workspace", "workspace_id", "user", "user_id", "profile", "plan", "territory"}
+)
+BLOCKED_ACCOUNT_STATES = frozenset(
+    {"suspended", "under_review", "canceled", "deletion_pending", "deleted"}
+)
+
 class PlatformApi:
     """Request handlers bound to one platform database."""
 
-    def __init__(self, config: CreConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: CreConfig | None = None,
+        *,
+        human_identity_verifier: HumanIdentityVerifier | None = None,
+    ) -> None:
+        self._injected_human_identity_verifier = human_identity_verifier
         self.configure(config or CreConfig())
 
     def configure(self, config: CreConfig) -> None:
@@ -96,6 +131,523 @@ class PlatformApi:
         self.provider_reconciliation = ProviderReconciliationStore(
             config.cache_db_path,
             self.provider_sync,
+        )
+        self.oauth = OAuthSessionStore(
+            config.cache_db_path,
+            refresh_family_max_age=timedelta(
+                days=config.oauth_refresh_family_max_age_days
+            ),
+        )
+        self.human_identities = HumanIdentityStore(config.cache_db_path)
+        self.browser_sessions = BrowserSessionStore(
+            config.cache_db_path,
+            ttl=timedelta(seconds=config.browser_session_ttl_seconds),
+        )
+        self.pending_authorizations = PendingAuthorizationStore(
+            config.cache_db_path
+        )
+        self.human_identity_verifier = self._injected_human_identity_verifier
+        if (
+            self.human_identity_verifier is None
+            and config.human_identity_provider == "clerk"
+            and config.clerk_secret_key is not None
+            and config.clerk_authorized_parties
+        ):
+            self.human_identity_verifier = ClerkHumanIdentityVerifier(config)
+
+    @staticmethod
+    def _connection_state(db_path, user_id: int) -> tuple[dict[str, Any] | None, list[str]]:
+        with sqlite3.connect(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            user = connection.execute(
+                "SELECT id,email,name FROM platform_users WHERE id=?",
+                (user_id,),
+            ).fetchone()
+            if user is None:
+                return None, []
+            rows = connection.execute(
+                """
+                SELECT workspace.public_id
+                FROM platform_memberships AS membership
+                JOIN platform_workspaces AS workspace
+                  ON workspace.id=membership.workspace_id
+                WHERE membership.user_id=?
+                ORDER BY workspace.id
+                """,
+                (user_id,),
+            ).fetchall()
+        return dict(user), [str(row["public_id"]) for row in rows]
+
+    async def _state_for_user(self, user_id: int) -> tuple[dict[str, Any] | None, list[str]]:
+        return await asyncio.to_thread(
+            self._connection_state, self.config.cache_db_path, user_id
+        )
+
+    async def _account_is_blocked(self, workspace: str) -> bool:
+        account = await asyncio.to_thread(self.entitlements.get_account, workspace)
+        return account is not None and account.state in BLOCKED_ACCOUNT_STATES
+
+    def _browser_session(self, request: Request):
+        token = request.cookies.get(self.config.browser_cookie_name)
+        if not token:
+            return None
+        return self.browser_sessions.validate(token)
+
+    def _connection_redirect(self, pending_handle: str) -> RedirectResponse:
+        parsed = urlsplit(self.config.connection_url)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        query["request"] = [pending_handle]
+        location = urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                urlencode(query, doseq=True),
+                parsed.fragment,
+            )
+        )
+        return RedirectResponse(location, status_code=303)
+
+    def _connection_origin(self) -> str:
+        parsed = urlsplit(self.config.connection_url)
+        return f"{parsed.scheme}://{parsed.netloc}"
+
+    def _with_connection_cors(self, request: Request, response: Response) -> Response:
+        origin = request.headers.get("origin")
+        if origin and hmac.compare_digest(origin, self._connection_origin()):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Vary"] = "Origin"
+        return response
+
+    async def browser_session_options(self, request: Request) -> Response:
+        origin = request.headers.get("origin", "")
+        if not origin or not hmac.compare_digest(origin, self._connection_origin()):
+            return _error(403, "origin_forbidden", "Connection origin is not allowed")
+        requested_method = request.headers.get("access-control-request-method", "")
+        if requested_method.upper() != "POST":
+            return _error(403, "method_forbidden", "Connection method is not allowed")
+        requested_headers = {
+            item.strip().casefold()
+            for item in request.headers.get("access-control-request-headers", "").split(",")
+            if item.strip()
+        }
+        if not requested_headers.issubset({"authorization", "content-type"}):
+            return _error(403, "headers_forbidden", "Connection headers are not allowed")
+        return Response(
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "POST",
+                "Access-Control-Allow-Headers": "Authorization, Content-Type",
+                "Access-Control-Max-Age": "600",
+                "Vary": "Origin",
+            },
+        )
+
+    async def oauth_metadata(self, request: Request) -> JSONResponse:
+        issuer = self.config.oauth_issuer.rstrip("/")
+        return JSONResponse(
+            {
+                "issuer": issuer,
+                "authorization_endpoint": issuer + "/oauth/authorize",
+                "token_endpoint": issuer + "/oauth/token",
+                "registration_endpoint": issuer + "/oauth/register",
+                "revocation_endpoint": issuer + "/oauth/revoke",
+                "response_types_supported": ["code"],
+                "grant_types_supported": ["authorization_code", "refresh_token"],
+                "code_challenge_methods_supported": ["S256"],
+                "token_endpoint_auth_methods_supported": ["none"],
+                "scopes_supported": sorted(OAUTH_PUBLIC_SCOPES),
+            },
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+
+    async def protected_resource_metadata(self, request: Request) -> JSONResponse:
+        return JSONResponse(
+            {
+                "resource": self.config.oauth_resource,
+                "authorization_servers": [self.config.oauth_issuer.rstrip("/")],
+                "bearer_methods_supported": ["header"],
+                "scopes_supported": sorted(OAUTH_PUBLIC_SCOPES),
+            },
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+
+    async def oauth_register(self, request: Request) -> JSONResponse:
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return error
+        if AUTHORITY_SELECTORS.intersection(body):
+            return _error(
+                422,
+                "authority_selector_forbidden",
+                "OAuth clients cannot select server-owned authority",
+            )
+        allowed = {
+            "client_name",
+            "redirect_uris",
+            "scope",
+            "token_endpoint_auth_method",
+            "grant_types",
+            "response_types",
+        }
+        if set(body).difference(allowed):
+            return _oauth_error(400, "invalid_client_metadata", "unsupported client metadata")
+        redirects = body.get("redirect_uris")
+        name = body.get("client_name", "MCP client")
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or len(name.strip()) > 128
+            or not isinstance(redirects, list)
+            or not redirects
+            or len(redirects) > 8
+            or any(not isinstance(uri, str) for uri in redirects)
+        ):
+            return _oauth_error(400, "invalid_client_metadata", "client name and redirect URIs are required")
+        if body.get("token_endpoint_auth_method", "none") != "none":
+            return _oauth_error(400, "invalid_client_metadata", "only public PKCE clients are supported")
+        if body.get("grant_types", ["authorization_code", "refresh_token"]) not in (
+            ["authorization_code"],
+            ["authorization_code", "refresh_token"],
+        ):
+            return _oauth_error(400, "invalid_client_metadata", "unsupported grant types")
+        if body.get("response_types", ["code"]) != ["code"]:
+            return _oauth_error(400, "invalid_client_metadata", "only the code response type is supported")
+        raw_scope = body.get("scope", "mcp:tools")
+        if not isinstance(raw_scope, str):
+            return _oauth_error(400, "invalid_client_metadata", "scope must be a string")
+        scopes = tuple(dict.fromkeys(raw_scope.split()))
+        if not scopes or not set(scopes).issubset(OAUTH_PUBLIC_SCOPES):
+            return _oauth_error(400, "invalid_scope", "requested scope is not supported")
+        try:
+            client = await asyncio.to_thread(
+                self.oauth.register_client,
+                name,
+                tuple(redirects),
+                scopes,
+            )
+        except ValueError as exc:
+            return _oauth_error(400, "invalid_redirect_uri", str(exc))
+        return JSONResponse(
+            {
+                "client_id": client.client_id,
+                "client_name": client.name,
+                "redirect_uris": list(client.redirect_uris),
+                "scope": " ".join(client.scopes),
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"],
+                "token_endpoint_auth_method": "none",
+            },
+            status_code=201,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    async def oauth_authorize(self, request: Request):
+        pairs = request.query_params.multi_items()
+        keys = [key for key, _ in pairs]
+        if len(keys) != len(set(keys)):
+            return _error(400, "duplicate_parameter", "OAuth parameters cannot repeat")
+        supplied = set(keys)
+        if AUTHORITY_SELECTORS.intersection(supplied):
+            return _error(
+                422,
+                "authority_selector_forbidden",
+                "Workspace, identity, profile, plan, and territory are server-owned",
+            )
+        allowed = {
+            "request",
+            "response_type",
+            "client_id",
+            "redirect_uri",
+            "scope",
+            "state",
+            "code_challenge",
+            "code_challenge_method",
+            "resource",
+        }
+        if supplied.difference(allowed):
+            return _error(400, "invalid_request", "Unsupported authorization parameter")
+
+        pending_handle = request.query_params.get("request")
+        if pending_handle:
+            if len(supplied) != 1:
+                return _error(400, "invalid_request", "Pending request cannot be combined with OAuth inputs")
+            pending = self.pending_authorizations.get(pending_handle)
+            if pending is None:
+                return _error(400, "invalid_request", "Authorization request is invalid or expired")
+        else:
+            required = {
+                "response_type",
+                "client_id",
+                "redirect_uri",
+                "state",
+                "code_challenge",
+                "code_challenge_method",
+            }
+            if not required.issubset(supplied):
+                return _error(400, "invalid_request", "Required authorization parameter is missing")
+            if request.query_params["response_type"] != "code":
+                return _error(400, "unsupported_response_type", "Only code is supported")
+            client_id = request.query_params["client_id"]
+            client = self.oauth.get_client(client_id)
+            redirect_uri = request.query_params["redirect_uri"]
+            if client is None or not client.active or redirect_uri not in client.redirect_uris:
+                return _error(400, "invalid_request", "OAuth client or redirect URI is invalid")
+            scopes = tuple(dict.fromkeys(request.query_params.get("scope", "mcp:tools").split()))
+            if not scopes or not set(scopes).issubset(set(client.scopes)):
+                return _error(400, "invalid_scope", "Requested scope is not registered")
+            resource = request.query_params.get("resource", self.config.oauth_resource)
+            if resource != self.config.oauth_resource:
+                return _error(400, "invalid_target", "Requested resource is not this MCP server")
+            pending = PendingAuthorization(
+                client_id=client_id,
+                redirect_uri=redirect_uri,
+                state=request.query_params["state"],
+                scopes=scopes,
+                code_challenge=request.query_params["code_challenge"],
+                code_challenge_method=request.query_params["code_challenge_method"],
+                audience=self.config.oauth_audience,
+                resource=resource,
+            )
+            if not pending.state.strip() or len(pending.state) > 512:
+                return _error(
+                    400,
+                    "invalid_request",
+                    "State is required and must not exceed 512 characters",
+                )
+            try:
+                # Validate PKCE and all registered-client constraints before a
+                # browser login is ever requested. The temporary code is not
+                # issued here; validation is performed by a no-write mirror.
+                if pending.code_challenge_method != "S256":
+                    raise ValueError("PKCE S256 is required")
+                import re
+
+                if re.fullmatch(r"[A-Za-z0-9_-]{43,128}", pending.code_challenge) is None:
+                    raise ValueError("PKCE S256 code challenge is invalid")
+            except ValueError as exc:
+                return _error(400, "invalid_request", str(exc))
+            pending_handle = self.pending_authorizations.issue(pending)
+
+        browser = self._browser_session(request)
+        if browser is None:
+            return self._connection_redirect(pending_handle)
+        user, workspaces = await self._state_for_user(browser.user_id)
+        if user is None:
+            return _error(401, "browser_session_invalid", "Platform user no longer exists")
+        if len(workspaces) != 1:
+            return _error(
+                409,
+                "workspace_selection_required",
+                "Exactly one live workspace membership is required for connection",
+            )
+        if await self._account_is_blocked(workspaces[0]):
+            return _error(
+                403,
+                "account_access_blocked",
+                "This workspace is not currently permitted to connect",
+            )
+        consumed = self.pending_authorizations.consume(pending_handle)
+        if consumed is None:
+            return _error(400, "invalid_request", "Authorization request is invalid or expired")
+        try:
+            code = await asyncio.to_thread(
+                self.oauth.create_auth_code,
+                workspaces[0],
+                browser.user_id,
+                consumed.client_id,
+                consumed.redirect_uri,
+                consumed.code_challenge,
+                code_challenge_method=consumed.code_challenge_method,
+                scopes=consumed.scopes,
+                audience=consumed.audience,
+                resource=consumed.resource,
+            )
+        except ValueError as exc:
+            return _error(400, "invalid_request", str(exc))
+        location = consumed.redirect_uri + ("&" if "?" in consumed.redirect_uri else "?") + urlencode(
+            {"code": code, "state": consumed.state}
+        )
+        return RedirectResponse(location, status_code=303)
+
+    async def browser_session(self, request: Request) -> JSONResponse:
+        if self.human_identity_verifier is None:
+            return self._with_connection_cors(request, _error(
+                503,
+                "human_identity_unconfigured",
+                "Customer identity verification is not configured",
+            ))
+        header = request.headers.get("authorization", "")
+        scheme, separator, token = header.partition(" ")
+        if not separator or scheme.casefold() != "bearer" or not token.strip():
+            return self._with_connection_cors(
+                request,
+                _error(401, "human_identity_required", "Clerk bearer token is required"),
+            )
+        identity = await self.human_identity_verifier.verify_bearer(token.strip())
+        if identity is None:
+            return self._with_connection_cors(
+                request,
+                _error(401, "human_identity_invalid", "Clerk session is invalid or expired"),
+            )
+        try:
+            user_id = await asyncio.to_thread(self.human_identities.resolve_or_bind, identity)
+        except ValueError as exc:
+            return self._with_connection_cors(
+                request, _error(403, "identity_not_provisioned", str(exc))
+            )
+        user, workspaces = await self._state_for_user(user_id)
+        if user is None:
+            return self._with_connection_cors(
+                request,
+                _error(403, "identity_not_provisioned", "Platform user no longer exists"),
+            )
+        blocked = (
+            len(workspaces) == 1
+            and await self._account_is_blocked(workspaces[0])
+        )
+        issued = await asyncio.to_thread(self.browser_sessions.issue, user_id)
+        connection: dict[str, Any] = {
+            "status": (
+                "access_blocked"
+                if blocked
+                else "ready"
+                if len(workspaces) == 1
+                else "workspace_resolution_required"
+            ),
+            "workspace_count": len(workspaces),
+        }
+        if len(workspaces) == 1:
+            connection["workspace_id"] = workspaces[0]
+        response = JSONResponse(
+            {
+                "user": user,
+                "connection": connection,
+                "csrf_token": issued.csrf_token,
+                "expires_at": issued.expires_at.isoformat(),
+            },
+            status_code=201,
+            headers={"Cache-Control": "no-store"},
+        )
+        response.set_cookie(
+            self.config.browser_cookie_name,
+            issued.token,
+            max_age=self.config.browser_session_ttl_seconds,
+            httponly=True,
+            secure=self.config.browser_cookie_secure,
+            samesite="lax",
+            path="/",
+        )
+        return self._with_connection_cors(request, response)
+
+    async def browser_logout(self, request: Request) -> JSONResponse:
+        token = request.cookies.get(self.config.browser_cookie_name, "")
+        csrf = request.headers.get("x-csrf-token", "")
+        if not token or not csrf or not self.browser_sessions.validate_csrf(token, csrf):
+            return _error(403, "csrf_failed", "Valid browser session and CSRF token required")
+        await asyncio.to_thread(self.browser_sessions.revoke, token)
+        response = JSONResponse({"revoked": True}, headers={"Cache-Control": "no-store"})
+        response.delete_cookie(
+            self.config.browser_cookie_name,
+            httponly=True,
+            secure=self.config.browser_cookie_secure,
+            samesite="lax",
+            path="/",
+        )
+        return response
+
+    async def _parse_form(self, request: Request) -> tuple[dict[str, str] | None, JSONResponse | None]:
+        content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().casefold()
+        if content_type != "application/x-www-form-urlencoded":
+            return None, _oauth_error(415, "invalid_request", "Form encoding is required")
+        raw = await request.body()
+        if len(raw) > 16 * 1024:
+            return None, _oauth_error(413, "invalid_request", "OAuth form is too large")
+        try:
+            parsed = parse_qs(
+                raw.decode("utf-8"),
+                keep_blank_values=True,
+                strict_parsing=True,
+                max_num_fields=16,
+            )
+        except (UnicodeDecodeError, ValueError):
+            return None, _oauth_error(400, "invalid_request", "OAuth form is invalid")
+        if any(len(values) != 1 for values in parsed.values()):
+            return None, _oauth_error(400, "invalid_request", "OAuth parameters cannot repeat")
+        return {key: values[0] for key, values in parsed.items()}, None
+
+    def _token_response(self, tokens) -> JSONResponse:
+        session = self.oauth.validate_access(
+            tokens.access_token,
+            audience=self.config.oauth_audience,
+            resource=self.config.oauth_resource,
+        )
+        if session is None:
+            return _oauth_error(400, "invalid_grant", "Issued session is no longer valid")
+        expires_in = max(
+            0,
+            int((tokens.access_expires_at - datetime.now(UTC)).total_seconds()),
+        )
+        return JSONResponse(
+            {
+                "access_token": tokens.access_token,
+                "refresh_token": tokens.refresh_token,
+                "token_type": "Bearer",
+                "expires_in": expires_in,
+                "scope": " ".join(session.scopes),
+            },
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
+
+    async def oauth_token(self, request: Request) -> JSONResponse:
+        form, error = await self._parse_form(request)
+        if error is not None:
+            return error
+        if AUTHORITY_SELECTORS.intersection(form):
+            return _oauth_error(400, "invalid_request", "Server-owned authority cannot be selected")
+        grant_type = form.get("grant_type")
+        client_id = form.get("client_id", "")
+        try:
+            if grant_type == "authorization_code":
+                required = ("code", "redirect_uri", "code_verifier")
+                if not client_id or any(not form.get(key) for key in required):
+                    raise ValueError("authorization code exchange parameters are required")
+                tokens = await asyncio.to_thread(
+                    self.oauth.exchange_code,
+                    form["code"],
+                    client_id,
+                    form["redirect_uri"],
+                    form["code_verifier"],
+                )
+            elif grant_type == "refresh_token":
+                if not client_id or not form.get("refresh_token"):
+                    raise ValueError("refresh token and client id are required")
+                tokens = await asyncio.to_thread(
+                    self.oauth.refresh_session,
+                    form["refresh_token"],
+                    client_id=client_id,
+                )
+                if tokens is None:
+                    raise ValueError("refresh token is invalid or expired")
+            else:
+                return _oauth_error(400, "unsupported_grant_type", "Grant type is not supported")
+        except ValueError as exc:
+            return _oauth_error(400, "invalid_grant", str(exc))
+        return self._token_response(tokens)
+
+    async def oauth_revoke(self, request: Request) -> JSONResponse:
+        form, error = await self._parse_form(request)
+        if error is not None:
+            return error
+        token = form.get("token", "")
+        client_id = form.get("client_id")
+        if token:
+            await asyncio.to_thread(self.oauth.revoke_token, token, client_id=client_id)
+        return JSONResponse(
+            {}, headers={"Cache-Control": "no-store", "Pragma": "no-cache"}
         )
 
     def _bearer_challenge(
@@ -859,9 +1411,26 @@ class PlatformApi:
         ]
 
 
-# (path, methods, handler-name) — the single source of truth for the platform
+# (path, methods, handler-name): the single source of truth for the platform
 # HTTP surface, shared by ``PlatformApi.routes`` and the server's registration.
 PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    (
+        "/.well-known/oauth-authorization-server",
+        ("GET",),
+        "oauth_metadata",
+    ),
+    (
+        "/.well-known/oauth-protected-resource",
+        ("GET",),
+        "protected_resource_metadata",
+    ),
+    ("/oauth/register", ("POST",), "oauth_register"),
+    ("/oauth/authorize", ("GET",), "oauth_authorize"),
+    ("/oauth/token", ("POST",), "oauth_token"),
+    ("/oauth/revoke", ("POST",), "oauth_revoke"),
+    ("/v1/browser/session", ("POST",), "browser_session"),
+    ("/v1/browser/session", ("OPTIONS",), "browser_session_options"),
+    ("/v1/browser/session", ("DELETE",), "browser_logout"),
     ("/v1/webhooks/stripe", ("POST",), "stripe_webhook"),
     ("/v1/webhooks/skool", ("POST",), "skool_webhook"),
     (
@@ -941,9 +1510,18 @@ PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 )
 
 
-def starlette_app(config: CreConfig | None = None) -> Starlette:
+def starlette_app(
+    config: CreConfig | None = None,
+    *,
+    human_identity_verifier: HumanIdentityVerifier | None = None,
+) -> Starlette:
     """Build a standalone ASGI app for the customer-facing platform routes."""
-    return Starlette(routes=PlatformApi(config).routes())
+    return Starlette(
+        routes=PlatformApi(
+            config,
+            human_identity_verifier=human_identity_verifier,
+        ).routes()
+    )
 
 
 __all__ = ["PLATFORM_ROUTE_SPECS", "PlatformApi", "starlette_app"]

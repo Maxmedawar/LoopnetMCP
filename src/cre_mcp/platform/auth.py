@@ -862,6 +862,42 @@ class OAuthSessionStore:
             )
         return cursor.rowcount > 0
 
+    def revoke_token(self, token: str, *, client_id: str | None = None) -> bool:
+        """Revoke the token's complete OAuth session without revealing validity."""
+        token_hash = _digest(token)
+        now = _iso(_utc_now())
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            parameters: list[str] = [token_hash, token_hash, token_hash]
+            client_filter = ""
+            if client_id is not None:
+                client_filter = " AND session.client_id=?"
+                parameters.append(client_id)
+            row = connection.execute(
+                f"""
+                SELECT DISTINCT session.session_id
+                FROM platform_oauth_sessions AS session
+                LEFT JOIN platform_oauth_refresh_history AS history
+                  ON history.session_id=session.session_id
+                WHERE (
+                    session.access_hash=?
+                    OR session.refresh_hash=?
+                    OR history.token_hash=?
+                ){client_filter}
+                """,
+                tuple(parameters),
+            ).fetchone()
+            if row is None:
+                return False
+            cursor = connection.execute(
+                """
+                UPDATE platform_oauth_sessions SET revoked_at=COALESCE(revoked_at,?),
+                    updated_at=? WHERE session_id=?
+                """,
+                (now, now, row["session_id"]),
+            )
+        return cursor.rowcount == 1
+
 
 __all__ = [
     "AUTHORITY_VERSION",

@@ -755,14 +755,10 @@ def test_session_issuance_has_no_profile_plan_or_territory_authority_inputs(tmp_
     (
         "/authorize?user_id=7&workspace_id=ws-invented",
         "/register",
-        "/oauth/register",
         "/token",
-        "/oauth/token",
     ),
 )
-async def test_identity_dependent_public_authorize_endpoint_is_not_exposed(
-    tmp_path, path
-):
+async def test_legacy_or_identity_injecting_oauth_aliases_are_not_exposed(tmp_path, path):
     config = _config(tmp_path)
     app = create_http_app(config=config)
     transport = httpx.ASGITransport(app=app)

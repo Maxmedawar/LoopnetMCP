@@ -187,7 +187,12 @@ def _build_hosted_customer_server() -> FastMCP:
     return build_customer_server(mcp)
 
 
-def create_http_app(path: str = "/mcp", config: CreConfig | None = None):
+def create_http_app(
+    path: str = "/mcp",
+    config: CreConfig | None = None,
+    *,
+    human_identity_verifier=None,
+):
     """Construct the opt-in Streamable HTTP ASGI application without binding.
 
     The FastMCP transport lives at ``path``. The authenticated customer-facing
@@ -200,7 +205,10 @@ def create_http_app(path: str = "/mcp", config: CreConfig | None = None):
     from cre_mcp.platform.api import PlatformApi
 
     config = config or CreConfig()
-    platform = PlatformApi(config)
+    platform = PlatformApi(
+        config,
+        human_identity_verifier=human_identity_verifier,
+    )
     from cre_mcp.surface import CUSTOMER_SURFACE
 
     hosted_server = _build_hosted_customer_server()

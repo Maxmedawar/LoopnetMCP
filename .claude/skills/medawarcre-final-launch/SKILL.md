@@ -77,6 +77,28 @@ Stripe and Skool are signals. They never directly authorize a request.
 13. Prepare the production-readiness packet. Public deployment, DNS, live
     payments, and real customer data require explicit final approval.
 
+## Current execution tranche
+
+The founder approved this exact sequence on 2026-08-04. It overrides the
+remaining order above without weakening any security invariant:
+
+1. Build Clerk-backed customer sign-in and the MCP connection journey only.
+   Do not revive or expose a customer portal.
+2. Build the internal-only React Operations Console using the verified Reicon
+   provenance. Every read and mutation must re-check live internal authority.
+3. Integrate Stripe in test mode. Do not create live prices, collect real
+   payment, or activate live billing.
+4. Integrate Skool joining, current-state reconciliation, and audited manual
+   revocation only to the provider capabilities that can be proved.
+5. Run the complete integrated security audit and repair every valid critical
+   or high finding.
+6. Deploy to private staging with no public DNS or public production exposure.
+7. Stop and request explicit founder approval before any production cutover.
+
+Ask for one exact credential or external-account action only when its adapter
+and local tests are complete and that one item is the remaining blocker. Never
+ask for a secret to be pasted into chat.
+
 ## Mandatory phase loop
 
 For each phase:

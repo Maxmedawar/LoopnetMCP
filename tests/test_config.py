@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from cre_mcp.config import CreConfig
 
 
@@ -60,3 +63,43 @@ def test_env_example_documents_every_provider_setting_without_skool_secret():
         assert text.count(name) == 1
     assert "# CRE_SKOOL_WEBHOOK_SECRET=" in text
     assert "CRE_SKOOL_WEBHOOK_SECRET=replace" not in text
+
+
+def test_clerk_and_connection_urls_are_https_origins_except_loopback():
+    config = CreConfig(
+        _env_file=None,
+        oauth_issuer="http://localhost:8000/",
+        connection_url="http://127.0.0.1:5173/connect",
+        clerk_issuer="https://clerk.example.test/",
+        clerk_authorized_parties=(
+            "https://connect.example.test/",
+            "https://connect.example.test",
+        ),
+    )
+    assert config.oauth_issuer == "http://localhost:8000"
+    assert config.clerk_issuer == "https://clerk.example.test"
+    assert config.clerk_authorized_parties == ("https://connect.example.test",)
+
+    invalid = (
+        {"oauth_issuer": "http://mcp.example.test"},
+        {"oauth_issuer": "https://mcp.example.test/oauth"},
+        {"connection_url": "http://connect.example.test/connect"},
+        {"connection_url": "https://connect.example.test/connect#token"},
+        {"clerk_issuer": "https://clerk.example.test/path"},
+        {"clerk_authorized_parties": ("https://connect.example.test/path",)},
+    )
+    for values in invalid:
+        with pytest.raises(ValidationError):
+            CreConfig(_env_file=None, **values)
+
+
+def test_blank_clerk_secrets_and_text_are_unconfigured():
+    config = CreConfig(
+        _env_file=None,
+        clerk_secret_key="   ",
+        clerk_publishable_key=" ",
+        clerk_issuer=" ",
+    )
+    assert config.clerk_secret_key is None
+    assert config.clerk_publishable_key is None
+    assert config.clerk_issuer is None

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import (
     AliasChoices,
@@ -13,6 +14,39 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from cre_mcp.access.profiles import Profile
+
+
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _validated_http_url(
+    value: str,
+    *,
+    field_name: str,
+    origin_only: bool,
+) -> str:
+    normalized = value.strip()
+    parsed = urlsplit(normalized)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError(f"{field_name} must be an absolute HTTP URL without credentials")
+    if parsed.scheme != "https" and parsed.hostname not in _LOOPBACK_HOSTS:
+        raise ValueError(f"{field_name} must use HTTPS outside loopback development")
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise ValueError(f"{field_name} has an invalid port") from exc
+    if parsed.fragment:
+        raise ValueError(f"{field_name} cannot include a fragment")
+    if origin_only and (parsed.path not in {"", "/"} or parsed.query):
+        raise ValueError(f"{field_name} must be an origin without path or query")
+    if origin_only:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return normalized
 
 
 def _env_aliases(field_name: str) -> AliasChoices:
@@ -69,6 +103,51 @@ class CreConfig(BaseSettings):
         default=90,
         ge=1,
         validation_alias=_env_aliases("oauth_refresh_family_max_age_days"),
+    )
+    oauth_issuer: str = Field(
+        default="http://localhost:8000",
+        validation_alias=_env_aliases("oauth_issuer"),
+    )
+    connection_url: str = Field(
+        default="http://localhost:5173/connect",
+        validation_alias=_env_aliases("connection_url"),
+    )
+    human_identity_provider: Literal["disabled", "clerk"] = Field(
+        default="disabled",
+        validation_alias=_env_aliases("human_identity_provider"),
+    )
+    clerk_secret_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=_env_aliases("clerk_secret_key"),
+    )
+    clerk_publishable_key: str | None = Field(
+        default=None,
+        validation_alias=_env_aliases("clerk_publishable_key"),
+    )
+    clerk_authorized_parties: tuple[str, ...] = Field(
+        default=(),
+        validation_alias=_env_aliases("clerk_authorized_parties"),
+    )
+    clerk_issuer: str | None = Field(
+        default=None,
+        validation_alias=_env_aliases("clerk_issuer"),
+    )
+    browser_session_ttl_seconds: int = Field(
+        default=30 * 60,
+        ge=60,
+        le=24 * 60 * 60,
+        validation_alias=_env_aliases("browser_session_ttl_seconds"),
+    )
+    browser_cookie_name: str = Field(
+        default="mcr_browser",
+        min_length=1,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        validation_alias=_env_aliases("browser_cookie_name"),
+    )
+    browser_cookie_secure: bool = Field(
+        default=True,
+        validation_alias=_env_aliases("browser_cookie_secure"),
     )
     request_delay_seconds: float = Field(
         default=3.0,
@@ -230,7 +309,11 @@ class CreConfig(BaseSettings):
         validation_alias=_env_aliases("skool_tier_mappings"),
     )
 
-    @field_validator("stripe_webhook_secret", "skool_webhook_secret")
+    @field_validator(
+        "clerk_secret_key",
+        "stripe_webhook_secret",
+        "skool_webhook_secret",
+    )
     @classmethod
     def blank_secret_is_unconfigured(
         cls,
@@ -239,6 +322,61 @@ class CreConfig(BaseSettings):
         if value is None:
             return None
         return value if value.get_secret_value().strip() else None
+
+    @field_validator("clerk_publishable_key", "clerk_issuer")
+    @classmethod
+    def blank_clerk_text_is_unconfigured(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @field_validator("oauth_issuer")
+    @classmethod
+    def validate_oauth_issuer(cls, value: str) -> str:
+        return _validated_http_url(
+            value,
+            field_name="oauth_issuer",
+            origin_only=True,
+        )
+
+    @field_validator("connection_url")
+    @classmethod
+    def validate_connection_url(cls, value: str) -> str:
+        return _validated_http_url(
+            value,
+            field_name="connection_url",
+            origin_only=False,
+        )
+
+    @field_validator("clerk_issuer")
+    @classmethod
+    def validate_clerk_issuer(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validated_http_url(
+            value,
+            field_name="clerk_issuer",
+            origin_only=True,
+        )
+
+    @field_validator("clerk_authorized_parties")
+    @classmethod
+    def validate_clerk_authorized_parties(
+        cls,
+        value: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        normalized = tuple(
+            dict.fromkeys(
+                _validated_http_url(
+                    item,
+                    field_name="clerk_authorized_parties",
+                    origin_only=True,
+                )
+                for item in value
+            )
+        )
+        return normalized
 
     @field_validator("stripe_price_mappings")
     @classmethod

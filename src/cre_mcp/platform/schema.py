@@ -37,6 +37,9 @@ PLATFORM_TABLES = frozenset(
         "platform_internal_admins",
         "platform_external_accounts",
         "platform_admin_audit",
+        "platform_human_identities",
+        "platform_browser_sessions",
+        "platform_oauth_authorization_requests",
     }
 )
 
@@ -213,6 +216,53 @@ CREATE TABLE IF NOT EXISTS platform_privacy_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_platform_privacy_requests_workspace
     ON platform_privacy_requests(workspace_id, status, created_at);
+
+CREATE TABLE IF NOT EXISTS platform_human_identities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    subject_hash TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(provider, subject_hash),
+    UNIQUE(provider, user_id),
+    FOREIGN KEY(user_id) REFERENCES platform_users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_platform_human_identities_user
+    ON platform_human_identities(user_id);
+
+CREATE TABLE IF NOT EXISTS platform_browser_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_hash TEXT NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL,
+    csrf_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES platform_users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_platform_browser_sessions_user
+    ON platform_browser_sessions(user_id, revoked_at, expires_at);
+
+CREATE TABLE IF NOT EXISTS platform_oauth_authorization_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_hash TEXT NOT NULL UNIQUE,
+    client_id TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    state TEXT NOT NULL,
+    scopes TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    code_challenge_method TEXT NOT NULL,
+    audience TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    consumed_at TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(client_id)
+        REFERENCES platform_oauth_clients(client_id) ON DELETE CASCADE,
+    CHECK(code_challenge_method = 'S256')
+);
 """
 
 SCHEMA = (
