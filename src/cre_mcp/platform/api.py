@@ -2766,19 +2766,33 @@ def starlette_app(
     human_identity_verifier: HumanIdentityVerifier | None = None,
     stripe_reconciliation_service: StripeReconciliationService | None = None,
     skool_lifecycle_service: SkoolLifecycleService | None = None,
-    include_uncertified_deal_routes: bool = False,
 ) -> Starlette:
-    """Build a standalone ASGI app for the customer-facing platform routes."""
-    return Starlette(
-        routes=PlatformApi(
-            config,
-            human_identity_verifier=human_identity_verifier,
-            stripe_reconciliation_service=stripe_reconciliation_service,
-            skool_lifecycle_service=skool_lifecycle_service,
-        ).routes(
-            include_uncertified_deal_routes=include_uncertified_deal_routes
-        )
+    """Build a fail-closed standalone ASGI app for platform routes."""
+    from cre_mcp.postgres.runtime import (
+        bind_persistence_lifespan,
+        build_postgres_hosted_persistence,
     )
+
+    bundle = build_postgres_hosted_persistence()
+    try:
+        if getattr(bundle, "backend", None) != "postgres":
+            raise RuntimeError("hosted HTTP requires PostgreSQL persistence")
+        if any(
+            service is not None
+            for service in (
+                human_identity_verifier,
+                stripe_reconciliation_service,
+                skool_lifecycle_service,
+            )
+        ):
+            raise ValueError(
+                "hosted service dependencies must be owned by the persistence bundle"
+            )
+        app = Starlette(routes=bundle.platform_api.routes())
+        return bind_persistence_lifespan(app, bundle)
+    except Exception:
+        bundle.close()
+        raise
 
 
 __all__ = ["PLATFORM_ROUTE_SPECS", "PlatformApi", "starlette_app"]

@@ -8,10 +8,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from cre_mcp.platform.admin import AdminConflictError
-from cre_mcp.platform.api import starlette_app
 from cre_mcp.platform.auth import OAuthSessionStore
 from cre_mcp.platform.providers.skool_lifecycle import SkoolLifecycleService
 from cre_mcp.platform.repository import PlatformRepository
+from tests.hosted_helpers import create_testing_starlette_app
 
 from .admin_helpers import _seed_internal_admin, audit_rows
 from .provider_helpers import (
@@ -63,7 +63,7 @@ async def _lifecycle(tmp_path, *, name: str = "Skool Target"):
             "community_1": "https://www.skool.com/medawar-cre"
         },
     )
-    starlette_app(config)
+    create_testing_starlette_app(config=config)
     workspace = await seed_workspace(config, name)
     subject_id = _subject_id(config.cache_db_path, workspace.id)
     _seed_internal_admin(

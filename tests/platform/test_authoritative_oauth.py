@@ -17,11 +17,16 @@ from fastmcp import FastMCP
 from cre_mcp.access.profiles import Profile
 from cre_mcp.access.registry import WorkspaceRegistry
 from cre_mcp.config import CreConfig
-from cre_mcp.platform.api import PlatformApi, starlette_app
+from cre_mcp.platform.api import PlatformApi
 from cre_mcp.platform.auth import OAuthSessionStore
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
-from cre_mcp.server import create_http_app, install_access_control
+from cre_mcp.server import install_access_control
+from tests.hosted_helpers import (
+    create_testing_http_app,
+    create_testing_starlette_app,
+    make_testing_persistence_bundle,
+)
 
 REDIRECT = "https://claude.ai/api/mcp/auth_callback"
 MCP_SCOPE = "mcp:tools"
@@ -295,11 +300,14 @@ def _quota_http_app(config: CreConfig):
         return {"ok": True, "location": location}
 
     platform = PlatformApi(config)
+    bundle = make_testing_persistence_bundle(config)
     install_access_control(
         config,
         runtime_mode="http",
         server=server,
         platform_api=platform,
+        access_registry=bundle.access_registry,
+        audit_log=bundle.audit_log,
     )
     return server.http_app(
         path="/mcp",
@@ -401,7 +409,7 @@ async def test_real_http_oauth_initializes_lists_and_calls_allowed_tool(tmp_path
         profile=Profile.LOCAL_SCOUT,
         territory_state="TX",
     )
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
 
     async with _live_http(app) as base_url:
         async with httpx.AsyncClient(base_url=base_url) as client:
@@ -464,7 +472,7 @@ async def test_bad_tokens_fail_before_mcp_session_allocation(tmp_path, case):
         "revoked": tenant.token,
     }[case]
 
-    response = await _initialize(create_http_app(config=config), token)
+    response = await _initialize(create_testing_http_app(config=config), token)
 
     assert response.status_code == 401
     assert "mcp-session-id" not in response.headers
@@ -479,7 +487,7 @@ async def test_wrong_audience_fails_before_mcp_session_allocation(tmp_path):
         audience="another-service",
     )
 
-    response = await _initialize(create_http_app(config=config), tenant.token)
+    response = await _initialize(create_testing_http_app(config=config), tenant.token)
 
     assert response.status_code == 401
     assert "mcp-session-id" not in response.headers
@@ -497,7 +505,7 @@ async def test_wrong_resource_fails_before_mcp_session_allocation(tmp_path):
         resource="https://wrong.example/mcp",
     )
 
-    response = await _initialize(create_http_app(config=config), tenant.token)
+    response = await _initialize(create_testing_http_app(config=config), tenant.token)
 
     assert response.status_code == 401
     assert "mcp-session-id" not in response.headers
@@ -511,7 +519,7 @@ async def test_missing_mcp_scope_fails_before_session_allocation(tmp_path):
         scopes=DEAL_SCOPES,
     )
 
-    response = await _initialize(create_http_app(config=config), tenant.token)
+    response = await _initialize(create_testing_http_app(config=config), tenant.token)
 
     assert response.status_code == 403
     assert "mcp-session-id" not in response.headers
@@ -524,7 +532,7 @@ async def test_static_registry_key_is_rejected_in_oauth_only_hosted_mode(tmp_pat
     registry.add_grant("legacy-static-key", "legacy-workspace", Profile.FULL_OPERATOR)
 
     response = await _initialize(
-        create_http_app(config=config),
+        create_testing_http_app(config=config),
         "legacy-static-key",
     )
 
@@ -540,7 +548,9 @@ async def test_current_authority_disables_deal_vault_on_next_request(
 ):
     config = _config(tmp_path)
     tenant = await _provision(config, f"Disable {disabled_by}")
-    api = starlette_app(config, include_uncertified_deal_routes=True)
+    api = create_testing_starlette_app(
+        config=config, include_uncertified_deal_routes=True
+    )
     transport = httpx.ASGITransport(app=api)
 
     async with httpx.AsyncClient(
@@ -577,7 +587,7 @@ async def test_current_authority_disables_deal_vault_on_next_request(
                 )
 
         after = await client.get("/v1/deals", headers=tenant.headers)
-    mcp_after = await _initialize(create_http_app(config=config), tenant.token)
+    mcp_after = await _initialize(create_testing_http_app(config=config), tenant.token)
 
     assert after.status_code == 403
     assert after.json()["error"]["code"] == "access_disabled"
@@ -613,7 +623,9 @@ async def test_disabled_customer_can_read_me_but_not_deals_or_mcp(
             tenant.workspace_id, "suspended", reason="billing"
         )
 
-    api = starlette_app(config, include_uncertified_deal_routes=True)
+    api = create_testing_starlette_app(
+        config=config, include_uncertified_deal_routes=True
+    )
     transport = httpx.ASGITransport(app=api)
     async with httpx.AsyncClient(
         transport=transport, base_url="http://platform.test"
@@ -623,7 +635,7 @@ async def test_disabled_customer_can_read_me_but_not_deals_or_mcp(
             "/v1/entitlements", headers=tenant.headers
         )
         deals = await client.get("/v1/deals", headers=tenant.headers)
-    mcp_response = await _initialize(create_http_app(config=config), tenant.token)
+    mcp_response = await _initialize(create_testing_http_app(config=config), tenant.token)
 
     assert me.status_code == 200
     assert entitlements.status_code == 200
@@ -642,7 +654,7 @@ async def test_territory_change_applies_to_next_mcp_call_without_refresh(tmp_pat
     )
     assert tenant.territory_id is not None
     repository = PlatformRepository(config.cache_db_path)
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
 
     async with _live_http(app) as base_url:
         async with httpx.AsyncClient(base_url=base_url) as client:
@@ -701,7 +713,9 @@ async def test_workspace_cannot_be_selected_through_http_or_mcp_input(tmp_path):
     alpha = await _provision(config, "Authority Alpha")
     beta = await _provision(config, "Authority Beta")
 
-    api = starlette_app(config, include_uncertified_deal_routes=True)
+    api = create_testing_starlette_app(
+        config=config, include_uncertified_deal_routes=True
+    )
     transport = httpx.ASGITransport(app=api)
     async with httpx.AsyncClient(
         transport=transport, base_url="http://platform.test"
@@ -724,7 +738,7 @@ async def test_workspace_cannot_be_selected_through_http_or_mcp_input(tmp_path):
     assert created.status_code == 201
     assert beta_deals.json()["deals"] == []
 
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
     async with _live_http(app) as base_url:
         async with httpx.AsyncClient(base_url=base_url) as client:
             session_id = await _raw_initialized_session(client, alpha.token)
@@ -777,7 +791,7 @@ def test_session_issuance_has_no_profile_plan_or_territory_authority_inputs(tmp_
 )
 async def test_legacy_or_identity_injecting_oauth_aliases_are_not_exposed(tmp_path, path):
     config = _config(tmp_path)
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport, base_url="http://authority.test"
@@ -899,7 +913,7 @@ async def test_missing_or_malformed_live_plan_fails_closed(tmp_path, case):
                 "UPDATE platform_plans SET daily_quotas='not-json' WHERE key='pro'"
             )
 
-    response = await _initialize(create_http_app(config=config), tenant.token)
+    response = await _initialize(create_testing_http_app(config=config), tenant.token)
 
     assert response.status_code == 403
     assert "mcp-session-id" not in response.headers
@@ -913,7 +927,7 @@ async def test_established_session_live_disable_remains_403(
 ):
     config = _config(tmp_path)
     tenant = await _provision(config, f"Established Disable {disabled_by}")
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
 
     async with _live_http(app) as base_url:
         async with httpx.AsyncClient(base_url=base_url) as client:
@@ -960,7 +974,7 @@ async def test_established_session_token_or_client_revoke_remains_401(
 ):
     config = _config(tmp_path)
     tenant = await _provision(config, f"Established Revoke {revoked_by}")
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
 
     async with _live_http(app) as base_url:
         async with httpx.AsyncClient(base_url=base_url) as client:
@@ -997,7 +1011,7 @@ async def test_http_cleanup_never_cancels_unowned_same_named_task(tmp_path):
 
     unowned = asyncio.create_task(_shutdown_watcher())
     try:
-        app = create_http_app(config=_config(tmp_path))
+        app = create_testing_http_app(config=_config(tmp_path))
         async with _live_http(app) as base_url:
             async with httpx.AsyncClient(base_url=base_url) as client:
                 response = await _raw_initialize(client, "not-a-valid-token")

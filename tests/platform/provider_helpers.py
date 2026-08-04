@@ -12,9 +12,9 @@ from typing import Any
 import httpx
 
 from cre_mcp.config import CreConfig
-from cre_mcp.platform.api import starlette_app
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
+from tests.hosted_helpers import create_testing_starlette_app
 
 STRIPE_SECRET = "whsec_test_stripe_provider_sync"
 SKOOL_SECRET = "relay_test_skool_provider_sync"
@@ -63,7 +63,9 @@ def api_client(config: CreConfig, *, app=None) -> httpx.AsyncClient:
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(
             app=app
-            or starlette_app(config, include_uncertified_deal_routes=True)
+            or create_testing_starlette_app(
+                config=config, include_uncertified_deal_routes=True
+            )
         ),
         base_url="http://provider.test",
     )

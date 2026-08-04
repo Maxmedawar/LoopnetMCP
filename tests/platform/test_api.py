@@ -8,10 +8,11 @@ import pytest
 
 from cre_mcp.access.profiles import Profile
 from cre_mcp.config import CreConfig
-from cre_mcp.platform.api import PlatformApi, starlette_app
+from cre_mcp.platform.api import PlatformApi
 from cre_mcp.platform.auth import OAuthSessionStore
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
+from tests.hosted_helpers import create_testing_starlette_app
 
 REDIRECT = "https://claude.ai/api/mcp/auth_callback"
 SCOPES = ("deals:read", "deals:write")
@@ -71,7 +72,9 @@ async def _provision(
 
 def _client(config: CreConfig) -> httpx.AsyncClient:
     transport = httpx.ASGITransport(
-        app=starlette_app(config, include_uncertified_deal_routes=True)
+        app=create_testing_starlette_app(
+            config=config, include_uncertified_deal_routes=True
+        )
     )
     return httpx.AsyncClient(transport=transport, base_url="http://platform.test")
 

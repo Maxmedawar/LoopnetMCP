@@ -27,7 +27,7 @@ from cre_mcp.platform.migrations import apply_migrations, current_version
 from cre_mcp.platform.providers.reconciliation import _event
 from cre_mcp.platform.repository import PlatformRepository
 from cre_mcp.platform.schema import create_schema
-from cre_mcp.server import create_http_app
+from tests.hosted_helpers import create_testing_http_app
 
 from .provider_helpers import (
     NOW,
@@ -267,7 +267,7 @@ async def test_expired_provider_lease_projects_disabled_v1_state_and_denies_mcp(
     assert granted.status_code == 200
     await asyncio.sleep(1.1)
 
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
@@ -731,7 +731,7 @@ async def test_provider_loss_revokes_open_mcp_api_refresh_and_pending_code(
         )
     ).status_code == 200
 
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),

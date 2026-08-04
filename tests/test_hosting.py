@@ -1,12 +1,19 @@
 """Phase 24 opt-in hosting and container artifact tests."""
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+import pytest
 
 from cre_mcp.config import CreConfig
 from cre_mcp.http.browser import BrowserFetcher
 from cre_mcp.http.fetch import FetchClient
-from cre_mcp.server import create_http_app, main, resolve_transport, run_server
+from cre_mcp.platform.api import starlette_app
+from cre_mcp.server import create_http_app, main, mcp, resolve_transport, run_server
+from tests.hosted_helpers import (
+    create_testing_http_app,
+    make_testing_persistence_bundle,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,21 +44,129 @@ def test_http_transport_resolves_from_environment_without_binding(monkeypatch):
     assert config.http_port == 8765
 
 
+def test_http_app_fails_closed_before_local_state_without_postgres(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("MEDAWARCRE_DATABASE_URL", raising=False)
+    config = _config(cache_db_path=tmp_path / "must-not-exist.db")
+
+    with pytest.raises(RuntimeError, match="PostgreSQL"):
+        create_http_app(config=config)
+
+    assert not config.cache_db_path.exists()
+    assert not (tmp_path / "access" / "registry.json").exists()
+    assert not (tmp_path / "access" / "audit.jsonl").exists()
+
+
+def test_standalone_http_fails_closed_before_local_state_without_postgres(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("MEDAWARCRE_DATABASE_URL", raising=False)
+    config = _config(cache_db_path=tmp_path / "standalone-must-not-exist.db")
+
+    with pytest.raises(RuntimeError, match="PostgreSQL"):
+        starlette_app(config=config)
+
+    assert not config.cache_db_path.exists()
+
+
+def test_internal_global_server_rejects_direct_http_app_construction():
+    with pytest.raises(RuntimeError, match="stdio-only"):
+        mcp.http_app()
+
+
+def test_internal_global_server_rejects_direct_http_run():
+    with pytest.raises(RuntimeError, match="stdio-only"):
+        mcp.run(transport="http")
+
+
+def test_internal_global_server_preserves_default_stdio_run():
+    from fastmcp import FastMCP
+
+    with patch.object(FastMCP, "run") as run:
+        mcp.run()
+
+    run.assert_called_once_with(transport=None, show_banner=True)
+
+
+async def test_internal_global_server_rejects_async_http_run_paths():
+    with pytest.raises(RuntimeError, match="stdio-only"):
+        await mcp.run_async(transport="http")
+    with pytest.raises(RuntimeError, match="stdio-only"):
+        await mcp.run_http_async()
+
+
 def test_http_app_constructs_at_mcp_path_without_binding(tmp_path):
-    app = create_http_app(config=_config(cache_db_path=tmp_path / "platform.db"))
+    app = create_testing_http_app(
+        config=_config(cache_db_path=tmp_path / "platform.db")
+    )
 
     assert callable(app)
     assert any(getattr(route, "path", None) == "/mcp" for route in app.routes)
 
 
 def test_http_app_serves_platform_routes_alongside_mcp(tmp_path):
-    app = create_http_app(config=_config(cache_db_path=tmp_path / "platform.db"))
+    app = create_testing_http_app(
+        config=_config(cache_db_path=tmp_path / "platform.db")
+    )
 
     paths = {getattr(route, "path", None) for route in app.routes}
     assert "/mcp" in paths
     assert "/v1/me" in paths
     assert "/v1/deals" not in paths
     assert "/v1/deals/{deal_id:int}" not in paths
+
+
+async def test_http_app_closes_postgres_bundle_once_with_asgi_lifespan(tmp_path):
+    config = _config(cache_db_path=tmp_path / "platform.db")
+    seeded = make_testing_persistence_bundle(config)
+    close = Mock()
+    bundle = type(seeded)(
+        platform_api=seeded.platform_api,
+        access_registry=seeded.access_registry,
+        audit_log=seeded.audit_log,
+        close_callback=close,
+    )
+    with patch(
+        "cre_mcp.postgres.runtime.build_postgres_hosted_persistence",
+        return_value=bundle,
+    ):
+        app = create_http_app(config=config)
+
+    async with app.router.lifespan_context(app):
+        pass
+    bundle.close()
+
+    close.assert_called_once_with()
+
+
+def test_http_app_closes_postgres_bundle_on_construction_failure(tmp_path):
+    config = _config(cache_db_path=tmp_path / "platform.db")
+    seeded = make_testing_persistence_bundle(config)
+    close = Mock()
+    bundle = type(seeded)(
+        platform_api=seeded.platform_api,
+        access_registry=seeded.access_registry,
+        audit_log=seeded.audit_log,
+        close_callback=close,
+    )
+    with patch(
+        "cre_mcp.postgres.runtime.build_postgres_hosted_persistence",
+        return_value=bundle,
+    ), patch(
+        "cre_mcp.server._build_hosted_customer_server",
+        side_effect=RuntimeError("construction failed"),
+    ), pytest.raises(RuntimeError, match="construction failed"):
+        create_http_app(config=config)
+
+    close.assert_called_once_with()
+
+
+def test_public_standalone_app_cannot_mount_uncertified_deal_routes(tmp_path):
+    config = _config(cache_db_path=tmp_path / "platform.db")
+
+    with pytest.raises(TypeError, match="include_uncertified_deal_routes"):
+        starlette_app(config=config, include_uncertified_deal_routes=True)
 
 
 async def test_platform_routes_enforce_auth_through_the_composed_app(tmp_path):
@@ -62,7 +177,7 @@ async def test_platform_routes_enforce_auth_through_the_composed_app(tmp_path):
     from cre_mcp.platform.repository import PlatformRepository
 
     config = _config(cache_db_path=tmp_path / "platform.db")
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
 
     repo = PlatformRepository(config.cache_db_path)
     auth = OAuthSessionStore(config.cache_db_path)
@@ -119,18 +234,23 @@ def test_run_server_binds_configured_http_host_and_port(tmp_path):
     from fastmcp import FastMCP
 
     hosted = FastMCP(name="hosted-test")
+    config = _config(
+        transport="http",
+        http_host="127.0.0.1",
+        http_port=9123,
+        cache_db_path=tmp_path / "platform.db",
+    )
+    bundle = make_testing_persistence_bundle(config)
+    close = Mock()
+    bundle.close_callback = close
     with patch(
         "cre_mcp.server._build_hosted_customer_server",
         return_value=hosted,
+    ), patch(
+        "cre_mcp.postgres.runtime.build_postgres_hosted_persistence",
+        return_value=bundle,
     ), patch.object(hosted, "run") as run:
-        run_server(
-            _config(
-                transport="http",
-                http_host="127.0.0.1",
-                http_port=9123,
-                cache_db_path=tmp_path / "platform.db",
-            )
-        )
+        run_server(config)
 
     run.assert_called_once_with(
         transport="http",
@@ -138,6 +258,7 @@ def test_run_server_binds_configured_http_host_and_port(tmp_path):
         port=9123,
         json_response=True,
     )
+    close.assert_called_once_with()
 
 
 def test_http_cli_flag_forces_http_without_binding():

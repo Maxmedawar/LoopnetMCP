@@ -4,7 +4,7 @@ import argparse
 import logging
 import sys
 from collections.abc import Sequence
-from typing import Literal
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 
@@ -62,8 +62,55 @@ _SERVER_INSTRUCTIONS = (
 )
 
 
+class _StdioOnlyFastMCP(FastMCP):
+    """Internal catalog that can never become a hosted network surface."""
+
+    @staticmethod
+    def _require_stdio(transport: object) -> None:
+        if transport not in (None, "stdio"):
+            raise RuntimeError(
+                "the internal MCP catalog is stdio-only; use the certified hosted builder"
+            )
+
+    def http_app(self, *args: Any, **kwargs: Any):
+        raise RuntimeError(
+            "the internal MCP catalog is stdio-only; use the certified hosted builder"
+        )
+
+    def run(
+        self,
+        transport: object = None,
+        show_banner: bool = True,
+        **transport_kwargs: Any,
+    ) -> None:
+        self._require_stdio(transport)
+        return super().run(
+            transport=transport,
+            show_banner=show_banner,
+            **transport_kwargs,
+        )
+
+    async def run_async(
+        self,
+        transport: object = None,
+        show_banner: bool = True,
+        **transport_kwargs: Any,
+    ) -> None:
+        self._require_stdio(transport)
+        return await super().run_async(
+            transport=transport,
+            show_banner=show_banner,
+            **transport_kwargs,
+        )
+
+    async def run_http_async(self, *args: Any, **kwargs: Any) -> None:
+        raise RuntimeError(
+            "the internal MCP catalog is stdio-only; use the certified hosted builder"
+        )
+
+
 def _build_server() -> FastMCP:
-    server = FastMCP(name="loopnet", instructions=_SERVER_INSTRUCTIONS)
+    server = _StdioOnlyFastMCP(name="loopnet", instructions=_SERVER_INSTRUCTIONS)
     register_all(server)
     return server
 
@@ -129,6 +176,8 @@ def install_access_control(
     runtime_mode: Literal["stdio", "http"] | None = None,
     server: FastMCP | None = None,
     platform_api=None,
+    access_registry=None,
+    audit_log=None,
     surface_catalog=None,
 ):
     """Install tenant-aware access control on the module server instance.
@@ -150,14 +199,30 @@ def install_access_control(
         target.middleware.remove(existing)
     config = config or CreConfig()
     # Point the platform routes at the same resolved config (shared cache DB).
-    platform = platform_api or _platform(config)
+    if runtime_mode == "http" and (
+        platform_api is None or access_registry is None or audit_log is None
+    ):
+        raise RuntimeError(
+            "hosted HTTP requires an explicit persistence bundle"
+        )
+    platform = platform_api if platform_api is not None else _platform(config)
     if runtime_mode == "http":
         target.auth = AuthoritativeOAuthVerifier(platform.authority)
     else:
         target.auth = None
     access_dir = config.cache_db_path.parent / "access"
-    registry = WorkspaceRegistry(config.access_registry_path or access_dir / "registry.json")
-    audit_log = AuditLog(config.access_audit_path or access_dir / "audit.jsonl")
+    registry = (
+        access_registry
+        if access_registry is not None
+        else WorkspaceRegistry(
+            config.access_registry_path or access_dir / "registry.json"
+        )
+    )
+    resolved_audit_log = (
+        audit_log
+        if audit_log is not None
+        else AuditLog(config.access_audit_path or access_dir / "audit.jsonl")
+    )
     tool_call_resolver = None
     tool_visibility_resolver = None
     if surface_catalog is not None:
@@ -172,7 +237,7 @@ def install_access_control(
     return install_access(
         target,
         registry=registry,
-        audit_log=audit_log,
+        audit_log=resolved_audit_log,
         runtime_mode=runtime_mode,
         config=config,
         tool_call_resolver=tool_call_resolver,
@@ -202,32 +267,46 @@ def create_http_app(
     Platform routes carry their own OAuth bearer-token auth and are independent
     of the MCP access middleware.
     """
-    from cre_mcp.platform.api import PlatformApi
-
     config = config or CreConfig()
-    platform = PlatformApi(
-        config,
-        human_identity_verifier=human_identity_verifier,
+    from cre_mcp.postgres.runtime import (
+        bind_persistence_lifespan,
+        build_postgres_hosted_persistence,
     )
-    from cre_mcp.surface import CUSTOMER_SURFACE
 
-    hosted_server = _build_hosted_customer_server()
-    _register_platform_routes(hosted_server, platform)
-    install_access_control(
-        config,
-        runtime_mode="http",
-        server=hosted_server,
-        platform_api=platform,
-        surface_catalog=CUSTOMER_SURFACE,
-    )
-    # JSON responses avoid creating an SSE watcher and per-request stream for
-    # ordinary request/response traffic. Streamable HTTP session semantics and
-    # transport-level OAuth status codes remain unchanged.
-    return hosted_server.http_app(
-        path=path,
-        transport="http",
-        json_response=True,
-    )
+    bundle = build_postgres_hosted_persistence()
+    try:
+        if getattr(bundle, "backend", None) != "postgres":
+            raise RuntimeError("hosted HTTP requires PostgreSQL persistence")
+        platform = bundle.platform_api
+        if human_identity_verifier is not None:
+            raise ValueError(
+                "human identity verification must be owned by the persistence bundle"
+            )
+        from cre_mcp.surface import CUSTOMER_SURFACE
+
+        hosted_server = _build_hosted_customer_server()
+        _register_platform_routes(hosted_server, platform)
+        install_access_control(
+            config,
+            runtime_mode="http",
+            server=hosted_server,
+            platform_api=platform,
+            access_registry=bundle.access_registry,
+            audit_log=bundle.audit_log,
+            surface_catalog=CUSTOMER_SURFACE,
+        )
+        # JSON responses avoid creating an SSE watcher and per-request stream for
+        # ordinary request/response traffic. Streamable HTTP session semantics and
+        # transport-level OAuth status codes remain unchanged.
+        app = hosted_server.http_app(
+            path=path,
+            transport="http",
+            json_response=True,
+        )
+        return bind_persistence_lifespan(app, bundle)
+    except Exception:
+        bundle.close()
+        raise
 
 
 def run_server(
@@ -239,20 +318,24 @@ def run_server(
     config = config or CreConfig()
     transport = resolve_transport(config, force_http=force_http)
     if transport == "http":
-        from cre_mcp.platform.api import PlatformApi
+        from cre_mcp.postgres.runtime import build_postgres_hosted_persistence
         from cre_mcp.surface import CUSTOMER_SURFACE
 
-        platform = PlatformApi(config)
-        hosted_server = _build_hosted_customer_server()
-        _register_platform_routes(hosted_server, platform)
-        uninstall = install_access_control(
-            config,
-            runtime_mode="http",
-            server=hosted_server,
-            platform_api=platform,
-            surface_catalog=CUSTOMER_SURFACE,
-        )
+        bundle = build_postgres_hosted_persistence()
+        uninstall = None
         try:
+            platform = bundle.platform_api
+            hosted_server = _build_hosted_customer_server()
+            _register_platform_routes(hosted_server, platform)
+            uninstall = install_access_control(
+                config,
+                runtime_mode="http",
+                server=hosted_server,
+                platform_api=platform,
+                access_registry=bundle.access_registry,
+                audit_log=bundle.audit_log,
+                surface_catalog=CUSTOMER_SURFACE,
+            )
             hosted_server.run(
                 transport="http",
                 host=config.http_host,
@@ -260,7 +343,9 @@ def run_server(
                 json_response=True,
             )
         finally:
-            uninstall()
+            if uninstall is not None:
+                uninstall()
+            bundle.close()
         return
 
     from cre_mcp.access.middleware import AccessMiddleware

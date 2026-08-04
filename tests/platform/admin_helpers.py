@@ -9,10 +9,10 @@ import httpx
 
 from cre_mcp.access.profiles import Profile
 from cre_mcp.config import CreConfig
-from cre_mcp.platform.api import starlette_app
 from cre_mcp.platform.auth import OAuthSessionStore
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
+from tests.hosted_helpers import create_testing_starlette_app
 
 ADMIN_SCOPE = "admin:controls"
 REDIRECT = "https://internal.medawarcre.test/oauth/callback"
@@ -41,7 +41,9 @@ def config_for(tmp_path) -> CreConfig:
 
 def api_client(config: CreConfig) -> httpx.AsyncClient:
     return httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=starlette_app(config)),
+        transport=httpx.ASGITransport(
+            app=create_testing_starlette_app(config=config)
+        ),
         base_url="http://platform.test",
     )
 

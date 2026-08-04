@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import httpx
 
-from cre_mcp.platform.api import PLATFORM_ROUTE_SPECS, starlette_app
-from cre_mcp.server import create_http_app, mcp
+from cre_mcp.platform.api import PLATFORM_ROUTE_SPECS
+from cre_mcp.server import mcp
+from tests.hosted_helpers import create_testing_http_app, create_testing_starlette_app
 
 from .provider_helpers import (
     json_bytes,
@@ -38,11 +39,11 @@ def test_provider_routes_mount_on_standalone_and_fastmcp_apps(tmp_path):
     config = provider_config(tmp_path)
     standalone_paths = {
         getattr(route, "path", None)
-        for route in starlette_app(config).routes
+        for route in create_testing_starlette_app(config=config).routes
     }
     fastmcp_paths = {
         getattr(route, "path", None)
-        for route in create_http_app(config=config).routes
+        for route in create_testing_http_app(config=config).routes
     }
 
     assert EXPECTED_PROVIDER_ROUTES <= standalone_paths
@@ -53,8 +54,8 @@ def test_provider_routes_mount_on_standalone_and_fastmcp_apps(tmp_path):
 async def test_signed_webhook_behaves_the_same_on_both_mounts(tmp_path):
     for index, app_factory in enumerate(
         (
-            lambda config: starlette_app(config),
-            lambda config: create_http_app(config=config),
+            lambda config: create_testing_starlette_app(config=config),
+            lambda config: create_testing_http_app(config=config),
         )
     ):
         config = provider_config(

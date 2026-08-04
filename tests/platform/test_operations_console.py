@@ -9,10 +9,10 @@ import httpx
 
 from cre_mcp.access.profiles import Profile
 from cre_mcp.config import CreConfig
-from cre_mcp.platform.api import starlette_app
 from cre_mcp.platform.connection import FakeHumanIdentityVerifier, VerifiedHumanIdentity
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
+from tests.hosted_helpers import create_testing_starlette_app
 
 from .admin_helpers import _seed_internal_admin, audit_rows
 from .provider_helpers import (
@@ -100,8 +100,8 @@ async def _client(
     )
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(
-            app=starlette_app(
-                config,
+            app=create_testing_starlette_app(
+                config=config,
                 human_identity_verifier=verifier,
                 stripe_reconciliation_service=stripe_reconciliation_service,
             )

@@ -11,13 +11,13 @@ import httpx
 
 from cre_mcp.access.profiles import Profile
 from cre_mcp.config import CreConfig
-from cre_mcp.platform.api import starlette_app
 from cre_mcp.platform.auth import OAuthSessionStore
 from cre_mcp.platform.authority import AuthorityResolver
 from cre_mcp.platform.connection import FakeHumanIdentityVerifier, VerifiedHumanIdentity
 from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
-from cre_mcp.server import create_http_app
+from tests.hosted_helpers import create_testing_http_app
+from tests.hosted_helpers import create_testing_starlette_app
 
 REDIRECT = "https://claude.ai/api/mcp/auth_callback"
 CONNECTION_ORIGIN = "https://connect.example.test"
@@ -80,7 +80,7 @@ async def test_discovery_dynamic_registration_and_full_pkce_connection(tmp_path)
     identity = VerifiedHumanIdentity(
         "clerk", "user_clerk_1", user.email, user.name
     )
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({"clerk-token": identity}),
     )
@@ -180,7 +180,7 @@ async def test_authorization_confirmation_rejects_csrf_origin_and_host_attacks(t
     config = _config(tmp_path)
     _, user = await _provision(config)
     identity = VerifiedHumanIdentity("clerk", "subject", user.email, user.name)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({"token": identity}),
     )
@@ -265,7 +265,7 @@ async def test_transient_code_creation_failure_restores_explicit_consent(
         return original(store, *args, **kwargs)
 
     monkeypatch.setattr(OAuthSessionStore, "create_auth_code", fail_once)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({"token": identity}),
     )
@@ -307,7 +307,7 @@ async def test_transient_code_creation_failure_restores_explicit_consent(
 
 
 async def test_dynamic_registration_rejects_unapproved_origins_and_deal_scopes(tmp_path):
-    app = starlette_app(_config(tmp_path))
+    app = create_testing_starlette_app(_config(tmp_path))
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="https://mcp.example.test",
@@ -359,7 +359,7 @@ async def test_dynamic_registration_fails_closed_without_redirect_allowlist(tmp_
     config = _config(tmp_path).model_copy(
         update={"oauth_client_registrations": {}}
     )
-    app = starlette_app(config)
+    app = create_testing_starlette_app(config)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="https://mcp.example.test",
@@ -378,7 +378,7 @@ async def test_dynamic_registration_fails_closed_without_redirect_allowlist(tmp_
 
 
 async def test_dynamic_registration_is_bounded_and_uses_server_owned_identity(tmp_path):
-    app = starlette_app(_config(tmp_path))
+    app = create_testing_starlette_app(_config(tmp_path))
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="https://mcp.example.test",
@@ -418,7 +418,7 @@ async def test_oauth_registration_and_pending_requests_have_hard_limits(tmp_path
             "oauth_pending_authorizations_per_client": 1,
         }
     )
-    app = starlette_app(config)
+    app = create_testing_starlette_app(config)
     registration_body = {
         "client_name": "Claude",
         "redirect_uris": [REDIRECT],
@@ -454,7 +454,7 @@ async def test_oauth_registration_and_pending_requests_have_hard_limits(tmp_path
 
 
 async def test_dynamic_registration_rejects_oversized_json_before_decoding(tmp_path):
-    app = starlette_app(_config(tmp_path))
+    app = create_testing_starlette_app(_config(tmp_path))
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="https://mcp.example.test",
@@ -478,7 +478,7 @@ async def test_oauth_forms_stream_limit_and_token_revoke_rate_limits(tmp_path):
         for _ in range(17):
             yield b"x" * 1024
 
-    oversized_app = starlette_app(_config(tmp_path))
+    oversized_app = create_testing_starlette_app(_config(tmp_path))
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=oversized_app),
         base_url="https://mcp.example.test",
@@ -489,7 +489,7 @@ async def test_oauth_forms_stream_limit_and_token_revoke_rate_limits(tmp_path):
             headers={"content-type": "application/x-www-form-urlencoded"},
         )
 
-    token_app = starlette_app(config)
+    token_app = create_testing_starlette_app(config)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=token_app),
         base_url="https://mcp.example.test",
@@ -503,7 +503,7 @@ async def test_oauth_forms_stream_limit_and_token_revoke_rate_limits(tmp_path):
             data={"grant_type": "unsupported"},
         )
 
-    revoke_app = starlette_app(config)
+    revoke_app = create_testing_starlette_app(config)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=revoke_app),
         base_url="https://mcp.example.test",
@@ -525,7 +525,7 @@ async def test_browser_session_exchange_is_rate_limited(tmp_path):
     )
     _, user = await _provision(config)
     identity = VerifiedHumanIdentity("clerk", "subject", user.email, user.name)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({"token": identity}),
     )
@@ -550,7 +550,7 @@ async def test_browser_session_exchange_is_rate_limited(tmp_path):
 async def test_authorize_rejects_all_client_supplied_authority_selectors(tmp_path):
     config = _config(tmp_path)
     await _provision(config)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({}),
     )
@@ -587,7 +587,7 @@ async def test_authorize_rejects_all_client_supplied_authority_selectors(tmp_pat
 
 async def test_authorize_rejects_oversized_state(tmp_path):
     config = _config(tmp_path)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({}),
     )
@@ -628,7 +628,7 @@ async def test_connection_fails_closed_without_configured_clerk(tmp_path):
         oauth_issuer="https://mcp.example.test",
         connection_url="https://connect.example.test/connect",
     )
-    app = starlette_app(config)
+    app = create_testing_starlette_app(config)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="https://mcp.example.test"
     ) as client:
@@ -645,7 +645,7 @@ async def test_connection_fails_closed_without_configured_clerk(tmp_path):
 
 async def test_browser_session_cors_is_exact_origin_and_credentials_safe(tmp_path):
     config = _config(tmp_path)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({}),
     )
@@ -702,7 +702,7 @@ async def test_ambiguous_workspace_membership_does_not_issue_code(tmp_path):
     assert second is not None
     assert await repository.add_membership(second.public_id, user.id, "owner") is not None
     identity = VerifiedHumanIdentity("clerk", "subject", user.email, user.name)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({"token": identity}),
     )
@@ -744,7 +744,7 @@ async def test_suspended_account_does_not_issue_code(tmp_path):
     entitlements = EntitlementStore(config.cache_db_path)
     entitlements.set_account_state(workspace.public_id, "suspended", reason="manual hold")
     identity = VerifiedHumanIdentity("clerk", "subject", user.email, user.name)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({"token": identity}),
     )
@@ -786,7 +786,7 @@ async def test_removed_membership_and_revoked_browser_session_fail_closed(tmp_pa
     config = _config(tmp_path)
     workspace, user = await _provision(config)
     identity = VerifiedHumanIdentity("clerk", "subject", user.email, user.name)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({"token": identity}),
     )
@@ -838,7 +838,7 @@ async def test_browser_logout_preflight_and_response_support_connection_origin(t
     config = _config(tmp_path)
     _, user = await _provision(config)
     identity = VerifiedHumanIdentity("clerk", "subject", user.email, user.name)
-    app = starlette_app(
+    app = create_testing_starlette_app(
         config,
         human_identity_verifier=FakeHumanIdentityVerifier({"token": identity}),
     )
@@ -880,7 +880,7 @@ async def test_browser_logout_preflight_and_response_support_connection_origin(t
 
 async def test_oauth_discovery_and_registration_ride_real_hosted_mcp_app(tmp_path):
     config = _config(tmp_path)
-    app = create_http_app(config=config)
+    app = create_testing_http_app(config=config)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="https://mcp.example.test"
     ) as client:
@@ -918,7 +918,7 @@ async def test_clerk_connection_token_initializes_and_calls_real_hosted_mcp(tmp_
         scope="subject",
     )
     identity = VerifiedHumanIdentity("clerk", "subject", user.email, user.name)
-    app = create_http_app(
+    app = create_testing_http_app(
         config=config,
         human_identity_verifier=FakeHumanIdentityVerifier({"token": identity}),
     )
