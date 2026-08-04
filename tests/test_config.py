@@ -52,15 +52,23 @@ def test_env_example_documents_every_provider_setting_without_skool_secret():
     text = (Path(__file__).parents[1] / ".env.example").read_text()
     expected = {
         "CRE_STRIPE_WEBHOOK_SECRET",
+        "CRE_STRIPE_WEBHOOK_SECRETS",
+        "CRE_STRIPE_API_KEY",
+        "CRE_STRIPE_API_VERSION",
         "CRE_SKOOL_WEBHOOK_SECRET",
         "CRE_PROVIDER_WEBHOOK_MAX_BODY_BYTES",
         "CRE_PROVIDER_GRANT_LEASE_SECONDS",
         "CRE_STRIPE_PRICE_MAPPINGS",
         "CRE_SKOOL_TIER_MAPPINGS",
     }
+    documented = [
+        line.removeprefix("# ").partition("=")[0]
+        for line in text.splitlines()
+        if line.startswith("# CRE_")
+    ]
 
     for name in expected:
-        assert text.count(name) == 1
+        assert documented.count(name) == 1
     assert "# CRE_SKOOL_WEBHOOK_SECRET=" in text
     assert "CRE_SKOOL_WEBHOOK_SECRET=replace" not in text
 

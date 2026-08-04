@@ -1237,10 +1237,16 @@ class ProviderSyncService:
         *,
         replay: bool,
     ) -> SyncResult:
-        if event.action in {"reject", "payment_succeeded"}:
+        if event.action in {
+            "reject",
+            "payment_succeeded",
+            "reconciliation_signal_only",
+        }:
             reason_code = (
                 "non_restoring_event"
                 if event.action == "payment_succeeded"
+                else "reconciliation_signal_only"
+                if event.action == "reconciliation_signal_only"
                 else "unsupported_event_type"
             )
             self._set_event(
@@ -1593,117 +1599,133 @@ class ProviderSyncService:
             workspace_id,
         )
 
+    def ingest_tx(
+        self,
+        connection: sqlite3.Connection,
+        event: NormalizedProviderEvent,
+    ) -> SyncResult:
+        """Ingest into a caller-owned transaction without committing it."""
+        existing = connection.execute(
+            """
+            SELECT * FROM platform_provider_events
+            WHERE provider=? AND event_id=?
+            """,
+            (event.provider, event.event_id),
+        ).fetchone()
+        if existing is not None:
+            event_db_id = int(existing["id"])
+            connection.execute(
+                """
+                UPDATE platform_provider_events
+                SET duplicate_count=duplicate_count+1,updated_at=?
+                WHERE id=?
+                """,
+                (_iso(_now()), event_db_id),
+            )
+            self._attempt(
+                connection,
+                event_db_id,
+                "duplicate",
+                "duplicate_event",
+            )
+            return SyncResult(
+                event_db_id,
+                event.event_id,
+                "duplicate",
+                "duplicate_event",
+                (
+                    int(existing["workspace_id"])
+                    if existing["workspace_id"] is not None
+                    else None
+                ),
+            )
+        now = _iso(_now())
+        initial_mapping: ProviderPlanMapping | None = None
+        if (
+            event.action not in RESTRICTIVE_ACTIONS
+            and event.action
+            not in {
+                "payment_succeeded",
+                "reconciliation_signal_only",
+                "reject",
+            }
+        ):
+            initial_mapping, _mapping_error = self._mapping(event)
+        entitlement_input_hash = event.entitlement_input_hash()
+        cursor = connection.execute(
+            """
+            INSERT INTO platform_provider_events(
+                workspace_id,provider,event_id,event_type,payload,
+                normalized_data,occurred_at,outcome,reason_code,
+                duplicate_count,replayed_at,object_stream_hash,
+                restrictive_rank,canonical_action,
+                external_account_hash,bound_subject_user_id,bound_scope,
+                entitlement_input_hash,bound_plan_key,bound_profile,
+                created_at,updated_at
+            ) VALUES (
+                NULL,?,?,?,?,?,?,'received',NULL,0,NULL,?,?,?,?,
+                NULL,NULL,?,?,?,?,?
+            )
+            """,
+            (
+                event.provider,
+                event.event_id,
+                event.event_type,
+                "{}",
+                json.dumps(
+                    event.stored_data(),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                _iso(event.occurred_at),
+                (
+                    provider_object_stream_hash(
+                        event.provider,
+                        event.external_object_id,
+                    )
+                    if event.external_object_id is not None
+                    else None
+                ),
+                int(event.action in RESTRICTIVE_ACTIONS),
+                event.action,
+                (
+                    provider_external_account_hash(
+                        event.provider,
+                        event.external_account_id,
+                    )
+                    if event.external_account_id is not None
+                    else None
+                ),
+                entitlement_input_hash,
+                (
+                    initial_mapping.plan_key
+                    if initial_mapping is not None
+                    else None
+                ),
+                (
+                    initial_mapping.profile.value
+                    if initial_mapping is not None
+                    else None
+                ),
+                now,
+                now,
+            ),
+        )
+        return self._process_existing_tx(
+            connection,
+            int(cursor.lastrowid),
+            event,
+            replay=False,
+        )
+
     def ingest(self, event: NormalizedProviderEvent) -> SyncResult:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            existing = connection.execute(
-                """
-                SELECT * FROM platform_provider_events
-                WHERE provider=? AND event_id=?
-                """,
-                (event.provider, event.event_id),
-            ).fetchone()
-            if existing is not None:
-                event_db_id = int(existing["id"])
-                connection.execute(
-                    """
-                    UPDATE platform_provider_events
-                    SET duplicate_count=duplicate_count+1,updated_at=?
-                    WHERE id=?
-                    """,
-                    (_iso(_now()), event_db_id),
-                )
-                self._attempt(
-                    connection,
-                    event_db_id,
-                    "duplicate",
-                    "duplicate_event",
-                )
-                connection.commit()
-                return SyncResult(
-                    event_db_id,
-                    event.event_id,
-                    "duplicate",
-                    "duplicate_event",
-                    (
-                        int(existing["workspace_id"])
-                        if existing["workspace_id"] is not None
-                        else None
-                    ),
-                )
-            now = _iso(_now())
-            initial_mapping: ProviderPlanMapping | None = None
-            if (
-                event.action not in RESTRICTIVE_ACTIONS
-                and event.action not in {"payment_succeeded", "reject"}
-            ):
-                initial_mapping, _mapping_error = self._mapping(event)
-            entitlement_input_hash = event.entitlement_input_hash()
-            cursor = connection.execute(
-                """
-                INSERT INTO platform_provider_events(
-                    workspace_id,provider,event_id,event_type,payload,
-                    normalized_data,occurred_at,outcome,reason_code,
-                    duplicate_count,replayed_at,object_stream_hash,
-                    restrictive_rank,canonical_action,
-                    external_account_hash,bound_subject_user_id,bound_scope,
-                    entitlement_input_hash,bound_plan_key,bound_profile,
-                    created_at,updated_at
-                ) VALUES (
-                    NULL,?,?,?,?,?,?,'received',NULL,0,NULL,?,?,?,?,
-                    NULL,NULL,?,?,?,?,?
-                )
-                """,
-                (
-                    event.provider,
-                    event.event_id,
-                    event.event_type,
-                    "{}",
-                    json.dumps(
-                        event.stored_data(),
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                    _iso(event.occurred_at),
-                    (
-                        provider_object_stream_hash(
-                            event.provider,
-                            event.external_object_id,
-                        )
-                        if event.external_object_id is not None
-                        else None
-                    ),
-                    int(event.action in RESTRICTIVE_ACTIONS),
-                    event.action,
-                    (
-                        provider_external_account_hash(
-                            event.provider,
-                            event.external_account_id,
-                        )
-                        if event.external_account_id is not None
-                        else None
-                    ),
-                    entitlement_input_hash,
-                    (
-                        initial_mapping.plan_key
-                        if initial_mapping is not None
-                        else None
-                    ),
-                    (
-                        initial_mapping.profile.value
-                        if initial_mapping is not None
-                        else None
-                    ),
-                    now,
-                    now,
-                ),
-            )
-            result = self._process_existing_tx(
-                connection,
-                int(cursor.lastrowid),
-                event,
-                replay=False,
-            )
+            try:
+                result = self.ingest_tx(connection, event)
+            except Exception:
+                connection.rollback()
+                raise
             connection.commit()
             return result
 

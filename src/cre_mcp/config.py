@@ -301,6 +301,18 @@ class CreConfig(BaseSettings):
         default=None,
         validation_alias=_env_aliases("stripe_webhook_secret"),
     )
+    stripe_webhook_secrets: tuple[SecretStr, ...] = Field(
+        default=(),
+        validation_alias=_env_aliases("stripe_webhook_secrets"),
+    )
+    stripe_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=_env_aliases("stripe_api_key"),
+    )
+    stripe_api_version: str = Field(
+        default="2026-02-25.clover",
+        validation_alias=_env_aliases("stripe_api_version"),
+    )
     skool_webhook_secret: SecretStr | None = Field(
         default=None,
         validation_alias=_env_aliases("skool_webhook_secret"),
@@ -329,6 +341,7 @@ class CreConfig(BaseSettings):
     @field_validator(
         "clerk_secret_key",
         "stripe_webhook_secret",
+        "stripe_api_key",
         "skool_webhook_secret",
     )
     @classmethod
@@ -339,6 +352,51 @@ class CreConfig(BaseSettings):
         if value is None:
             return None
         return value if value.get_secret_value().strip() else None
+
+    @field_validator("stripe_webhook_secrets")
+    @classmethod
+    def normalize_stripe_webhook_secrets(
+        cls,
+        value: tuple[SecretStr, ...],
+    ) -> tuple[SecretStr, ...]:
+        result: list[SecretStr] = []
+        seen: set[str] = set()
+        for secret in value:
+            normalized = secret.get_secret_value().strip()
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                result.append(SecretStr(normalized))
+        return tuple(result)
+
+    @field_validator("stripe_api_key")
+    @classmethod
+    def stripe_api_key_must_be_test_mode(
+        cls,
+        value: SecretStr | None,
+    ) -> SecretStr | None:
+        if value is None:
+            return None
+        normalized = value.get_secret_value().strip()
+        if not normalized.startswith(("sk_test_", "rk_test_")):
+            raise ValueError("stripe_api_key must be a test-mode secret or restricted key")
+        return SecretStr(normalized)
+
+    @field_validator("stripe_api_version")
+    @classmethod
+    def validate_stripe_api_version(cls, value: str) -> str:
+        normalized = value.strip()
+        date, separator, channel = normalized.partition(".")
+        if (
+            not separator
+            or len(date) != 10
+            or date[4] != "-"
+            or date[7] != "-"
+            or not date.replace("-", "").isdigit()
+            or not channel.isascii()
+            or not channel.isalpha()
+        ):
+            raise ValueError("stripe_api_version must be YYYY-MM-DD.channel")
+        return normalized
 
     @field_validator(
         "clerk_publishable_key",
@@ -419,6 +477,21 @@ class CreConfig(BaseSettings):
         if any(not key.strip() for key in value):
             raise ValueError("Stripe price ids cannot be blank")
         return value
+
+    @property
+    def stripe_signing_secrets(self) -> tuple[SecretStr, ...]:
+        """All active test webhook secrets, deduplicated for safe rotation."""
+        values: list[SecretStr] = []
+        seen: set[str] = set()
+        for secret in (
+            *((self.stripe_webhook_secret,) if self.stripe_webhook_secret else ()),
+            *self.stripe_webhook_secrets,
+        ):
+            raw = secret.get_secret_value()
+            if raw not in seen:
+                seen.add(raw)
+                values.append(secret)
+        return tuple(values)
 
     @field_validator("skool_tier_mappings")
     @classmethod

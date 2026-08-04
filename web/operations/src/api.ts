@@ -103,6 +103,20 @@ export type SourceRight = {
   required_proofs: string[];
 };
 
+export type StripeReconciliationReport = {
+  provider: "stripe";
+  mode: "test";
+  complete: true;
+  observed_at: string;
+  discrepancy_count: number;
+  results: Array<{
+    subscription_id: string;
+    action: string;
+    outcome: string;
+    reason_code: string | null;
+  }>;
+};
+
 export class OperationsApiError extends Error {
   constructor(
     public readonly status: number,
@@ -236,6 +250,18 @@ export class OperationsApi {
       reason_code: reasonCode,
       reason,
     });
+  }
+
+  reconcileStripe(
+    publicId: string,
+    reasonCode: string,
+    reason: string,
+  ): Promise<StripeReconciliationReport> {
+    return this.mutate(
+      `/v1/operations/workspaces/${encodeURIComponent(publicId)}/stripe-reconcile`,
+      "POST",
+      { reason_code: reasonCode, reason },
+    );
   }
 
   audit(workspaceId?: string): Promise<{ events: AuditEvent[] }> {

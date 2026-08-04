@@ -11,6 +11,7 @@ import {
   Operator,
   ProviderEvent,
   SourceRight,
+  StripeReconciliationReport,
   WorkspaceDetail,
   WorkspaceSummary,
 } from "./api";
@@ -80,6 +81,7 @@ export function OperationsConsole({ platformOrigin }: { platformOrigin: string }
   const [events, setEvents] = useState<ProviderEvent[]>([]);
   const [rights, setRights] = useState<SourceRight[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [stripeReport, setStripeReport] = useState<StripeReconciliationReport | null>(null);
 
   const loadHealth = useCallback(async () => {
     const next = await api.health();
@@ -185,6 +187,20 @@ export function OperationsConsole({ platformOrigin }: { platformOrigin: string }
       await reloadWorkspace();
       setReason("");
     }, "Provider mapping removed and audited.");
+  };
+
+  const reconcileStripe = () => {
+    if (!detail || !validReason) return;
+    void run(async () => {
+      const report = await api.reconcileStripe(
+        detail.workspace.public_id,
+        reasonCode,
+        reason,
+      );
+      setStripeReport(report);
+      await reloadWorkspace();
+      setReason("");
+    }, "Stripe test state reconciled and audited.");
   };
 
   const loadProviders = (selected = provider) => {
@@ -345,7 +361,8 @@ export function OperationsConsole({ platformOrigin }: { platformOrigin: string }
                       <label>Reason code<select value={reasonCode} disabled={!mayMutate} onChange={(event) => setReasonCode(event.target.value)}>{REASON_CODES.map((item) => <option key={item}>{item}</option>)}</select></label>
                       <label>Operator reason<textarea value={reason} disabled={!mayMutate} minLength={8} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Describe the evidence and requested result." /></label>
                     </div>
-                    {mayMutate && <div className="account-action"><label>Account state<select value={accountState} onChange={(event) => setAccountState(event.target.value)}><option>active</option><option>past_due</option><option>suspended</option><option>canceled</option></select></label><button className="action" type="button" disabled={!validReason || busy} onClick={changeAccountState}>Apply state</button></div>}
+                    {mayMutate && <div className="account-action"><label>Account state<select value={accountState} onChange={(event) => setAccountState(event.target.value)}><option>active</option><option>past_due</option><option>suspended</option><option>canceled</option></select></label><button className="action" type="button" disabled={!validReason || busy} onClick={changeAccountState}>Apply state</button>{detail.external_accounts.some((item) => item.provider === "stripe") && <button className="action" type="button" disabled={!validReason || busy} onClick={reconcileStripe}>Reconcile Stripe test state</button>}</div>}
+                    {stripeReport && <p className="reconciliation-result" role="status">Stripe test reconciliation checked a complete subscription list at {stripeReport.observed_at}. Discrepancies observed: <strong>{stripeReport.discrepancy_count}</strong>.</p>}
                   </section>
                 </div>
               )}

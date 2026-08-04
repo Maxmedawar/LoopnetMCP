@@ -78,6 +78,16 @@ function installApi(operator = admin) {
     if (url.pathname.endsWith("/account-state") && method === "POST") {
       return response({ account: { state: "suspended" } });
     }
+    if (url.pathname.endsWith("/stripe-reconcile") && method === "POST") {
+      return response({
+        provider: "stripe",
+        mode: "test",
+        complete: true,
+        observed_at: "2026-08-04T18:00:00+00:00",
+        discrepancy_count: 2,
+        results: [],
+      });
+    }
     if (url.pathname === "/v1/operations/source-rights") {
       return response({
         summary: { total: 1, hosted_allowed: 0, hosted_blocked: 1 },
@@ -167,6 +177,28 @@ describe("OperationsConsole", () => {
     expect(JSON.parse(String(mutation?.[1]?.body))).toMatchObject({
       state: "suspended",
       reason_code: "support_resolution",
+    });
+  });
+
+  it("surfaces a reasoned Stripe test reconciliation report", async () => {
+    const fetchMock = installApi();
+    render(<OperationsConsole platformOrigin={PLATFORM} />);
+    await ready();
+    await openWorkspace();
+
+    const reconcile = screen.getByRole("button", { name: "Reconcile Stripe test state" });
+    expect(reconcile).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Operator reason"), {
+      target: { value: "Compared Stripe test state to the workspace projection." },
+    });
+    fireEvent.click(reconcile);
+
+    expect(await screen.findByText(/Discrepancies observed:/)).toHaveTextContent("2");
+    const mutation = fetchMock.mock.calls.find(([input, init]) =>
+      String(input).endsWith("/stripe-reconcile") && init?.method === "POST",
+    );
+    expect(mutation?.[1]?.headers).toMatchObject({
+      "X-CSRF-Token": "mcr_ops_csrf_test",
     });
   });
 

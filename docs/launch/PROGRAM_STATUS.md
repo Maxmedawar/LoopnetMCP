@@ -58,7 +58,7 @@ and an independent audit are recorded here.
 | 🔴 | Search and deal persistence | Tenant records, evidence, score versions, object-ID isolation, privacy behavior |
 | 🔴 | Combined opportunity index | Server-side deduplication, provenance, staff-only access, pagination and conflict tests |
 | 🔴 | Scheduled saved searches | Idempotent queue, current entitlement and territory checks, audit, internal status |
-| 🔴 | Stripe test integration | Signed webhook, replay and ordering, mappings, lifecycle, reconciliation, active-session effects |
+| 🟡 | Stripe test integration | Implementation and local gates complete: test-only credentials and mode enforcement, rotating signed webhooks, durable lifecycle journal, fixed-host GET-only complete-list reconciliation, atomic projection repair, active-session effects, and reasoned operator audit. Representative fixtures still require a real Stripe test-account staging proof; integrated audit remains scheduled after Skool |
 | 🔴 | Skool reconciliation | Proven current-state source or explicit restrictive fallback, manual revoke, uncertainty state |
 | 🔴 | Privacy and retention | Notice, export, correction, deletion, retention, processor propagation, audit |
 | 🟢 | Source-rights controls | First replacement `e58c721...` was rejected and repaired. Exact replacement `4c33265...` fails closed on contradictory local/hosted policy and cleanly imports; 164 focused and 1,950 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `3185ccb` |
@@ -68,6 +68,27 @@ and an independent audit are recorded here.
 | 🔴 | Public production cutover | Explicit founder approval after the readiness packet only |
 
 No row may be deleted. Superseded work stays visible with its disposition.
+
+## Stripe test integration evidence
+
+- Repository gate: `4496 passed, 1 warning in 127.21s (0:02:07)`
+- Platform gate: `402 passed, 1 warning in 21.61s`
+- Operations Console: `8 passed`; production build completed; `npm audit`
+  reported `found 0 vulnerabilities`
+- Stripe access is disabled without an explicit `sk_test_` or `rk_test_` key.
+  Live keys and live-mode webhook objects are rejected.
+- Reconciliation reads only the fixed Stripe subscriptions endpoint, consumes
+  every bounded page, validates the complete item-level price and period state,
+  and commits projection repair plus the operator audit in one transaction.
+- `customer.updated` and active-entitlement summary events are durable
+  reconciliation signals only. They cannot grant access by themselves.
+- Fixtures contain invented test identifiers and follow Stripe's documented
+  list and subscription schemas. A real test-account capture remains a private
+  staging gate.
+- Official contract references: `https://docs.stripe.com/webhooks`,
+  `https://docs.stripe.com/api/events/object`,
+  `https://docs.stripe.com/api/subscriptions/list`, and
+  `https://docs.stripe.com/api/subscriptions/object`.
 
 ## Preserved red evidence
 

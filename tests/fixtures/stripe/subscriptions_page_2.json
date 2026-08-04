@@ -1,0 +1,15 @@
+{
+  "object": "list",
+  "url": "/v1/subscriptions",
+  "has_more": false,
+  "data": [
+    {
+      "id": "sub_reconcile_canceled",
+      "object": "subscription",
+      "customer": "cus_reconcile",
+      "status": "canceled",
+      "livemode": false,
+      "items": {"object": "list", "data": [], "has_more": false}
+    }
+  ]
+}

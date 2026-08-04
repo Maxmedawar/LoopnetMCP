@@ -55,6 +55,8 @@ from cre_mcp.platform.providers.reconciliation import (
 from cre_mcp.platform.providers.skool import SKOOL_EVENT_TYPES, parse_skool_event
 from cre_mcp.platform.providers.stripe import (
     STRIPE_EVENT_TYPES,
+    StripeProviderUnavailableError,
+    StripeReconciliationService,
     parse_stripe_event,
 )
 
@@ -111,8 +113,12 @@ class PlatformApi:
         config: CreConfig | None = None,
         *,
         human_identity_verifier: HumanIdentityVerifier | None = None,
+        stripe_reconciliation_service: StripeReconciliationService | None = None,
     ) -> None:
         self._injected_human_identity_verifier = human_identity_verifier
+        self._injected_stripe_reconciliation_service = (
+            stripe_reconciliation_service
+        )
         self.configure(config or CreConfig())
 
     def configure(self, config: CreConfig) -> None:
@@ -132,6 +138,10 @@ class PlatformApi:
         self.provider_reconciliation = ProviderReconciliationStore(
             config.cache_db_path,
             self.provider_sync,
+        )
+        self.stripe_reconciliation = (
+            self._injected_stripe_reconciliation_service
+            or StripeReconciliationService(config, sync=self.provider_sync)
         )
         self.oauth = OAuthSessionStore(
             config.cache_db_path,
@@ -1070,6 +1080,42 @@ class PlatformApi:
         response = error or JSONResponse(_jsonable(result))
         return self._with_operations_cors(request, response)
 
+    async def reconcile_operations_stripe(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        try:
+            report = await self.stripe_reconciliation.reconcile_workspace(
+                request.path_params["workspace_id"],
+                actor_user_id=operator["user_id"],
+                reason_code=body.get("reason_code"),
+                reason=body.get("reason"),
+            )
+        except StripeProviderUnavailableError as exc:
+            response = _error(
+                503,
+                "stripe_reconciliation_unavailable",
+                str(exc),
+            )
+        except AdminForbiddenError as exc:
+            response = _error(403, "forbidden", str(exc))
+        except AdminNotFoundError as exc:
+            response = _error(404, "not_found", str(exc))
+        except AdminValidationError as exc:
+            response = _error(422, "invalid_request", str(exc))
+        except AdminAuditError:
+            response = _error(
+                500,
+                "admin_audit_failed",
+                "Stripe reconciliation could not be audited",
+            )
+        else:
+            response = JSONResponse(_jsonable(report))
+        return self._with_operations_cors(request, response)
+
     async def list_operations_audit(self, request: Request) -> JSONResponse:
         _operator, error = self._operations_operator(request, mutate=False)
         if error is not None:
@@ -1379,14 +1425,18 @@ class PlatformApi:
 
     async def _webhook(self, request: Request, provider: str) -> JSONResponse:
         if provider == "stripe":
-            secret = self.config.stripe_webhook_secret
+            secrets = self.config.stripe_signing_secrets
             header_name = "stripe-signature"
             parser = parse_stripe_event
         else:
-            secret = self.config.skool_webhook_secret
+            secrets = (
+                (self.config.skool_webhook_secret,)
+                if self.config.skool_webhook_secret is not None
+                else ()
+            )
             header_name = "x-skool-signature"
             parser = parse_skool_event
-        if secret is None:
+        if not secrets:
             return _error(
                 404,
                 "provider_not_configured",
@@ -1445,19 +1495,29 @@ class PlatformApi:
                 "Content-Length does not match the accepted body",
             )
         raw_body = b"".join(body_chunks)
-        try:
-            verify_hmac_signature(
-                raw_body,
-                request.headers.get(header_name, ""),
-                secret,
-            )
-        except WebhookTimestampError:
+        signature_header = request.headers.get(header_name, "")
+        signature_matched = False
+        timestamp_rejected = False
+        for secret in secrets:
+            try:
+                verify_hmac_signature(
+                    raw_body,
+                    signature_header,
+                    secret,
+                )
+            except WebhookTimestampError:
+                timestamp_rejected = True
+            except WebhookSignatureError:
+                pass
+            else:
+                signature_matched = True
+        if not signature_matched and timestamp_rejected:
             return _error(
                 400,
                 "webhook_timestamp_out_of_range",
                 "Webhook timestamp is outside the accepted window",
             )
-        except WebhookSignatureError:
+        if not signature_matched:
             return _error(
                 400,
                 "invalid_webhook_signature",
@@ -2094,6 +2154,11 @@ PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         ("GET",),
         "list_operations_workspace_provider_events",
     ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/stripe-reconcile",
+        ("POST",),
+        "reconcile_operations_stripe",
+    ),
     ("/v1/operations/audit", ("GET",), "list_operations_audit"),
     ("/v1/operations/health", ("GET",), "operations_health"),
     (
@@ -2185,12 +2250,14 @@ def starlette_app(
     config: CreConfig | None = None,
     *,
     human_identity_verifier: HumanIdentityVerifier | None = None,
+    stripe_reconciliation_service: StripeReconciliationService | None = None,
 ) -> Starlette:
     """Build a standalone ASGI app for the customer-facing platform routes."""
     return Starlette(
         routes=PlatformApi(
             config,
             human_identity_verifier=human_identity_verifier,
+            stripe_reconciliation_service=stripe_reconciliation_service,
         ).routes()
     )
 

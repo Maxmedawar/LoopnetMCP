@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from typing import Any
 
 import httpx
 
@@ -79,13 +80,22 @@ def _headers(**extra: str) -> dict[str, str]:
     return {"origin": ORIGIN, "host": HOST, **extra}
 
 
-async def _client(config: CreConfig, identity: VerifiedHumanIdentity | None = None):
+async def _client(
+    config: CreConfig,
+    identity: VerifiedHumanIdentity | None = None,
+    *,
+    stripe_reconciliation_service: Any = None,
+):
     verifier = FakeHumanIdentityVerifier(
         {"clerk-operator-token": identity} if identity is not None else {}
     )
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(
-            app=starlette_app(config, human_identity_verifier=verifier)
+            app=starlette_app(
+                config,
+                human_identity_verifier=verifier,
+                stripe_reconciliation_service=stripe_reconciliation_service,
+            )
         ),
         base_url=f"https://{HOST}",
     )
@@ -433,4 +443,71 @@ async def test_provider_quarantine_is_internal_and_replay_is_reason_gated(tmp_pa
     assert [row["action"] for row in audit_rows(config.cache_db_path)][-2:] == [
         "provider_event.quarantine_list",
         "provider_event.replay",
+    ]
+
+
+async def test_stripe_reconciliation_route_is_admin_csrf_and_reason_gated(tmp_path):
+    config = _config(tmp_path)
+    target, _target_user, _ = await _person(config, "Stripe Target")
+    _workspace, operator, _ = await _person(
+        config,
+        "Stripe Operator",
+        internal_role="platform_admin",
+    )
+    identity = VerifiedHumanIdentity(
+        "clerk",
+        "stripe-operator-subject",
+        operator.email,
+        operator.name,
+    )
+
+    class FakeReconciliation:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        async def reconcile_workspace(self, workspace_id: str, **values: Any):
+            self.calls.append({"workspace_id": workspace_id, **values})
+            return {
+                "provider": "stripe",
+                "mode": "test",
+                "complete": True,
+                "observed_at": "2026-08-04T18:00:00+00:00",
+                "discrepancy_count": 1,
+                "results": [],
+            }
+
+    reconciliation = FakeReconciliation()
+    async with await _client(
+        config,
+        identity,
+        stripe_reconciliation_service=reconciliation,
+    ) as client:
+        _signed_in, csrf = await _sign_in(client)
+        missing_csrf = await client.post(
+            f"/v1/operations/workspaces/{target.public_id}/stripe-reconcile",
+            headers=_headers(),
+            json={
+                "reason_code": "billing_correction",
+                "reason": "Compared the complete Stripe test state.",
+            },
+        )
+        reconciled = await client.post(
+            f"/v1/operations/workspaces/{target.public_id}/stripe-reconcile",
+            headers=_headers(**{"x-csrf-token": csrf}),
+            json={
+                "reason_code": "billing_correction",
+                "reason": "Compared the complete Stripe test state.",
+            },
+        )
+
+    assert missing_csrf.status_code == 403
+    assert reconciled.status_code == 200
+    assert reconciled.json()["discrepancy_count"] == 1
+    assert reconciliation.calls == [
+        {
+            "workspace_id": target.public_id,
+            "actor_user_id": operator.id,
+            "reason_code": "billing_correction",
+            "reason": "Compared the complete Stripe test state.",
+        }
     ]

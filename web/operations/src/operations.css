@@ -371,7 +371,14 @@ input::placeholder, textarea::placeholder { color: #909286; }
 }
 .mutation-docket > p { margin: -4px 0 18px; color: #96988c; font-size: 12px; }
 .reason-fields { display: grid; grid-template-columns: minmax(180px, .65fr) minmax(280px, 1.6fr); gap: 16px; }
-.account-action { display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: end; gap: 16px; margin-top: 16px; }
+.account-action { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; align-items: end; gap: 16px; margin-top: 16px; }
+.reconciliation-result {
+  margin: 18px 0 0;
+  padding: 13px 15px;
+  color: #e2e2d8;
+  background: #20211c;
+  line-height: 1.55;
+}
 
 .provider-selector { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
 .provider-selector > button:not(.icon-action) {
