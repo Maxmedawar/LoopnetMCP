@@ -117,6 +117,85 @@ export type StripeReconciliationReport = {
   }>;
 };
 
+export type SkoolJoinTask = {
+  id: number;
+  subject_user_id: number;
+  member_name: string;
+  invite_email: string;
+  community_id: string;
+  level_id: string;
+  tier: string;
+  state: "pending" | "completed" | "canceled";
+  completion_source: "manual_admin_invite" | "zapier_invite" | null;
+  external_mapping_id: number | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SkoolMapping = {
+  id: number;
+  external_member_id: string;
+  subject_user_id: number;
+  member_name: string;
+  member_email: string;
+  community_id: string | null;
+  grant_status: string;
+  plan_key: string | null;
+  profile: string | null;
+  grant_ends_at: string | null;
+};
+
+export type SkoolStatus = {
+  provider: "skool";
+  automation: "operator_task_only";
+  official_constraint: string;
+  reconciliation: {
+    id?: number;
+    community_id?: string;
+    source?: string;
+    observed_at: string | null;
+    confidence?: string;
+    complete?: boolean;
+    certainty: "confirmed" | "uncertain" | "conflict";
+    reason_code: string;
+    age_seconds: number | null;
+    stale: boolean;
+    member_count?: number;
+    mapped_member_count?: number;
+    discrepancy_count?: number;
+    conflict_count?: number;
+  };
+  join_tasks: SkoolJoinTask[];
+  mappings: SkoolMapping[];
+  available_tiers: Array<{
+    tier: string;
+    community_id: string;
+    level_id: string;
+    plan_key: string;
+    profile: string;
+    community_url: string | null;
+  }>;
+};
+
+export type SkoolReconciliationReport = {
+  id: number;
+  provider: "skool";
+  community_id: string;
+  source: string;
+  observed_at: string;
+  age_seconds: number;
+  confidence: string;
+  complete: boolean;
+  certainty: "confirmed" | "uncertain" | "conflict";
+  reason_code: string;
+  member_count: number;
+  mapped_member_count: number;
+  unmapped_member_count: number;
+  discrepancy_count: number;
+  conflict_count: number;
+};
+
 export class OperationsApiError extends Error {
   constructor(
     public readonly status: number,
@@ -259,6 +338,77 @@ export class OperationsApi {
   ): Promise<StripeReconciliationReport> {
     return this.mutate(
       `/v1/operations/workspaces/${encodeURIComponent(publicId)}/stripe-reconcile`,
+      "POST",
+      { reason_code: reasonCode, reason },
+    );
+  }
+
+  skoolStatus(publicId: string): Promise<SkoolStatus> {
+    return this.request(
+      `/v1/operations/workspaces/${encodeURIComponent(publicId)}/skool`,
+    );
+  }
+
+  createSkoolJoinTask(
+    publicId: string,
+    subjectUserId: number,
+    tier: string,
+    reasonCode: string,
+    reason: string,
+  ): Promise<SkoolJoinTask> {
+    return this.mutate(
+      `/v1/operations/workspaces/${encodeURIComponent(publicId)}/skool/join-tasks`,
+      "POST",
+      {
+        subject_user_id: subjectUserId,
+        tier,
+        reason_code: reasonCode,
+        reason,
+      },
+    );
+  }
+
+  completeSkoolJoinTask(
+    publicId: string,
+    taskId: number,
+    externalMemberId: string,
+    completionSource: "manual_admin_invite" | "zapier_invite",
+    reasonCode: string,
+    reason: string,
+  ): Promise<{ task: SkoolJoinTask; grant_created: false; next_gate: string }> {
+    return this.mutate(
+      `/v1/operations/workspaces/${encodeURIComponent(publicId)}/skool/join-tasks/${taskId}/complete`,
+      "POST",
+      {
+        external_member_id: externalMemberId,
+        completion_source: completionSource,
+        reason_code: reasonCode,
+        reason,
+      },
+    );
+  }
+
+  reconcileSkool(
+    publicId: string,
+    artifact: Record<string, unknown>,
+    reasonCode: string,
+    reason: string,
+  ): Promise<SkoolReconciliationReport> {
+    return this.mutate(
+      `/v1/operations/workspaces/${encodeURIComponent(publicId)}/skool/reconcile`,
+      "POST",
+      { artifact, reason_code: reasonCode, reason },
+    );
+  }
+
+  revokeSkool(
+    publicId: string,
+    mappingId: number,
+    reasonCode: string,
+    reason: string,
+  ): Promise<Record<string, unknown>> {
+    return this.mutate(
+      `/v1/operations/workspaces/${encodeURIComponent(publicId)}/skool/mappings/${mappingId}/revoke`,
       "POST",
       { reason_code: reasonCode, reason },
     );

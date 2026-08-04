@@ -32,18 +32,36 @@ email or client-supplied identity claims.
 Fallback and Skool lease expiry are bounded stale-authority safeguards. They
 are not immediate churn notification.
 
-## Why Skool is not production-ready
+## Skool operating boundary
 
 The official documented Skool Zapier surface described for this phase exposes
 New Paid Member polling at roughly 10 to 15 minutes. It does not expose a
 trusted cancellation, removal, ban, payment-failure, or current-roster feed.
 Skool cancellation can retain community access until the billing-cycle end.
 
-The signed relay and current-member source consumed by this code are external
-dependencies. They are not implemented in this repository. Without a
-trustworthy current-state or restrictive signal, immediate Skool revocation
-cannot be guaranteed. The safe production posture is to fail closed and keep
-the Skool webhook secret unset. The unconfigured route returns a fixed 404.
+The runtime does not invent a Skool member-management API. Joining creates an
+audited operator task that names the supported Skool Admin Invite or Zapier
+Invite path. Completing the task binds the exact Skool member id to the
+server-owned subject, but does not grant access. A signed member event or a
+complete, current, confirmed operator review remains the next authority gate.
+
+Current-state reconciliation stores a payload-free hash receipt plus counts,
+source, observation time, confidence, and certainty. Stale, partial,
+provisional, or unverified evidence is recorded as uncertain and cannot
+strengthen access. A complete review can apply restrictive absence or status
+changes. Unknown tiers revoke existing Skool authority and report a conflict.
+
+Manual revocation immediately removes the linked Skool grant and invalidates
+affected OAuth sessions and pending authorization codes in the same audited
+transaction. Removing the member from the Skool community itself is still an
+operator action in Skool's interface.
+
+The optional signed relay remains an external dependency and stays disabled
+until its secret is configured. The unconfigured route returns a fixed 404.
+True automatic reconciliation also requires a trustworthy hosted source or a
+scheduled operator runbook. Until private staging proves that path, the safe
+posture is fail closed and describe uncertainty instead of claiming immediate
+Skool churn detection.
 
 ## Prohibited shortcuts
 
@@ -53,6 +71,8 @@ the Skool webhook secret unset. The unconfigured route returns a fixed 404.
 - Do not assume Skool payout records in Stripe are individual member
   subscriptions.
 - Do not describe the lease as immediate cancellation enforcement.
+- Do not mark a review complete unless every current member in the configured
+  community was checked.
 
 Direct billing through the product's own Stripe integration is the only
 currently documented path in scope that can meet immediate revocation end to

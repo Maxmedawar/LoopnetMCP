@@ -10,6 +10,8 @@ import {
   OperationsApiError,
   Operator,
   ProviderEvent,
+  SkoolReconciliationReport,
+  SkoolStatus,
   SourceRight,
   StripeReconciliationReport,
   WorkspaceDetail,
@@ -55,6 +57,24 @@ function JsonDiff({ value }: { value: unknown }) {
   return <pre>{JSON.stringify(value, null, 2)}</pre>;
 }
 
+function currentStateTemplate(communityId = "community_id"): string {
+  return JSON.stringify({
+    community_id: communityId,
+    source: "operator_members_review",
+    observed_at: new Date().toISOString(),
+    confidence: "unverified",
+    complete: false,
+    members: [],
+  }, null, 2);
+}
+
+function evidenceAge(seconds: number | null): string {
+  if (seconds == null) return "not recorded";
+  if (seconds < 60) return `${seconds} seconds`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes`;
+  return `${Math.floor(seconds / 3600)} hours`;
+}
+
 export function OperationsConsole({ platformOrigin }: { platformOrigin: string }) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const clerk = useClerk();
@@ -82,6 +102,14 @@ export function OperationsConsole({ platformOrigin }: { platformOrigin: string }
   const [rights, setRights] = useState<SourceRight[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [stripeReport, setStripeReport] = useState<StripeReconciliationReport | null>(null);
+  const [skoolStatus, setSkoolStatus] = useState<SkoolStatus | null>(null);
+  const [skoolReport, setSkoolReport] = useState<SkoolReconciliationReport | null>(null);
+  const [skoolSubject, setSkoolSubject] = useState("");
+  const [skoolTier, setSkoolTier] = useState("");
+  const [skoolTask, setSkoolTask] = useState("");
+  const [skoolMemberId, setSkoolMemberId] = useState("");
+  const [skoolCompletionSource, setSkoolCompletionSource] = useState<"manual_admin_invite" | "zapier_invite">("manual_admin_invite");
+  const [skoolArtifact, setSkoolArtifact] = useState(currentStateTemplate());
 
   const loadHealth = useCallback(async () => {
     const next = await api.health();
@@ -139,15 +167,31 @@ export function OperationsConsole({ platformOrigin }: { platformOrigin: string }
 
   const openWorkspace = (publicId: string) => {
     void run(async () => {
-      const result = await api.getWorkspace(publicId);
+      const [result, skool] = await Promise.all([
+        api.getWorkspace(publicId),
+        api.skoolStatus(publicId),
+      ]);
       setDetail(result);
+      setSkoolStatus(skool);
       setAccountState(result.account?.state ?? "active");
+      setSkoolSubject(String(result.memberships[0]?.user_id ?? ""));
+      setSkoolTier(skool.available_tiers[0]?.tier ?? "");
+      const pending = skool.join_tasks.find((task) => task.state === "pending");
+      setSkoolTask(String(pending?.id ?? ""));
+      setSkoolArtifact(currentStateTemplate(skool.available_tiers[0]?.community_id));
     });
   };
 
   const reloadWorkspace = async () => {
     if (!detail) return;
-    setDetail(await api.getWorkspace(detail.workspace.public_id));
+    const [workspace, skool] = await Promise.all([
+      api.getWorkspace(detail.workspace.public_id),
+      api.skoolStatus(detail.workspace.public_id),
+    ]);
+    setDetail(workspace);
+    setSkoolStatus(skool);
+    const pending = skool.join_tasks.find((task) => task.state === "pending");
+    setSkoolTask(String(pending?.id ?? ""));
   };
 
   const validReason = reason.trim().length >= 8 && reasonCode.length > 0;
@@ -201,6 +245,73 @@ export function OperationsConsole({ platformOrigin }: { platformOrigin: string }
       await reloadWorkspace();
       setReason("");
     }, "Stripe test state reconciled and audited.");
+  };
+
+  const createSkoolJoinTask = () => {
+    if (!detail || !validReason || !skoolSubject || !skoolTier) return;
+    void run(async () => {
+      await api.createSkoolJoinTask(
+        detail.workspace.public_id,
+        Number(skoolSubject),
+        skoolTier,
+        reasonCode,
+        reason,
+      );
+      await reloadWorkspace();
+      setReason("");
+    }, "Skool join task created. Complete the supported invite outside this runtime.");
+  };
+
+  const completeSkoolJoinTask = () => {
+    if (!detail || !validReason || !skoolTask || !skoolMemberId.trim()) return;
+    void run(async () => {
+      await api.completeSkoolJoinTask(
+        detail.workspace.public_id,
+        Number(skoolTask),
+        skoolMemberId.trim(),
+        skoolCompletionSource,
+        reasonCode,
+        reason,
+      );
+      await reloadWorkspace();
+      setSkoolMemberId("");
+      setReason("");
+    }, "Skool member identity bound. Access still requires trusted current-state evidence.");
+  };
+
+  const reconcileSkool = () => {
+    if (!detail || !validReason) return;
+    void run(async () => {
+      let artifact: Record<string, unknown>;
+      try {
+        artifact = JSON.parse(skoolArtifact) as Record<string, unknown>;
+      } catch {
+        throw new Error("Skool current-state evidence must be valid JSON.");
+      }
+      const report = await api.reconcileSkool(
+        detail.workspace.public_id,
+        artifact,
+        reasonCode,
+        reason,
+      );
+      setSkoolReport(report);
+      await reloadWorkspace();
+      setReason("");
+    }, "Skool current-state evidence reconciled and audited.");
+  };
+
+  const revokeSkool = (mappingId: number) => {
+    if (!detail || !validReason) return;
+    void run(async () => {
+      await api.revokeSkool(
+        detail.workspace.public_id,
+        mappingId,
+        reasonCode,
+        reason,
+      );
+      await reloadWorkspace();
+      setReason("");
+    }, "Skool authority and affected OAuth sessions revoked.");
   };
 
   const loadProviders = (selected = provider) => {
@@ -364,6 +475,61 @@ export function OperationsConsole({ platformOrigin }: { platformOrigin: string }
                     {mayMutate && <div className="account-action"><label>Account state<select value={accountState} onChange={(event) => setAccountState(event.target.value)}><option>active</option><option>past_due</option><option>suspended</option><option>canceled</option></select></label><button className="action" type="button" disabled={!validReason || busy} onClick={changeAccountState}>Apply state</button>{detail.external_accounts.some((item) => item.provider === "stripe") && <button className="action" type="button" disabled={!validReason || busy} onClick={reconcileStripe}>Reconcile Stripe test state</button>}</div>}
                     {stripeReport && <p className="reconciliation-result" role="status">Stripe test reconciliation checked a complete subscription list at {stripeReport.observed_at}. Discrepancies observed: <strong>{stripeReport.discrepancy_count}</strong>.</p>}
                   </section>
+
+                  {skoolStatus && (
+                    <section className="skool-ledger" aria-label="Skool lifecycle">
+                      <div className="skool-ledger__heading">
+                        <h3>Skool evidence ledger</h3>
+                        <p>{skoolStatus.official_constraint}</p>
+                      </div>
+                      <dl className="skool-bearing">
+                        <div><dt>Current-state certainty</dt><dd>{skoolStatus.reconciliation.certainty}</dd></div>
+                        <div><dt>Evidence age</dt><dd>{evidenceAge(skoolStatus.reconciliation.age_seconds)}</dd></div>
+                        <div><dt>Reason</dt><dd>{skoolStatus.reconciliation.reason_code}</dd></div>
+                        <div><dt>Conflicts</dt><dd>{skoolStatus.reconciliation.conflict_count ?? 0}</dd></div>
+                      </dl>
+
+                      {skoolStatus.available_tiers.length === 0 ? (
+                        <p className="empty-value">No server-owned Skool tier mapping is configured. Join and reconciliation controls remain closed.</p>
+                      ) : (
+                        <div className="skool-controls">
+                          <fieldset>
+                            <legend>Create a supported join task</legend>
+                            <label>Workspace member<select value={skoolSubject} disabled={!mayMutate} onChange={(event) => setSkoolSubject(event.target.value)}>{detail.memberships.map((item) => <option key={item.id} value={item.user_id}>{item.name ?? item.email ?? `User ${item.user_id}`}</option>)}</select></label>
+                            <label>Mapped tier<select value={skoolTier} disabled={!mayMutate} onChange={(event) => setSkoolTier(event.target.value)}>{skoolStatus.available_tiers.map((item) => <option key={item.tier} value={item.tier}>{item.tier} / {item.profile}</option>)}</select></label>
+                            {mayMutate && <button className="action" type="button" disabled={!validReason || busy || !skoolSubject || !skoolTier} onClick={createSkoolJoinTask}>Create join task</button>}
+                          </fieldset>
+
+                          <fieldset>
+                            <legend>Record a completed invite</legend>
+                            <label>Pending task<select value={skoolTask} disabled={!mayMutate} onChange={(event) => setSkoolTask(event.target.value)}><option value="">Select a pending task</option>{skoolStatus.join_tasks.filter((task) => task.state === "pending").map((task) => <option key={task.id} value={task.id}>#{task.id} {task.member_name} / {task.tier}</option>)}</select></label>
+                            <label>Exact Skool member ID<input value={skoolMemberId} disabled={!mayMutate} onChange={(event) => setSkoolMemberId(event.target.value)} placeholder="member identifier from Skool" /></label>
+                            <label>Invite path<select value={skoolCompletionSource} disabled={!mayMutate} onChange={(event) => setSkoolCompletionSource(event.target.value as "manual_admin_invite" | "zapier_invite")}><option value="manual_admin_invite">Skool Admin Invite</option><option value="zapier_invite">Zapier Invite</option></select></label>
+                            {mayMutate && <button className="action" type="button" disabled={!validReason || busy || !skoolTask || !skoolMemberId.trim()} onClick={completeSkoolJoinTask}>Record joined member</button>}
+                          </fieldset>
+
+                          <fieldset className="skool-evidence">
+                            <legend>Reconcile current members</legend>
+                            <label>Timestamped review artifact<textarea value={skoolArtifact} disabled={!mayMutate} spellCheck={false} onChange={(event) => setSkoolArtifact(event.target.value)} /></label>
+                            <p>Use a complete, confirmed review only when every current member in this community was checked. Stale, partial, or unverified evidence cannot grant access.</p>
+                            {mayMutate && <button className="action" type="button" disabled={!validReason || busy} onClick={reconcileSkool}>Reconcile evidence</button>}
+                          </fieldset>
+                        </div>
+                      )}
+
+                      <div className="skool-mappings">
+                        <h4>Bound members and manual revocation</h4>
+                        {skoolStatus.mappings.length === 0 ? <p className="empty-value">No Skool member identities are bound.</p> : skoolStatus.mappings.map((mapping) => (
+                          <article key={mapping.id}>
+                            <div><strong>{mapping.member_name}</strong><span>{mapping.member_email}</span></div>
+                            <div><span>{mapping.external_member_id}</span><strong>{mapping.grant_status}</strong></div>
+                            {mayMutate && mapping.grant_status !== "revoked" && <button className="action" type="button" disabled={!validReason || busy} onClick={() => revokeSkool(mapping.id)}>Revoke Skool authority</button>}
+                          </article>
+                        ))}
+                      </div>
+                      {skoolReport && <p className="reconciliation-result" role="status">Skool evidence is {skoolReport.certainty}. Mapped members: <strong>{skoolReport.mapped_member_count}</strong>. Conflicts: <strong>{skoolReport.conflict_count}</strong>.</p>}
+                    </section>
+                  )}
                 </div>
               )}
             </>

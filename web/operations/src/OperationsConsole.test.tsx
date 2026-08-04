@@ -52,6 +52,54 @@ const detail = {
   external_accounts: [{ id: 11, provider: "stripe", external_account_id: "cus_test_123", subject_user_id: 8, metadata: {} }],
 };
 
+const skoolStatus = {
+  provider: "skool",
+  automation: "operator_task_only",
+  official_constraint: "Joining uses Admin Invite or Zapier Invite. No undocumented member endpoint is called.",
+  reconciliation: {
+    certainty: "uncertain",
+    reason_code: "no_current_state_artifact",
+    observed_at: null,
+    age_seconds: null,
+    stale: true,
+  },
+  join_tasks: [{
+    id: 17,
+    subject_user_id: 8,
+    member_name: "Austin Buyer",
+    invite_email: "buyer@example.test",
+    community_id: "community_1",
+    level_id: "level_local",
+    tier: "community_1:level_local",
+    state: "pending",
+    completion_source: null,
+    external_mapping_id: null,
+    completed_at: null,
+    created_at: "2026-08-04T12:00:00Z",
+    updated_at: "2026-08-04T12:00:00Z",
+  }],
+  mappings: [{
+    id: 21,
+    external_member_id: "member_austin",
+    subject_user_id: 8,
+    member_name: "Austin Buyer",
+    member_email: "buyer@example.test",
+    community_id: "community_1",
+    grant_status: "active",
+    plan_key: "local",
+    profile: "local_scout",
+    grant_ends_at: "2026-08-05T12:00:00Z",
+  }],
+  available_tiers: [{
+    tier: "community_1:level_local",
+    community_id: "community_1",
+    level_id: "level_local",
+    plan_key: "local",
+    profile: "local_scout",
+    community_url: "https://www.skool.com/medawar-cre",
+  }],
+};
+
 function response(value: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(value), {
     status,
@@ -75,6 +123,9 @@ function installApi(operator = admin) {
     if (url.pathname === `/v1/operations/workspaces/${summary.public_id}` && method === "GET") {
       return response(detail);
     }
+    if (url.pathname === `/v1/operations/workspaces/${summary.public_id}/skool` && method === "GET") {
+      return response(skoolStatus);
+    }
     if (url.pathname.endsWith("/account-state") && method === "POST") {
       return response({ account: { state: "suspended" } });
     }
@@ -87,6 +138,38 @@ function installApi(operator = admin) {
         discrepancy_count: 2,
         results: [],
       });
+    }
+    if (url.pathname.endsWith("/skool/join-tasks") && method === "POST") {
+      return response(skoolStatus.join_tasks[0], 201);
+    }
+    if (url.pathname.endsWith("/skool/join-tasks/17/complete") && method === "POST") {
+      return response({
+        task: { ...skoolStatus.join_tasks[0], state: "completed" },
+        grant_created: false,
+        next_gate: "Trusted current-state evidence is required.",
+      });
+    }
+    if (url.pathname.endsWith("/skool/reconcile") && method === "POST") {
+      return response({
+        id: 3,
+        provider: "skool",
+        community_id: "community_1",
+        source: "operator_members_review",
+        observed_at: "2026-08-04T18:00:00+00:00",
+        age_seconds: 0,
+        confidence: "confirmed",
+        complete: true,
+        certainty: "confirmed",
+        reason_code: "confirmed_current_state",
+        member_count: 1,
+        mapped_member_count: 1,
+        unmapped_member_count: 0,
+        discrepancy_count: 0,
+        conflict_count: 0,
+      });
+    }
+    if (url.pathname.endsWith("/skool/mappings/21/revoke") && method === "POST") {
+      return response({ grant_status: "revoked", oauth_sessions_revoked: 1 });
     }
     if (url.pathname === "/v1/operations/source-rights") {
       return response({
@@ -196,6 +279,57 @@ describe("OperationsConsole", () => {
     expect(await screen.findByText(/Discrepancies observed:/)).toHaveTextContent("2");
     const mutation = fetchMock.mock.calls.find(([input, init]) =>
       String(input).endsWith("/stripe-reconcile") && init?.method === "POST",
+    );
+    expect(mutation?.[1]?.headers).toMatchObject({
+      "X-CSRF-Token": "mcr_ops_csrf_test",
+    });
+  });
+
+  it("keeps Skool joins operator-bounded and reconciliation uncertainty visible", async () => {
+    const fetchMock = installApi();
+    render(<OperationsConsole platformOrigin={PLATFORM} />);
+    await ready();
+    await openWorkspace();
+
+    expect(screen.getByText("Skool evidence ledger")).toBeInTheDocument();
+    expect(screen.getByText("no_current_state_artifact")).toBeInTheDocument();
+    expect(screen.getByText(/No undocumented member endpoint/)).toBeInTheDocument();
+    const join = screen.getByRole("button", { name: "Create join task" });
+    expect(join).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Operator reason"), {
+      target: { value: "Verified the supported Skool invite runbook." },
+    });
+    fireEvent.click(join);
+
+    expect(await screen.findByText(/join task created/i)).toBeInTheDocument();
+    const mutation = fetchMock.mock.calls.find(([input, init]) =>
+      String(input).endsWith("/skool/join-tasks") && init?.method === "POST",
+    );
+    expect(mutation?.[1]?.headers).toMatchObject({
+      "X-CSRF-Token": "mcr_ops_csrf_test",
+    });
+    expect(JSON.parse(String(mutation?.[1]?.body))).toMatchObject({
+      subject_user_id: 8,
+      tier: "community_1:level_local",
+    });
+  });
+
+  it("requires reasoned manual Skool revocation", async () => {
+    const fetchMock = installApi();
+    render(<OperationsConsole platformOrigin={PLATFORM} />);
+    await ready();
+    await openWorkspace();
+
+    const revoke = screen.getByRole("button", { name: "Revoke Skool authority" });
+    expect(revoke).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Operator reason"), {
+      target: { value: "Confirmed the member should no longer hold access." },
+    });
+    fireEvent.click(revoke);
+
+    expect(await screen.findByText(/affected OAuth sessions revoked/i)).toBeInTheDocument();
+    const mutation = fetchMock.mock.calls.find(([input, init]) =>
+      String(input).endsWith("/skool/mappings/21/revoke") && init?.method === "POST",
     );
     expect(mutation?.[1]?.headers).toMatchObject({
       "X-CSRF-Token": "mcr_ops_csrf_test",

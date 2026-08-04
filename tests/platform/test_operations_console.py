@@ -36,6 +36,15 @@ def _config(tmp_path, *, enabled: bool = True) -> CreConfig:
         operations_console_origin=ORIGIN if enabled else None,
         browser_cookie_secure=True,
         stripe_webhook_secret=STRIPE_SECRET,
+        skool_tier_mappings={
+            "community_1:level_local": {
+                "plan_key": "local",
+                "profile": "local_scout",
+            }
+        },
+        skool_community_urls={
+            "community_1": "https://www.skool.com/medawar-cre"
+        },
     )
 
 
@@ -236,6 +245,81 @@ async def test_support_reads_but_cannot_mutate_and_admin_needs_csrf(tmp_path):
     assert changed.status_code == 200
     assert changed.json()["account"]["state"] == "suspended"
     assert audit_rows(config.cache_db_path)[-1]["action"] == "account.state.update"
+
+
+async def test_skool_lifecycle_routes_are_internal_reasoned_and_csrf_bound(
+    tmp_path,
+):
+    config = _config(tmp_path)
+    target, target_user, _ = await _person(config, "Skool Managed Buyer")
+    _support_ws, support, _ = await _person(
+        config,
+        "Skool Support Reader",
+        internal_role="support",
+    )
+    support_identity = VerifiedHumanIdentity(
+        "clerk",
+        "skool-support-subject",
+        support.email,
+        support.name,
+    )
+
+    async with await _client(config, support_identity) as client:
+        _signed_in, support_csrf = await _sign_in(client)
+        status = await client.get(
+            f"/v1/operations/workspaces/{target.public_id}/skool",
+            headers=_headers(),
+        )
+        denied = await client.post(
+            f"/v1/operations/workspaces/{target.public_id}/skool/join-tasks",
+            headers=_headers(**{"x-csrf-token": support_csrf}),
+            json={
+                "subject_user_id": target_user.id,
+                "tier": "community_1:level_local",
+                "reason_code": "support_resolution",
+                "reason": "Verified by the Skool operations runbook.",
+            },
+        )
+
+    assert status.status_code == 200
+    assert status.json()["automation"] == "operator_task_only"
+    assert status.json()["reconciliation"]["certainty"] == "uncertain"
+    assert denied.status_code == 403
+
+    _admin_ws, admin, _ = await _person(
+        config,
+        "Skool Control Admin",
+        internal_role="platform_admin",
+    )
+    admin_identity = VerifiedHumanIdentity(
+        "clerk",
+        "skool-admin-subject",
+        admin.email,
+        admin.name,
+    )
+    body = {
+        "subject_user_id": target_user.id,
+        "tier": "community_1:level_local",
+        "reason_code": "entitlement_correction",
+        "reason": "Verified by the Skool operations runbook.",
+    }
+    async with await _client(config, admin_identity) as client:
+        _signed_in, csrf = await _sign_in(client)
+        missing_csrf = await client.post(
+            f"/v1/operations/workspaces/{target.public_id}/skool/join-tasks",
+            headers=_headers(),
+            json=body,
+        )
+        created = await client.post(
+            f"/v1/operations/workspaces/{target.public_id}/skool/join-tasks",
+            headers=_headers(**{"x-csrf-token": csrf}),
+            json=body,
+        )
+
+    assert missing_csrf.status_code == 403
+    assert created.status_code == 201
+    assert created.json()["state"] == "pending"
+    assert audit_rows(config.cache_db_path)[-1]["action"] == "skool.join_task.create"
 
 
 async def test_removed_admin_and_jv_operator_fail_closed(tmp_path):

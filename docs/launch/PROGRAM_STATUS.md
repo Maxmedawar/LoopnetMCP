@@ -59,7 +59,7 @@ and an independent audit are recorded here.
 | 🔴 | Combined opportunity index | Server-side deduplication, provenance, staff-only access, pagination and conflict tests |
 | 🔴 | Scheduled saved searches | Idempotent queue, current entitlement and territory checks, audit, internal status |
 | 🟡 | Stripe test integration | Implementation and local gates complete: test-only credentials and mode enforcement, rotating signed webhooks, durable lifecycle journal, fixed-host GET-only complete-list reconciliation, atomic projection repair, active-session effects, and reasoned operator audit. Representative fixtures still require a real Stripe test-account staging proof; integrated audit remains scheduled after Skool |
-| 🔴 | Skool reconciliation | Proven current-state source or explicit restrictive fallback, manual revoke, uncertainty state |
+| 🟡 | Skool reconciliation | Local gates complete: operator-only supported join tasks, exact member binding without implicit grant, rotating signed relay secrets, payload-free timestamped review receipts, stale and partial uncertainty, restrictive mismatch handling, manual revoke, OAuth invalidation, and internal Console controls. Private staging must prove the configured relay and operator runbook |
 | 🔴 | Privacy and retention | Notice, export, correction, deletion, retention, processor propagation, audit |
 | 🟢 | Source-rights controls | First replacement `e58c721...` was rejected and repaired. Exact replacement `4c33265...` fails closed on contradictory local/hosted policy and cleanly imports; 164 focused and 1,950 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `3185ccb` |
 | 🔴 | Private staging | Reproducible package, TLS, migrations, workers, monitoring, backup and restore exercise, rollback |
@@ -89,6 +89,31 @@ No row may be deleted. Superseded work stays visible with its disposition.
   `https://docs.stripe.com/api/events/object`,
   `https://docs.stripe.com/api/subscriptions/list`, and
   `https://docs.stripe.com/api/subscriptions/object`.
+
+## Skool lifecycle evidence
+
+- Repository gate: `4507 passed, 1 warning in 183.33s (0:03:03)`
+- Platform gate: `413 passed, 1 warning in 42.62s`
+- Operations Console: `10 passed`; production build completed; `npm audit`
+  reported `found 0 vulnerabilities`
+- Joining is deliberately operator-bounded. The system creates an audited task
+  for Skool Admin Invite or Zapier Invite, then waits for the member to click
+  JOIN NOW and for an operator to bind the exact member id.
+- Completing a join task creates no grant. A signed event or a complete,
+  current, confirmed member review remains the next authority gate.
+- Reconciliation stores only a hash receipt and operational metadata. Stale,
+  partial, provisional, or unverified reviews are visibly uncertain and cannot
+  strengthen access.
+- Missing members and restrictive statuses revoke. An unmapped tier is a
+  conflict and revokes existing Skool authority rather than guessing a plan.
+- Manual revocation removes Skool authority and invalidates the affected OAuth
+  session and pending authorization codes in the same audited transaction.
+- The Operations Console exposes join tasks, evidence age, certainty,
+  discrepancies, conflicts, exact mappings, and reason-gated manual revocation.
+- Official operating references:
+  `https://help.skool.com/article/14-how-do-i-invite-members-to-my-community`,
+  `https://help.skool.com/article/56-zapier-integration`, and
+  `https://help.skool.com/article/141-how-to-remove-a-member`.
 
 ## Preserved red evidence
 

@@ -308,7 +308,7 @@ def test_legacy_plan_schema_gains_daily_quotas_without_data_loss(tmp_path):
         ).fetchone()[0] == 1
 
 
-def test_admin_controls_v1_is_fresh_additive_and_empty(tmp_path):
+def test_admin_controls_current_schema_is_fresh_additive_and_empty(tmp_path):
     from cre_mcp.platform.migrations import current_version
     from cre_mcp.platform.schema import create_schema
 
@@ -323,11 +323,13 @@ def test_admin_controls_v1_is_fresh_additive_and_empty(tmp_path):
         }
         version = current_version(connection, "admin-controls")
 
-    assert version == 1
+    assert version == 2
     assert {
         "platform_internal_admins",
         "platform_external_accounts",
         "platform_admin_audit",
+        "platform_skool_join_tasks",
+        "platform_skool_reconciliations",
     } <= names
     with sqlite3.connect(path) as connection:
         assert connection.execute(
@@ -339,9 +341,15 @@ def test_admin_controls_v1_is_fresh_additive_and_empty(tmp_path):
         assert connection.execute(
             "SELECT COUNT(*) FROM platform_admin_audit"
         ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM platform_skool_join_tasks"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM platform_skool_reconciliations"
+        ).fetchone()[0] == 0
 
 
-def test_admin_controls_v1_upgrades_without_backfill_or_legacy_column_changes(
+def test_admin_controls_upgrade_preserves_legacy_rows_without_backfill(
     tmp_path,
 ):
     from cre_mcp.platform.entitlements import _ENTITLEMENT_SCHEMA
@@ -425,7 +433,7 @@ def test_admin_controls_v1_upgrades_without_backfill_or_legacy_column_changes(
             )
         )
 
-    assert version == 1
+    assert version == 2
     assert subscription == "cus_legacy"
     assert grant == "legacy-ref"
     assert counts == (0, 0, 0)

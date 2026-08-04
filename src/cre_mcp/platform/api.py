@@ -53,6 +53,7 @@ from cre_mcp.platform.providers.reconciliation import (
     ProviderReconciliationStore,
 )
 from cre_mcp.platform.providers.skool import SKOOL_EVENT_TYPES, parse_skool_event
+from cre_mcp.platform.providers.skool_lifecycle import SkoolLifecycleService
 from cre_mcp.platform.providers.stripe import (
     STRIPE_EVENT_TYPES,
     StripeProviderUnavailableError,
@@ -114,11 +115,13 @@ class PlatformApi:
         *,
         human_identity_verifier: HumanIdentityVerifier | None = None,
         stripe_reconciliation_service: StripeReconciliationService | None = None,
+        skool_lifecycle_service: SkoolLifecycleService | None = None,
     ) -> None:
         self._injected_human_identity_verifier = human_identity_verifier
         self._injected_stripe_reconciliation_service = (
             stripe_reconciliation_service
         )
+        self._injected_skool_lifecycle_service = skool_lifecycle_service
         self.configure(config or CreConfig())
 
     def configure(self, config: CreConfig) -> None:
@@ -142,6 +145,10 @@ class PlatformApi:
         self.stripe_reconciliation = (
             self._injected_stripe_reconciliation_service
             or StripeReconciliationService(config, sync=self.provider_sync)
+        )
+        self.skool_lifecycle = (
+            self._injected_skool_lifecycle_service
+            or SkoolLifecycleService(config, sync=self.provider_sync)
         )
         self.oauth = OAuthSessionStore(
             config.cache_db_path,
@@ -1116,6 +1123,99 @@ class PlatformApi:
             response = JSONResponse(_jsonable(report))
         return self._with_operations_cors(request, response)
 
+    async def get_operations_skool(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=False)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.skool_lifecycle.status,
+            request.path_params["workspace_id"],
+            actor_user_id=operator["user_id"],
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def create_operations_skool_join_task(
+        self,
+        request: Request,
+    ) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.skool_lifecycle.create_join_task,
+            request.path_params["workspace_id"],
+            actor_user_id=operator["user_id"],
+            subject_user_id=body.get("subject_user_id"),
+            tier=body.get("tier"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result), status_code=201)
+        return self._with_operations_cors(request, response)
+
+    async def complete_operations_skool_join_task(
+        self,
+        request: Request,
+    ) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.skool_lifecycle.complete_join_task,
+            request.path_params["workspace_id"],
+            request.path_params["task_id"],
+            actor_user_id=operator["user_id"],
+            external_member_id=body.get("external_member_id"),
+            completion_source=body.get("completion_source"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def reconcile_operations_skool(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.skool_lifecycle.reconcile_workspace,
+            request.path_params["workspace_id"],
+            actor_user_id=operator["user_id"],
+            artifact=body.get("artifact"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def revoke_operations_skool(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.skool_lifecycle.manual_revoke,
+            request.path_params["workspace_id"],
+            request.path_params["mapping_id"],
+            actor_user_id=operator["user_id"],
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
     async def list_operations_audit(self, request: Request) -> JSONResponse:
         _operator, error = self._operations_operator(request, mutate=False)
         if error is not None:
@@ -1429,11 +1529,7 @@ class PlatformApi:
             header_name = "stripe-signature"
             parser = parse_stripe_event
         else:
-            secrets = (
-                (self.config.skool_webhook_secret,)
-                if self.config.skool_webhook_secret is not None
-                else ()
-            )
+            secrets = self.config.skool_signing_secrets
             header_name = "x-skool-signature"
             parser = parse_skool_event
         if not secrets:
@@ -2159,6 +2255,31 @@ PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         ("POST",),
         "reconcile_operations_stripe",
     ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/skool",
+        ("GET",),
+        "get_operations_skool",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/skool/join-tasks",
+        ("POST",),
+        "create_operations_skool_join_task",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/skool/join-tasks/{task_id}/complete",
+        ("POST",),
+        "complete_operations_skool_join_task",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/skool/reconcile",
+        ("POST",),
+        "reconcile_operations_skool",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/skool/mappings/{mapping_id}/revoke",
+        ("POST",),
+        "revoke_operations_skool",
+    ),
     ("/v1/operations/audit", ("GET",), "list_operations_audit"),
     ("/v1/operations/health", ("GET",), "operations_health"),
     (
@@ -2251,6 +2372,7 @@ def starlette_app(
     *,
     human_identity_verifier: HumanIdentityVerifier | None = None,
     stripe_reconciliation_service: StripeReconciliationService | None = None,
+    skool_lifecycle_service: SkoolLifecycleService | None = None,
 ) -> Starlette:
     """Build a standalone ASGI app for the customer-facing platform routes."""
     return Starlette(
@@ -2258,6 +2380,7 @@ def starlette_app(
             config,
             human_identity_verifier=human_identity_verifier,
             stripe_reconciliation_service=stripe_reconciliation_service,
+            skool_lifecycle_service=skool_lifecycle_service,
         ).routes()
     )
 

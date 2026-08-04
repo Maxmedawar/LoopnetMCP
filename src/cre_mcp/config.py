@@ -317,6 +317,20 @@ class CreConfig(BaseSettings):
         default=None,
         validation_alias=_env_aliases("skool_webhook_secret"),
     )
+    skool_webhook_secrets: tuple[SecretStr, ...] = Field(
+        default=(),
+        validation_alias=_env_aliases("skool_webhook_secrets"),
+    )
+    skool_reconciliation_max_age_seconds: int = Field(
+        default=24 * 60 * 60,
+        ge=60,
+        le=7 * 24 * 60 * 60,
+        validation_alias=_env_aliases("skool_reconciliation_max_age_seconds"),
+    )
+    skool_community_urls: dict[str, str] = Field(
+        default_factory=dict,
+        validation_alias=_env_aliases("skool_community_urls"),
+    )
     provider_webhook_max_body_bytes: int = Field(
         default=64 * 1024,
         ge=1,
@@ -356,6 +370,21 @@ class CreConfig(BaseSettings):
     @field_validator("stripe_webhook_secrets")
     @classmethod
     def normalize_stripe_webhook_secrets(
+        cls,
+        value: tuple[SecretStr, ...],
+    ) -> tuple[SecretStr, ...]:
+        result: list[SecretStr] = []
+        seen: set[str] = set()
+        for secret in value:
+            normalized = secret.get_secret_value().strip()
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                result.append(SecretStr(normalized))
+        return tuple(result)
+
+    @field_validator("skool_webhook_secrets")
+    @classmethod
+    def normalize_skool_webhook_secrets(
         cls,
         value: tuple[SecretStr, ...],
     ) -> tuple[SecretStr, ...]:
@@ -493,6 +522,21 @@ class CreConfig(BaseSettings):
                 values.append(secret)
         return tuple(values)
 
+    @property
+    def skool_signing_secrets(self) -> tuple[SecretStr, ...]:
+        """All active relay secrets, deduplicated for safe rotation."""
+        values: list[SecretStr] = []
+        seen: set[str] = set()
+        for secret in (
+            *((self.skool_webhook_secret,) if self.skool_webhook_secret else ()),
+            *self.skool_webhook_secrets,
+        ):
+            raw = secret.get_secret_value()
+            if raw not in seen:
+                seen.add(raw)
+                values.append(secret)
+        return tuple(values)
+
     @field_validator("skool_tier_mappings")
     @classmethod
     def validate_skool_mapping_keys(
@@ -506,6 +550,30 @@ class CreConfig(BaseSettings):
                     "Skool mapping keys must be <community_id>:<level_id>"
                 )
         return value
+
+    @field_validator("skool_community_urls")
+    @classmethod
+    def validate_skool_community_urls(
+        cls,
+        value: dict[str, str],
+    ) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        for community_id, url in value.items():
+            key = community_id.strip()
+            if not key or ":" in key or len(key) > 255:
+                raise ValueError(
+                    "Skool community ids must be nonblank safe identifiers"
+                )
+            validated = _validated_http_url(
+                url,
+                field_name="skool_community_urls",
+                origin_only=False,
+            )
+            parsed = urlsplit(validated)
+            if parsed.hostname not in {"skool.com", "www.skool.com"}:
+                raise ValueError("Skool community URLs must use skool.com")
+            normalized[key] = validated
+        return normalized
 
     def model_post_init(self, __context) -> None:
         super().model_post_init(__context)

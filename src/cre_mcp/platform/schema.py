@@ -41,6 +41,8 @@ PLATFORM_TABLES = frozenset(
         "platform_browser_sessions",
         "platform_operator_sessions",
         "platform_oauth_authorization_requests",
+        "platform_skool_join_tasks",
+        "platform_skool_reconciliations",
     }
 )
 
@@ -401,11 +403,109 @@ def _admin_controls_v1(connection: sqlite3.Connection) -> None:
     )
 
 
+def _skool_lifecycle_v1(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_skool_join_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL,
+            subject_user_id INTEGER NOT NULL,
+            community_id TEXT NOT NULL,
+            level_id TEXT NOT NULL,
+            state TEXT NOT NULL,
+            requested_by INTEGER NOT NULL,
+            completed_by INTEGER,
+            completion_source TEXT,
+            external_mapping_id INTEGER,
+            completed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(workspace_id)
+                REFERENCES platform_workspaces(id) ON DELETE CASCADE,
+            FOREIGN KEY(subject_user_id)
+                REFERENCES platform_users(id) ON DELETE CASCADE,
+            FOREIGN KEY(requested_by) REFERENCES platform_users(id),
+            FOREIGN KEY(completed_by) REFERENCES platform_users(id),
+            FOREIGN KEY(external_mapping_id)
+                REFERENCES platform_external_accounts(id),
+            CHECK(state IN ('pending','completed','canceled')),
+            CHECK(completion_source IS NULL OR completion_source IN (
+                'manual_admin_invite','zapier_invite'
+            )),
+            CHECK(length(trim(community_id)) > 0),
+            CHECK(length(trim(level_id)) > 0)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_platform_skool_join_tasks_pending
+        ON platform_skool_join_tasks(
+            workspace_id,subject_user_id,community_id,level_id
+        )
+        WHERE state='pending'
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_platform_skool_join_tasks_workspace
+        ON platform_skool_join_tasks(workspace_id,state,created_at,id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_skool_reconciliations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL,
+            community_id TEXT NOT NULL,
+            artifact_hash TEXT NOT NULL UNIQUE,
+            source TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            confidence TEXT NOT NULL,
+            complete INTEGER NOT NULL,
+            certainty TEXT NOT NULL,
+            reason_code TEXT NOT NULL,
+            member_count INTEGER NOT NULL,
+            mapped_member_count INTEGER NOT NULL,
+            discrepancy_count INTEGER NOT NULL,
+            conflict_count INTEGER NOT NULL,
+            created_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(workspace_id)
+                REFERENCES platform_workspaces(id) ON DELETE CASCADE,
+            FOREIGN KEY(created_by) REFERENCES platform_users(id),
+            CHECK(source IN ('operator_members_review')),
+            CHECK(confidence IN ('confirmed','provisional','unverified')),
+            CHECK(complete IN (0,1)),
+            CHECK(certainty IN ('confirmed','uncertain','conflict')),
+            CHECK(member_count >= 0),
+            CHECK(mapped_member_count >= 0),
+            CHECK(discrepancy_count >= 0),
+            CHECK(conflict_count >= 0)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_platform_skool_reconciliations_workspace
+        ON platform_skool_reconciliations(
+            workspace_id,community_id,observed_at,id
+        )
+        """
+    )
+
+
 ADMIN_CONTROL_MIGRATIONS = (
     Migration(
         1,
         "internal admin authority, external mappings, and atomic audit",
         _admin_controls_v1,
+    ),
+    Migration(
+        2,
+        "payload-free Skool join and current-state evidence",
+        _skool_lifecycle_v1,
     ),
 )
 
