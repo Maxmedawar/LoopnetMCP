@@ -9,7 +9,7 @@ from cre_mcp.postgres import cli
 from cre_mcp.postgres.config import PostgresSettings
 from cre_mcp.postgres.migrations import load_migrations
 from cre_mcp.postgres.pool import INTERNAL_ROLES
-from cre_mcp.postgres.authority import ADMISSION_ROLE
+from cre_mcp.postgres.authority import ADMISSION_ROLE, SERVICE_ROLES
 from cre_mcp.postgres.schema import (
     EXPECTED_CATALOG_FINGERPRINT,
     EXPECTED_RLS_TABLES,
@@ -77,6 +77,13 @@ def test_launch_schema_inventory_covers_every_required_domain() -> None:
         "oauth_clients",
     }
     assert ADMISSION_ROLE == "medawarcre_admission"
+    assert set(SERVICE_ROLES.values()) == {
+        "medawarcre_oauth",
+        "medawarcre_provider_ingress",
+        "medawarcre_provider_reconcile",
+        "medawarcre_worker",
+        "medawarcre_scheduler",
+    }
     assert len(EXPECTED_CATALOG_FINGERPRINT) == 64
 
 

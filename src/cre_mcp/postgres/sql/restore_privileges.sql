@@ -1,14 +1,22 @@
 REVOKE ALL ON SCHEMA medawarcre
-FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup, medawarcre_admission;
+FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup,
+     medawarcre_admission, medawarcre_oauth, medawarcre_provider_ingress,
+     medawarcre_provider_reconcile, medawarcre_worker, medawarcre_scheduler;
 GRANT USAGE ON SCHEMA medawarcre
 TO medawarcre_app, medawarcre_admin, medawarcre_backup, medawarcre_admission;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA medawarcre
-FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup, medawarcre_admission;
+FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup,
+     medawarcre_admission, medawarcre_oauth, medawarcre_provider_ingress,
+     medawarcre_provider_reconcile, medawarcre_worker, medawarcre_scheduler;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA medawarcre
-FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup, medawarcre_admission;
+FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup,
+     medawarcre_admission, medawarcre_oauth, medawarcre_provider_ingress,
+     medawarcre_provider_reconcile, medawarcre_worker, medawarcre_scheduler;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA medawarcre
-FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup, medawarcre_admission;
+FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup,
+     medawarcre_admission, medawarcre_oauth, medawarcre_provider_ingress,
+     medawarcre_provider_reconcile, medawarcre_worker, medawarcre_scheduler;
 
 GRANT SELECT ON medawarcre.schema_migrations,
                 medawarcre.plans,

@@ -135,10 +135,12 @@ class PostgresDatabase:
         )
 
     def _configure(self, connection: psycopg.Connection) -> None:
+        self._pin_search_path(connection)
         self._assert_runtime_role(connection)
         connection.execute("SET TIME ZONE 'UTC'")
         connection.execute(
             "SELECT set_config('application_name', %s, false), "
+            "set_config('search_path', 'pg_catalog', false), "
             "set_config('statement_timeout', %s, false), "
             "set_config('lock_timeout', %s, false), "
             "set_config('idle_in_transaction_session_timeout', %s, false)",
@@ -150,6 +152,10 @@ class PostgresDatabase:
             ),
         )
         connection.commit()
+
+    @staticmethod
+    def _pin_search_path(connection: psycopg.Connection) -> None:
+        connection.execute("SET search_path TO pg_catalog")
 
     def _assert_runtime_role(self, connection: psycopg.Connection) -> None:
         expected_role = (
@@ -171,6 +177,7 @@ class PostgresDatabase:
 
     @staticmethod
     def _reset(connection: psycopg.Connection) -> None:
+        connection.execute("SET search_path TO pg_catalog")
         for key in _CONTEXT_KEYS:
             connection.execute(
                 "SELECT set_config(%s, '', false)",
@@ -180,6 +187,7 @@ class PostgresDatabase:
 
     def open(self, *, wait: bool = True) -> None:
         with psycopg.connect(self.settings.dsn) as connection:
+            self._pin_search_path(connection)
             self._assert_runtime_role(connection)
         self._pool.open(wait=wait)
 

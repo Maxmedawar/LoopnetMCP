@@ -47,6 +47,12 @@ logins require `INHERIT FALSE` both on the login and its membership.
 - `medawarcre_admission`: `NOLOGIN NOINHERIT`, receives schema usage and
   EXECUTE only on the three admission functions. Its login must also be
   `NOINHERIT` and must explicitly `SET ROLE medawarcre_admission`.
+- `medawarcre_oauth`, `medawarcre_provider_ingress`,
+  `medawarcre_provider_reconcile`, `medawarcre_worker`, and
+  `medawarcre_scheduler`: `NOLOGIN NOINHERIT` service boundaries. Their login
+  roles must also be `NOINHERIT`, receive one exact membership, and explicitly
+  `SET ROLE`. They intentionally receive no object privilege until a reviewed
+  migration grants execution on their narrow service functions.
 
 Every preflight rejects superusers, `BYPASSRLS`, cluster capabilities, unsafe
 or extra transitive memberships, membership-option drift, direct database,
@@ -66,7 +72,8 @@ waiters, acquire timeout, lifetime, idle timeout, reconnect timeout, statement
 timeout, lock timeout, and idle-transaction timeout are all validated. A zero
 or negative waiter bound is invalid.
 
-New connections set UTC and the configured timeouts. Every checkout is tested,
+New connections set UTC, pin `search_path` to `pg_catalog`, and set the
+configured timeouts. Every checkout is tested,
 and stale connections are discarded. Authorization context is transaction
 local:
 

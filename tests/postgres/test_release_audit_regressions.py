@@ -12,6 +12,7 @@ from psycopg import sql
 
 from cre_mcp.postgres import backup as backup_module
 from cre_mcp.postgres.authority import (
+    SERVICE_ROLES,
     UnsafeDatabaseRoleError,
     assert_admission_session,
 )
@@ -69,6 +70,10 @@ def test_bootstrap_logins_have_exact_pg16_membership_options(postgres_cluster) -
             False,
             True,
         ),
+        **{
+            f"medawarcre_test_{service}": (role, False, False, True)
+            for service, role in SERVICE_ROLES.items()
+        },
     }
     with psycopg.connect(postgres_cluster.dsn()) as connection:
         actual = {
@@ -84,6 +89,27 @@ def test_bootstrap_logins_have_exact_pg16_membership_options(postgres_cluster) -
             )
         }
     assert actual == expected
+
+
+def test_shared_preflight_pins_admission_and_migration_search_path(
+    postgres_database: tuple[str, str, str],
+) -> None:
+    _, migration_dsn, app_dsn = postgres_database
+    admission_dsn = app_dsn.replace(
+        "user=medawarcre_test_app", "user=medawarcre_test_admission"
+    )
+    with psycopg.connect(migration_dsn) as connection:
+        connection.execute("SET search_path TO public, pg_catalog")
+        assert_migration_session(connection)
+        assert connection.execute("SHOW search_path").fetchone() == (
+            "pg_catalog",
+        )
+    with psycopg.connect(admission_dsn) as connection:
+        connection.execute("SET search_path TO public, pg_catalog")
+        assert_admission_session(connection)
+        assert connection.execute("SHOW search_path").fetchone() == (
+            "pg_catalog",
+        )
 
 
 @pytest.mark.parametrize(

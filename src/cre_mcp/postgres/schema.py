@@ -288,7 +288,7 @@ SCHEMA_NAME = "medawarcre"
 # Generated from ``catalog.catalog_fingerprint()`` on the reviewed PostgreSQL
 # 16 launch schema. Any schema migration must update this value deliberately.
 EXPECTED_CATALOG_FINGERPRINT = (
-    "9b37f7be63bb844354a1d7c6d39318abe703aaa33286bce5edd25ffcca9f7b0c"
+    "3119230b660bee9318b6ae86f602a3a3f6baf22a193b6c472036ee031f1fceb5"
 )
 
 __all__ = [

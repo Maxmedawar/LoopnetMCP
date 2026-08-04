@@ -5,6 +5,13 @@ from __future__ import annotations
 import psycopg
 
 ADMISSION_ROLE = "medawarcre_admission"
+SERVICE_ROLES = {
+    "oauth": "medawarcre_oauth",
+    "provider_ingress": "medawarcre_provider_ingress",
+    "provider_reconcile": "medawarcre_provider_reconcile",
+    "worker": "medawarcre_worker",
+    "scheduler": "medawarcre_scheduler",
+}
 
 
 class UnsafeDatabaseRoleError(RuntimeError):
@@ -22,6 +29,10 @@ def assert_exact_group_session(
     allow_effective_ownership: bool = False,
 ) -> None:
     """Reject privileged logins, extra memberships, and unsafe group drift."""
+    # SQL grammar performs this pin before any function lookup. Every caller,
+    # including migration, admission, backup, restore, and dormant services,
+    # therefore evaluates the preflight only against PostgreSQL's catalog.
+    connection.execute("SET search_path TO pg_catalog")
     row = connection.execute(
         """
         SELECT role.rolcanlogin,
@@ -37,7 +48,7 @@ def assert_exact_group_session(
                    FROM pg_catalog.pg_roles inherited_role
                    WHERE inherited_role.rolname NOT IN (session_user, %s)
                      AND (NOT %s OR inherited_role.rolname <> 'pg_database_owner')
-                     AND pg_has_role(session_user, inherited_role.oid, 'member')
+                     AND pg_catalog.pg_has_role(session_user, inherited_role.oid, 'member')
                    ORDER BY inherited_role.rolname
                ),
                ARRAY(
@@ -52,7 +63,7 @@ def assert_exact_group_session(
                ),
                EXISTS (
                    SELECT 1 FROM pg_catalog.pg_database database
-                   WHERE database.datname=current_database()
+                   WHERE database.datname=pg_catalog.current_database()
                      AND database.datdba=role.oid
                ),
                EXISTS (
@@ -95,15 +106,15 @@ def assert_exact_group_session(
                ),
                EXISTS (
                    SELECT 1 FROM pg_catalog.pg_database database
-                   WHERE database.datname=current_database()
-                     AND pg_has_role(session_user, database.datdba, 'member')
+                   WHERE database.datname=pg_catalog.current_database()
+                     AND pg_catalog.pg_has_role(session_user, database.datdba, 'member')
                ),
                EXISTS (
                    SELECT 1 FROM pg_catalog.pg_namespace namespace
                    WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
                      AND namespace.nspname NOT LIKE 'pg_toast%%'
                      AND namespace.nspname NOT LIKE 'pg_temp_%%'
-                     AND pg_has_role(session_user, namespace.nspowner, 'member')
+                     AND pg_catalog.pg_has_role(session_user, namespace.nspowner, 'member')
                ),
                EXISTS (
                    SELECT 1
@@ -114,7 +125,7 @@ def assert_exact_group_session(
                      AND namespace.nspname NOT LIKE 'pg_toast%%'
                      AND namespace.nspname NOT LIKE 'pg_temp_%%'
                      AND relation.relkind IN ('r','p','S','v','m','f')
-                     AND pg_has_role(session_user, relation.relowner, 'member')
+                     AND pg_catalog.pg_has_role(session_user, relation.relowner, 'member')
                ),
                EXISTS (
                    SELECT 1
@@ -124,7 +135,7 @@ def assert_exact_group_session(
                    WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
                      AND namespace.nspname NOT LIKE 'pg_toast%%'
                      AND namespace.nspname NOT LIKE 'pg_temp_%%'
-                     AND pg_has_role(session_user, procedure.proowner, 'member')
+                     AND pg_catalog.pg_has_role(session_user, procedure.proowner, 'member')
                ),
                EXISTS (
                    SELECT 1
@@ -134,16 +145,20 @@ def assert_exact_group_session(
                    WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
                      AND namespace.nspname NOT LIKE 'pg_toast%%'
                      AND namespace.nspname NOT LIKE 'pg_temp_%%'
-                     AND pg_has_role(session_user, type_record.typowner, 'member')
+                     AND pg_catalog.pg_has_role(session_user, type_record.typowner, 'member')
                ),
-               has_database_privilege(session_user, current_database(), 'CREATE'),
+               pg_catalog.has_database_privilege(
+                   session_user, pg_catalog.current_database(), 'CREATE'
+               ),
                EXISTS (
                    SELECT 1
                    FROM pg_catalog.pg_namespace namespace
                    WHERE namespace.nspname NOT IN ('pg_catalog','information_schema')
                      AND namespace.nspname NOT LIKE 'pg_toast%%'
                      AND namespace.nspname NOT LIKE 'pg_temp_%%'
-                     AND has_schema_privilege(session_user, namespace.oid, 'CREATE')
+                     AND pg_catalog.has_schema_privilege(
+                         session_user, namespace.oid, 'CREATE'
+                     )
                ),
                EXISTS (
                    SELECT 1
@@ -151,7 +166,7 @@ def assert_exact_group_session(
                        SELECT acl.grantee
                        FROM pg_catalog.pg_database database
                        CROSS JOIN LATERAL pg_catalog.aclexplode(database.datacl) acl
-                       WHERE database.datname=current_database()
+                       WHERE database.datname=pg_catalog.current_database()
                        UNION ALL
                        SELECT acl.grantee
                        FROM pg_catalog.pg_namespace namespace
@@ -186,7 +201,7 @@ def assert_exact_group_session(
                        SELECT acl.grantee
                        FROM pg_catalog.pg_database database
                        CROSS JOIN LATERAL pg_catalog.aclexplode(database.datacl) acl
-                       WHERE database.datname=current_database()
+                       WHERE database.datname=pg_catalog.current_database()
                        UNION ALL
                        SELECT acl.grantee
                        FROM pg_catalog.pg_namespace namespace
@@ -328,9 +343,131 @@ def assert_admission_session(connection: psycopg.Connection) -> None:
     assert_exact_group_session(connection, ADMISSION_ROLE)
 
 
+def assert_group_has_no_object_authority(
+    connection: psycopg.Connection,
+    group_role: str,
+) -> None:
+    """Reject ownership, default ACLs, or direct grants on a dormant service role."""
+    if group_role not in SERVICE_ROLES.values():
+        raise ValueError("unsupported PostgreSQL service group role")
+    connection.execute("SET search_path TO pg_catalog")
+    row = connection.execute(
+        """
+        SELECT
+            EXISTS (
+                SELECT 1
+                FROM pg_catalog.pg_database database
+                WHERE database.datname=pg_catalog.current_database()
+                  AND database.datdba=role.oid
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM pg_catalog.pg_namespace namespace
+                WHERE namespace.nspowner=role.oid
+                  AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                  AND namespace.nspname NOT LIKE 'pg_toast%%'
+                  AND namespace.nspname NOT IN ('pg_catalog','information_schema')
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM pg_catalog.pg_class relation
+                JOIN pg_catalog.pg_namespace namespace
+                  ON namespace.oid=relation.relnamespace
+                WHERE relation.relowner=role.oid
+                  AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                  AND namespace.nspname NOT LIKE 'pg_toast%%'
+                  AND namespace.nspname NOT IN ('pg_catalog','information_schema')
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM pg_catalog.pg_proc procedure
+                JOIN pg_catalog.pg_namespace namespace
+                  ON namespace.oid=procedure.pronamespace
+                WHERE procedure.proowner=role.oid
+                  AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                  AND namespace.nspname NOT LIKE 'pg_toast%%'
+                  AND namespace.nspname NOT IN ('pg_catalog','information_schema')
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM pg_catalog.pg_type type_record
+                JOIN pg_catalog.pg_namespace namespace
+                  ON namespace.oid=type_record.typnamespace
+                WHERE type_record.typowner=role.oid
+                  AND namespace.nspname NOT LIKE 'pg_temp_%%'
+                  AND namespace.nspname NOT LIKE 'pg_toast%%'
+                  AND namespace.nspname NOT IN ('pg_catalog','information_schema')
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM (
+                    SELECT acl.grantee
+                    FROM pg_catalog.pg_database database
+                    CROSS JOIN LATERAL pg_catalog.aclexplode(database.datacl) acl
+                    WHERE database.datname=pg_catalog.current_database()
+                    UNION ALL
+                    SELECT acl.grantee
+                    FROM pg_catalog.pg_namespace namespace
+                    CROSS JOIN LATERAL pg_catalog.aclexplode(namespace.nspacl) acl
+                    UNION ALL
+                    SELECT acl.grantee
+                    FROM pg_catalog.pg_class relation
+                    CROSS JOIN LATERAL pg_catalog.aclexplode(relation.relacl) acl
+                    UNION ALL
+                    SELECT acl.grantee
+                    FROM pg_catalog.pg_attribute attribute
+                    CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) acl
+                    WHERE attribute.attnum > 0 AND NOT attribute.attisdropped
+                    UNION ALL
+                    SELECT acl.grantee
+                    FROM pg_catalog.pg_proc procedure
+                    CROSS JOIN LATERAL pg_catalog.aclexplode(procedure.proacl) acl
+                    UNION ALL
+                    SELECT acl.grantee
+                    FROM pg_catalog.pg_type type_record
+                    CROSS JOIN LATERAL pg_catalog.aclexplode(type_record.typacl) acl
+                    UNION ALL
+                    SELECT acl.grantee
+                    FROM pg_catalog.pg_default_acl default_acl
+                    CROSS JOIN LATERAL pg_catalog.aclexplode(default_acl.defaclacl) acl
+                ) direct_acl
+                WHERE direct_acl.grantee=role.oid
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM pg_catalog.pg_default_acl default_acl
+                WHERE default_acl.defaclrole=role.oid
+            )
+        FROM pg_catalog.pg_roles role
+        WHERE role.rolname=%s
+        """,
+        (group_role,),
+    ).fetchone()
+    if row is None or bool(row[0]):
+        raise UnsafeDatabaseRoleError(
+            "service group role violates the zero-privilege authority contract"
+        )
+
+
+def assert_service_session(
+    connection: psycopg.Connection,
+    service: str,
+) -> None:
+    """Require the one non-inheriting group role for a hosted service."""
+    try:
+        group_role = SERVICE_ROLES[service]
+    except KeyError as error:
+        raise ValueError("unsupported PostgreSQL service identity") from error
+    assert_exact_group_session(connection, group_role)
+    assert_group_has_no_object_authority(connection, group_role)
+
+
 __all__ = [
     "ADMISSION_ROLE",
+    "SERVICE_ROLES",
     "UnsafeDatabaseRoleError",
     "assert_admission_session",
     "assert_exact_group_session",
+    "assert_group_has_no_object_authority",
+    "assert_service_session",
 ]

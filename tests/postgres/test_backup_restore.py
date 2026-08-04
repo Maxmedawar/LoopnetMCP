@@ -6,16 +6,57 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from psycopg import sql
 
 from cre_mcp.postgres.backup import (
     BackupError,
     BackupVerificationError,
+    _assert_bootstrap_roles,
     _verify_restored_database,
     create_backup,
     load_manifest,
     restore_backup,
 )
+from cre_mcp.postgres.authority import SERVICE_ROLES
 from cre_mcp.postgres.migrations import MigrationRunner, load_migrations
+
+
+def test_restore_preflight_rejects_service_group_role_drift(
+    distinct_postgres_cluster,
+) -> None:
+    service_role = SERVICE_ROLES["oauth"]
+    with psycopg.connect(distinct_postgres_cluster.dsn(), autocommit=True) as connection:
+        _assert_bootstrap_roles(connection)
+        connection.execute(
+            sql.SQL("ALTER ROLE {} CREATEDB").format(sql.Identifier(service_role))
+        )
+        try:
+            with pytest.raises(BackupVerificationError, match="bootstrap"):
+                _assert_bootstrap_roles(connection)
+        finally:
+            connection.execute(
+                sql.SQL("ALTER ROLE {} NOCREATEDB").format(
+                    sql.Identifier(service_role)
+                )
+            )
+
+
+def test_restore_preflight_rejects_service_authority_outside_app_schema(
+    distinct_postgres_cluster,
+) -> None:
+    service_role = SERVICE_ROLES["oauth"]
+    with psycopg.connect(distinct_postgres_cluster.dsn(), autocommit=True) as connection:
+        _assert_bootstrap_roles(connection)
+        connection.execute(
+            sql.SQL("CREATE SCHEMA service_owned AUTHORIZATION {}").format(
+                sql.Identifier(service_role)
+            )
+        )
+        try:
+            with pytest.raises(BackupVerificationError, match="authority"):
+                _assert_bootstrap_roles(connection)
+        finally:
+            connection.execute("DROP SCHEMA service_owned")
 
 
 def _seed_restore_fixture(admin_dsn: str) -> tuple[str, str, str]:

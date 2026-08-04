@@ -24,8 +24,10 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from cre_mcp.postgres.authority import (
     ADMISSION_ROLE,
+    SERVICE_ROLES,
     UnsafeDatabaseRoleError,
     assert_exact_group_session,
+    assert_group_has_no_object_authority,
 )
 from cre_mcp.postgres.catalog import catalog_fingerprint
 from cre_mcp.postgres.config import PostgresSettings
@@ -59,6 +61,14 @@ _POSTGRES_VERSION = re.compile(
     r"(?P<major>[0-9]+)(?:\.[0-9]+)*(?:\s.*)?$"
 )
 _MINIMUM_SERVER_VERSION = 160000
+_SERVICE_ROLE_NAMES = tuple(SERVICE_ROLES.values())
+_RUNTIME_ROLE_NAMES = (
+    "medawarcre_app",
+    "medawarcre_admin",
+    BACKUP_ROLE,
+    ADMISSION_ROLE,
+    *_SERVICE_ROLE_NAMES,
+)
 
 
 class BackupError(RuntimeError):
@@ -596,6 +606,7 @@ def _assert_clean_target(connection: psycopg.Connection) -> None:
 
 
 def _assert_bootstrap_roles(connection: psycopg.Connection) -> None:
+    connection.execute("SET search_path TO pg_catalog")
     rows = {
         str(row[0]): tuple(row[1:])
         for row in connection.execute(
@@ -609,6 +620,7 @@ def _assert_bootstrap_roles(connection: psycopg.Connection) -> None:
                     "medawarcre_admin",
                     BACKUP_ROLE,
                     ADMISSION_ROLE,
+                    *_SERVICE_ROLE_NAMES,
                 ],
             ),
         )
@@ -619,6 +631,10 @@ def _assert_bootstrap_roles(connection: psycopg.Connection) -> None:
         "medawarcre_admin": (False, True, False, False, False, False, False),
         BACKUP_ROLE: (False, True, False, True, False, False, False),
         ADMISSION_ROLE: (False, False, False, False, False, False, False),
+        **{
+            role: (False, False, False, False, False, False, False)
+            for role in _SERVICE_ROLE_NAMES
+        },
     }
     if rows != expected:
         raise BackupVerificationError("target role bootstrap contract is invalid")
@@ -635,6 +651,13 @@ def _assert_bootstrap_roles(connection: psycopg.Connection) -> None:
         raise BackupVerificationError(
             "target group roles have unauthorized parent memberships"
         )
+    try:
+        for role in _SERVICE_ROLE_NAMES:
+            assert_group_has_no_object_authority(connection, role)
+    except UnsafeDatabaseRoleError as error:
+        raise BackupVerificationError(
+            "target service role bootstrap authority is invalid"
+        ) from error
 
 
 def _apply_restore_privileges(dsn: str) -> None:
@@ -700,6 +723,7 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
                     "medawarcre_admin",
                     BACKUP_ROLE,
                     ADMISSION_ROLE,
+                    *_SERVICE_ROLE_NAMES,
                 ],
                 SCHEMA_NAME,
             ),
@@ -766,6 +790,10 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
             ),
             BACKUP_ROLE: (True, False, False, False),
             ADMISSION_ROLE: (False, False, False, False),
+            **{
+                role: (False, False, False, False)
+                for role in _SERVICE_ROLE_NAMES
+            },
         }
         for role, expected in expected_by_role.items():
             actual = tuple(
@@ -836,18 +864,14 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
                     raise BackupVerificationError(
                         "restored column privileges do not match the exact role contract"
                     )
-    for role in (
-        "medawarcre_app",
-        "medawarcre_admin",
-        BACKUP_ROLE,
-        ADMISSION_ROLE,
-    ):
+    for role in _RUNTIME_ROLE_NAMES:
         usage, create = connection.execute(
             "SELECT has_schema_privilege(%s,%s,'USAGE'),"
             "has_schema_privilege(%s,%s,'CREATE')",
             (role, SCHEMA_NAME, role, SCHEMA_NAME),
         ).fetchone()
-        if not usage or create:
+        expected_usage = role not in _SERVICE_ROLE_NAMES
+        if bool(usage) != expected_usage or create:
             raise BackupVerificationError(
                 "restored schema privileges do not match the exact role contract"
             )
@@ -904,12 +928,7 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
         )
     for (function_name, argument_types), allowed_roles in function_contract.items():
         signature = f"{SCHEMA_NAME}.{function_name}({argument_types})"
-        for role in (
-            "medawarcre_app",
-            "medawarcre_admin",
-            BACKUP_ROLE,
-            ADMISSION_ROLE,
-        ):
+        for role in _RUNTIME_ROLE_NAMES:
             allowed = bool(
                 connection.execute(
                     "SELECT has_function_privilege(%s,%s,'EXECUTE')",
@@ -1045,7 +1064,9 @@ def _install_smoke_binding(dsn: str, nonce: str) -> None:
         connection.execute(
             "REVOKE ALL ON medawarcre.restore_smoke_binding FROM PUBLIC, "
             "medawarcre_app, medawarcre_admin, medawarcre_backup, "
-            "medawarcre_admission"
+            "medawarcre_admission, medawarcre_oauth, "
+            "medawarcre_provider_ingress, medawarcre_provider_reconcile, "
+            "medawarcre_worker, medawarcre_scheduler"
         )
         connection.execute(
             "GRANT SELECT ON medawarcre.restore_smoke_binding "

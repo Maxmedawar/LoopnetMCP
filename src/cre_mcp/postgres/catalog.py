@@ -16,6 +16,11 @@ _CONTRACT_ROLES = (
     "medawarcre_app",
     "medawarcre_backup",
     "medawarcre_migration",
+    "medawarcre_oauth",
+    "medawarcre_provider_ingress",
+    "medawarcre_provider_reconcile",
+    "medawarcre_scheduler",
+    "medawarcre_worker",
 )
 
 
