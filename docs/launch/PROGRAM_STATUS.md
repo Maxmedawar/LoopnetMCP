@@ -29,7 +29,7 @@ and an independent audit are recorded here.
 | Customer portal commits | `8a44d4c`, `13abbf5`, local-only, superseded for product routing |
 | PostgreSQL certified phase | Exact replacement candidate `f68a9a489602ef0b22614e899e5800820c0579e12002afce83c7aaa613f0e9e6` passed both fresh read-only reviews unchanged and was committed as `5089748aaa6f9f726db5801f866a130974d1eb89` |
 | Source-rights certified phase | Exact replacement candidate `4c33265f12dec0927fb34a6c344158174ef5bb89f8bda2a2c3363fd873986f04` passed both fresh read-only reviews unchanged and was committed as `3185ccb595cf305f9c69f15ae2730f2d6fa75ee7` |
-| Cloud integration phase | `integration/cloud-platform-launch` at `46e79a8`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; OAuth/JV repair, fail-closed hosted persistence, and exact dormant service-role boundaries committed; 4,548 repository tests passed |
+| Cloud integration phase | `integration/cloud-platform-launch` at `830c914`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; OAuth/JV repair, fail-closed hosted persistence, exact service roles, migration `0002`, and the one-snapshot OAuth authority repository committed; 4,568 repository tests passed |
 | Customer MCP surface | Commit `802b16cec823f74fc41cab10cb4de9602d56fea7`; 274 internal capabilities retained, 253 exact actions grouped, 21 MCP capabilities internal-only, all 45 historical IDs reconciled; visible counts Local 8, National 10, Full 20, JV 14 |
 | SQLite dbops salvage | 4,513 uncommitted lines in the protected dbops worktree; not production DR |
 | Protected backup | SHA-256 `8361a9db47bb4ea5276f009309cdc8b0401c0272dc4ae6b8711d9f4b0e489095`, read-only integrity `ok` |
@@ -53,6 +53,7 @@ and an independent audit are recorded here.
 | 🟢 | Production PostgreSQL and recovery | Candidate `2af2a907...` was rejected and repaired. Exact replacement `f68a9a4...` separates direct from inherited ownership; 69 PostgreSQL and 1,839 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `5089748` |
 | 🟢 | Launch integration branch | Certified OAuth `88e3082`, PostgreSQL `5089748`, and source rights `3185ccb` integrated as `0b5a87b`; shared enforcement-order regressions repaired; 4,444 repository tests passed |
 | 🟢 | Consolidated customer MCP surface | Hosted HTTP uses 20 coherent grouped facades with profile listings Local 8, National 10, Full 20, JV 14; all grouped actions resolve to exact server-owned capability IDs; internal services and 21 internal MCP capabilities remain unexposed; commit `802b16c`; 4,459 repository tests passed |
+| 🟢 | Hosted OAuth PostgreSQL authority checkpoint | Exact 1,024-file candidate `2bf5a43d...`, migration checksum `3058382c...`, catalog fingerprint `40f025fc...`, 102 PostgreSQL tests, 4,568 repository tests, local image build and truth-import smoke, final wheel `324f777c...`, and two hash-stable independent approvals; committed as `830c914` |
 | 🟡 | Clerk identity and connection flow | Implementation and local gates complete: official Clerk adapter, connection-only React screen, OAuth discovery/DCR/PKCE/revocation, live authority rechecks, and a real hosted MCP call. Integrated audit remains scheduled after Stripe and Skool per the founder-approved sequence |
 | 🟡 | Internal Operations Console | Implementation and local gates complete: separate React control ledger, pinned Reicon provenance, opaque Clerk operator sessions, live staff and JV separation, exact Origin and Host, CSRF, reasoned mutations, provider quarantine, source rights, health, and append-only audit. Integrated security and real-browser staging gates remain scheduled |
 | 🔴 | Search and deal persistence | Tenant records, evidence, score versions, object-ID isolation, privacy behavior |
@@ -63,7 +64,7 @@ and an independent audit are recorded here.
 | 🔴 | Privacy and retention | Notice, export, correction, deletion, retention, processor propagation, audit |
 | 🟢 | Source-rights controls | First replacement `e58c721...` was rejected and repaired. Exact replacement `4c33265...` fails closed on contradictory local/hosted policy and cleanly imports; 164 focused and 1,950 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `3185ccb` |
 | 🔴 | Private staging | Reproducible package, TLS, migrations, workers, monitoring, backup and restore exercise, rollback |
-| 🔴 | Integrated security audit | OAuth consent, public-client, route exposure, request-bound, browser-session, logout, and identity-wide JV findings repaired in `d82e600`; all public HTTP entrypoints fail closed through `5bcd5c0`; exact dormant OAuth, provider-ingress, provider-reconciliation, worker, and scheduler roles are committed in `46e79a8`; PostgreSQL domain repositories, durable atomic admission/audit, jobs/privacy, and deployment correctness remain open blockers |
+| 🔴 | Integrated security audit | OAuth consent, public-client, route exposure, request-bound, browser-session, logout, and identity-wide JV findings repaired in `d82e600`; all public HTTP entrypoints fail closed through `5bcd5c0`; exact service roles, migration `0002`, and the one-snapshot OAuth authority repository are committed through `830c914`; PostgreSQL domain repositories, durable atomic admission/audit, jobs/privacy, and deployment correctness remain open blockers |
 | 🔴 | Production-readiness packet | Exact hashes, artifacts, evidence, limitations, credentials, rollback, first-user plan |
 | 🔴 | Public production cutover | Explicit founder approval after the readiness packet only |
 
@@ -811,17 +812,57 @@ MCP HTTP bypass, and default stdio compatibility, then approved the unchanged
 boundary as safe to commit. It does not certify hosted functionality.
 
 Commit `46e79a8` establishes separate dormant OAuth, provider-ingress,
-provider-reconciliation, worker, and scheduler database group roles. The roles
-have no object authority yet and cannot be used as generic runtime identities.
-Their exact login and catalog contracts are verified at startup and restore.
+provider-reconciliation, worker, and scheduler database group roles. Migration
+`0002` and commit `830c914` activate only the narrow OAuth function boundary.
+The other service roles remain dormant. Exact login, object-authority, default
+ACL, ownership, catalog, backup, and restore contracts fail closed.
 
-The next unfinished checkpoint is migration `0002` plus the narrow OAuth
-function pool and one-statement live-authority repository. Request-scoped domain
-repositories, atomic approval, quota, and durable audit, then jobs, privacy,
-container, migration, recovery, and private-staging proof remain release
-blockers. The integrated
-audit row cannot turn green until those paths are repaired and receive a fresh
-full-system review.
+## One-snapshot PostgreSQL OAuth authority checkpoint 2026-08-04
+
+Commit `830c91463ea5335f687b088f7bbb9f577e9aec03` adds migration
+`0002_hosted_lifecycle_and_oauth_authority.sql`, a dedicated OAuth connection
+pool, and one fixed statement that derives token, client, user, workspace,
+membership, account, grant, plan, quota, territory, staff, and identity-wide JV
+authority from one PostgreSQL snapshot. Raw bearer tokens are hashed before the
+database call. The OAuth role has only schema usage and exact function execute
+authority. Pool setup, checkout, reset, backup, restore, and catalog checks
+reject authority drift.
+
+The 1,024-file reviewed candidate was
+`2bf5a43d0367cc087a85ae99f754e6c7dfd4d20a432dc9035f70b04a24b2fac5`.
+Migration `0002` is
+`3058382c0943220e19bfa6b7754cda09fe823e478dc86397f8283047cc309b8f`;
+the PostgreSQL 16 catalog fingerprint is
+`40f025fcf85251cf340428438c5e5ebf3b20462ea8ee59c5ac882f9a94e47eef`.
+The final wheel is
+`324f777c57694962146c18adfe919a1f8354d4dda8eaafe0b2af549447c3974d`.
+
+Evidence:
+
+- PostgreSQL 16.14: 102 passed. Complete repository: 4,568 passed in 170.04
+  seconds. The only warning is the known third-party FastMCP/Authlib
+  deprecation.
+- Compile, dependency, server import, packaged migration, secret review, and
+  diff checks passed.
+- Local Docker build `medawarcre-oauth-review:local` succeeded as image
+  `sha256:84872a140166765718c53ba32251996b54b609605d3ee28658f82ddd36b04e00`.
+  It runs as `cremcp`; server, OpenPyXL 3.1.5, and PDFPlumber 0.11.10 imports
+  passed inside the image.
+- Two fresh read-only reviewers independently reproduced the candidate hash,
+  migration, catalog, and wheel evidence and returned hash-stable approval.
+- `printenv PYTHON` was still empty after the Codex restart. The controller did
+  not repeat the failed Security-helper loop and used the required fresh
+  read-only reviewer fallback.
+- No interface file changed. The complete anti-slop recheck found no applicable
+  UI defect.
+- No deployment, DNS, billing, paid resource, provider mutation, customer-data
+  access, or production action occurred.
+
+This is not hosted-functionality approval. The exact unfinished checkpoint is
+request-scoped domain repositories plus atomic approval, quota, and durable
+decision audit. Jobs, privacy, provider service paths, container rollout,
+migration operations, recovery, private staging, the final integrated audit,
+readiness packet, and founder-approved cutover remain red.
 
 ## Phase evidence template
 
