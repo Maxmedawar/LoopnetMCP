@@ -29,7 +29,7 @@ and an independent audit are recorded here.
 | Customer portal commits | `8a44d4c`, `13abbf5`, local-only, superseded for product routing |
 | PostgreSQL certified phase | Exact replacement candidate `f68a9a489602ef0b22614e899e5800820c0579e12002afce83c7aaa613f0e9e6` passed both fresh read-only reviews unchanged and was committed as `5089748aaa6f9f726db5801f866a130974d1eb89` |
 | Source-rights certified phase | Exact replacement candidate `4c33265f12dec0927fb34a6c344158174ef5bb89f8bda2a2c3363fd873986f04` passed both fresh read-only reviews unchanged and was committed as `3185ccb595cf305f9c69f15ae2730f2d6fa75ee7` |
-| Cloud integration phase | `integration/cloud-platform-launch` at `802b16cec823f74fc41cab10cb4de9602d56fea7`; certified OAuth, PostgreSQL, and source-rights histories integrated; customer MCP surface consolidated; 4,459 repository tests passed |
+| Cloud integration phase | `integration/cloud-platform-launch` at `d82e600286682c70639c3130e4f96661d7085a3c`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; first audit repair committed; 4,526 repository tests passed |
 | Customer MCP surface | Commit `802b16cec823f74fc41cab10cb4de9602d56fea7`; 274 internal capabilities retained, 253 exact actions grouped, 21 MCP capabilities internal-only, all 45 historical IDs reconciled; visible counts Local 8, National 10, Full 20, JV 14 |
 | SQLite dbops salvage | 4,513 uncommitted lines in the protected dbops worktree; not production DR |
 | Protected backup | SHA-256 `8361a9db47bb4ea5276f009309cdc8b0401c0272dc4ae6b8711d9f4b0e489095`, read-only integrity `ok` |
@@ -63,7 +63,7 @@ and an independent audit are recorded here.
 | 🔴 | Privacy and retention | Notice, export, correction, deletion, retention, processor propagation, audit |
 | 🟢 | Source-rights controls | First replacement `e58c721...` was rejected and repaired. Exact replacement `4c33265...` fails closed on contradictory local/hosted policy and cleanly imports; 164 focused and 1,950 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `3185ccb` |
 | 🔴 | Private staging | Reproducible package, TLS, migrations, workers, monitoring, backup and restore exercise, rollback |
-| 🔴 | Integrated security audit | Fresh full-system attack pass, repairs, second audit, no critical or high open finding |
+| 🔴 | Integrated security audit | OAuth consent, public-client, route exposure, request-bound, browser-session, logout, and identity-wide JV findings repaired and independently cleared in `d82e600`; hosted SQLite/JSON/JSONL authority, PostgreSQL runtime rewiring, durable atomic admission/audit, jobs/privacy, and deployment correctness remain open blockers |
 | 🔴 | Production-readiness packet | Exact hashes, artifacts, evidence, limitations, credentials, rollback, first-user plan |
 | 🔴 | Public production cutover | Explicit founder approval after the readiness packet only |
 
@@ -653,6 +653,8 @@ unless trusted-host validation is proven.
 | 2026-08-03 | Source-rights certification commit | Stage the unchanged twice-approved candidate, check the staged diff, and commit one phase boundary | `3185ccb595cf305f9c69f15ae2730f2d6fa75ee7` (`feat: enforce certified source-rights controls`); worktree clean |
 | 2026-08-03 | Certified cloud-platform integration | New `integration/cloud-platform-launch` worktree based on certified OAuth; cherry-pick certified PostgreSQL and source-rights commits; reconcile enforcement order at the shared middleware and internal snapshot projection seams; run the complete repository suite | `0b5a87b05901018ccadde6cf45eccdbd4c8e3e0a`; 4,444 passed in 144.38 seconds; one categorized third-party Authlib deprecation; worktree clean; no old 45-tool server implementation merged |
 | 2026-08-03 | Consolidated customer MCP surface | Lock and export the full 45-versus-274 reconciliation; construct a separate hosted facade; preserve exact entitlement, quota, territory, source-rights, approval, result, and audit enforcement; verify real HTTP OAuth and full repository | `802b16cec823f74fc41cab10cb4de9602d56fea7`; 4,459 passed in 164.56 seconds; one categorized third-party Authlib deprecation; 253 grouped actions, 21 internal-only MCP capabilities, profile counts 8/10/20/14; no old server implementation imported and no deployment performed |
+| 2026-08-04 | Integrated audit round one RED | Fresh independent authorization, database/isolation, provider/deployment, source-rights, and lifecycle review of integrated HEAD `4167d50` | Critical consentless OAuth code exfiltration; high uncertified hosted deal exposure, hosted SQLite authority, obsolete deployment path, approval/audit/jobs/privacy gaps; medium historical-JV, logout CORS, request exhaustion, and cookie-site findings; no public action performed |
+| 2026-08-04 | OAuth/JV audit repair and second review | Tests-first exact-client DCR, explicit consent, exact Origin and Host, CSRF, one-time pending requests, public deal-route removal, streamed body caps, bounded/rate-limited public state, one-per-user browser sessions, identity-wide live JV separation, and retryable consent | Independent reviewer rejected two intermediate candidates, then approved the repaired candidate after adversarial concurrency and cross-workspace checks; 140 focused tests, 4,526 repository tests, 5 connection tests, 10 Operations tests, both builds and audits, compile, pip, secret-pattern, and diff gates passed; committed as `d82e600286682c70639c3130e4f96661d7085a3c` |
 | 2026-08-01 | Protected backup | SQLite URI read-only integrity and FK checks | `integrity_check=ok`; zero FK violations; file unchanged |
 | 2026-08-01 | Hosted persistence archaeology | Enumerate every direct SQLite connector plus JSON, JSONL, and blob authority from HTTP registration to storage | Generic compatibility shim rejected; explicit cloud persistence bundle and domain-port migration required |
 | 2026-08-01 | Portal salvage archaeology | Inspect backend `8a44d4c` and frontend `13abbf5` with file-level provenance and route boundaries | No wholesale merge; React rebuild required; exact safe primitives and forbidden customer surfaces mapped |
@@ -751,6 +753,53 @@ Evidence:
 - No public deployment, DNS, billing, or real customer-data action ran.
 - The exact phase commit is recorded by the following program checkpoint because
   a Git commit cannot contain its own content-derived hash.
+
+## Integrated audit repair checkpoint 2026-08-04
+
+The first full-system audit is complete but the integrated audit phase remains
+red. The OAuth, connection, hosted-route, logout, request-exhaustion, and JV
+separation findings are repaired and independently cleared in `d82e600`. Public
+registration now maps only an exact server-owned client shape, advertises only
+`mcp:tools`, and cannot expose uncertified deal routes. A passive GET cannot
+issue a code. The connection screen presents client, destination, workspace,
+and access before an exact-origin, exact-host, CSRF-protected POST consumes a
+single pending request.
+
+Public request bodies are streamed under pre-append byte caps. Registration is
+deduplicated under an immediate transaction. Registration, authorization,
+token, revocation, and Clerk exchange have source-scoped process limits, while
+private-edge limits remain mandatory. Pending and browser-session stores are
+transactionally bounded; browser sessions are one per user. Cross-host browser
+cookies deliberately use `SameSite=None; Secure` under the existing Origin,
+Host, and CSRF checks. A failed authorization-code write restores the explicit
+consent request for retry. Any identity holding a live JV grant in any workspace
+is denied internal-admin authority; revoked, future, and expired grants do not
+create a permanent block.
+
+Evidence:
+
+- Repair commit: `d82e600286682c70639c3130e4f96661d7085a3c` on
+  `integration/cloud-platform-launch`.
+- Final focused security gate: 140 passed with one categorized third-party
+  Authlib deprecation.
+- Final repository gate: 4,526 passed in 204.82 seconds with the same warning.
+- Connection application: 5 Vitest cases, production build, and zero npm audit
+  findings. Operations application: 10 Vitest cases, production build, and
+  zero npm audit findings.
+- Source and tests compile; `pip check`, secret-pattern review,
+  `git diff --check`, and staged diff checks passed.
+- The required embedded browser runtime exposed no `eb_*` tools. No external
+  browser substitute was used. DOM interactions were clicked in Vitest; real
+  pointer, keyboard, zoom, and viewport proof remains a private-staging gate.
+- No deployment, DNS, billing, provider mutation, customer-data access, or
+  production action occurred.
+
+The next active phase is hosted persistence correctness. The HTTP runtime still
+constructs SQLite plus file-backed authority and does not require the certified
+PostgreSQL bundle before binding. Atomic approval, quota, and durable audit,
+then jobs, privacy, container, migration, recovery, and private-staging proof
+remain release blockers. The integrated audit row cannot turn green until those
+paths are repaired and receive a fresh full-system review.
 
 ## Phase evidence template
 
