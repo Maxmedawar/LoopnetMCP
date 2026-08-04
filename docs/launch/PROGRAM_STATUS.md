@@ -29,7 +29,7 @@ and an independent audit are recorded here.
 | Customer portal commits | `8a44d4c`, `13abbf5`, local-only, superseded for product routing |
 | PostgreSQL certified phase | Exact replacement candidate `f68a9a489602ef0b22614e899e5800820c0579e12002afce83c7aaa613f0e9e6` passed both fresh read-only reviews unchanged and was committed as `5089748aaa6f9f726db5801f866a130974d1eb89` |
 | Source-rights certified phase | Exact replacement candidate `4c33265f12dec0927fb34a6c344158174ef5bb89f8bda2a2c3363fd873986f04` passed both fresh read-only reviews unchanged and was committed as `3185ccb595cf305f9c69f15ae2730f2d6fa75ee7` |
-| Cloud integration phase | `integration/cloud-platform-launch` at `d82e600286682c70639c3130e4f96661d7085a3c`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; first audit repair committed; 4,526 repository tests passed |
+| Cloud integration phase | `integration/cloud-platform-launch` at `5bcd5c0`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; OAuth/JV audit repair and fail-closed hosted persistence boundary committed; 4,535 repository tests passed |
 | Customer MCP surface | Commit `802b16cec823f74fc41cab10cb4de9602d56fea7`; 274 internal capabilities retained, 253 exact actions grouped, 21 MCP capabilities internal-only, all 45 historical IDs reconciled; visible counts Local 8, National 10, Full 20, JV 14 |
 | SQLite dbops salvage | 4,513 uncommitted lines in the protected dbops worktree; not production DR |
 | Protected backup | SHA-256 `8361a9db47bb4ea5276f009309cdc8b0401c0272dc4ae6b8711d9f4b0e489095`, read-only integrity `ok` |
@@ -63,7 +63,7 @@ and an independent audit are recorded here.
 | 🔴 | Privacy and retention | Notice, export, correction, deletion, retention, processor propagation, audit |
 | 🟢 | Source-rights controls | First replacement `e58c721...` was rejected and repaired. Exact replacement `4c33265...` fails closed on contradictory local/hosted policy and cleanly imports; 164 focused and 1,950 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `3185ccb` |
 | 🔴 | Private staging | Reproducible package, TLS, migrations, workers, monitoring, backup and restore exercise, rollback |
-| 🔴 | Integrated security audit | OAuth consent, public-client, route exposure, request-bound, browser-session, logout, and identity-wide JV findings repaired and independently cleared in `d82e600`; hosted SQLite/JSON/JSONL authority, PostgreSQL runtime rewiring, durable atomic admission/audit, jobs/privacy, and deployment correctness remain open blockers |
+| 🔴 | Integrated security audit | OAuth consent, public-client, route exposure, request-bound, browser-session, logout, and identity-wide JV findings repaired in `d82e600`; all public HTTP entrypoints now fail closed through `5bcd5c0` instead of constructing legacy persistence; PostgreSQL domain repositories, durable atomic admission/audit, jobs/privacy, and deployment correctness remain open blockers |
 | 🔴 | Production-readiness packet | Exact hashes, artifacts, evidence, limitations, credentials, rollback, first-user plan |
 | 🔴 | Public production cutover | Explicit founder approval after the readiness packet only |
 
@@ -794,12 +794,26 @@ Evidence:
 - No deployment, DNS, billing, provider mutation, customer-data access, or
   production action occurred.
 
-The next active phase is hosted persistence correctness. The HTTP runtime still
-constructs SQLite plus file-backed authority and does not require the certified
-PostgreSQL bundle before binding. Atomic approval, quota, and durable audit,
-then jobs, privacy, container, migration, recovery, and private-staging proof
-remain release blockers. The integrated audit row cannot turn green until those
-paths are repaired and receive a fresh full-system review.
+The next active phase is hosted persistence correctness. Commit `5bcd5c0`
+establishes the first fail-closed boundary: `create_http_app`, `run_server`, the
+standalone Starlette factory, and the exported global MCP catalog cannot bind a
+public HTTP surface through SQLite, JSON, or JSONL. They require the PostgreSQL
+builder, verify pool and schema readiness, and currently reject startup after
+that check because the hosted domain repositories are not yet certified. Legacy
+persistence can enter HTTP tests only through a test-owned patched builder.
+
+That boundary passed 4,535 repository tests in 194.11 seconds with the one
+categorized third-party Authlib deprecation, plus compile, dependency, secret,
+and diff checks. A fresh read-only reviewer found and drove closure of bundle
+lifecycle leaks, uncertified standalone deal-route mounting, the raw internal
+MCP HTTP bypass, and default stdio compatibility, then approved the unchanged
+boundary as safe to commit. It does not certify hosted functionality.
+
+PostgreSQL OAuth/provider bootstrap, request-scoped repositories, atomic
+approval, quota, and durable audit, then jobs, privacy, container, migration,
+recovery, and private-staging proof remain release blockers. The integrated
+audit row cannot turn green until those paths are repaired and receive a fresh
+full-system review.
 
 ## Phase evidence template
 
