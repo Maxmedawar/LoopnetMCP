@@ -95,6 +95,32 @@ async def test_browser_session_is_opaque_hashed_expiring_and_csrf_protected(tmp_
     )
 
 
+async def test_browser_sessions_are_one_per_user_and_globally_bounded(tmp_path):
+    config = CreConfig(_env_file=None, cache_db_path=tmp_path / "platform.db")
+    repository = PlatformRepository(config)
+    first_user = await repository.create_user("first@example.test", "First")
+    second_user = await repository.create_user("second@example.test", "Second")
+    assert first_user is not None and second_user is not None
+    sessions = BrowserSessionStore(config.cache_db_path, global_limit=1)
+
+    first = sessions.issue(first_user.id)
+    replacement = sessions.issue(first_user.id)
+
+    assert sessions.validate(first.token) is None
+    assert sessions.validate(replacement.token) is not None
+    with sqlite3.connect(config.cache_db_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM platform_browser_sessions"
+        ).fetchone()[0] == 1
+
+    try:
+        sessions.issue(second_user.id)
+    except ValueError as exc:
+        assert "capacity" in str(exc)
+    else:  # pragma: no cover - assertion branch
+        raise AssertionError("browser session capacity must fail closed")
+
+
 async def test_fake_verifier_is_explicit_and_rejects_unknown_bearer():
     identity = VerifiedHumanIdentity(
         "clerk", "subject", "buyer@example.test", "Buyer"

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from cre_mcp.access.profiles import Profile
+from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.platform.repository import PlatformRepository
 
 from .admin_helpers import (
@@ -159,6 +162,89 @@ async def test_unknown_internal_role_fails_closed_for_reads_and_mutations(tmp_pa
 
     assert read.status_code == 403
     assert mutation.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("grant_state", "starts_offset", "ends_offset", "expected_status"),
+    [
+        ("active", -1, 1, 403),
+        ("revoked", -1, 1, 200),
+        ("active", 1, 2, 200),
+        ("active", -2, -1, 200),
+    ],
+)
+async def test_only_current_jv_grants_block_internal_admin(
+    tmp_path,
+    grant_state,
+    starts_offset,
+    ends_offset,
+    expected_status,
+):
+    config = config_for(tmp_path)
+    identity = await provision_identity(
+        config,
+        f"JV lifecycle {grant_state} {starts_offset} {ends_offset}",
+        internal_role="platform_admin",
+        profile=Profile.JV_PARTNER,
+    )
+    target = await provision_target(config, "JV lifecycle target")
+    now = datetime.now(UTC)
+    with sqlite3.connect(config.cache_db_path) as connection:
+        connection.execute(
+            """
+            UPDATE platform_access_grants
+            SET status=?,starts_at=?,ends_at=?
+            WHERE workspace_id=? AND profile='jv_partner'
+            """,
+            (
+                grant_state,
+                (now + timedelta(days=starts_offset)).isoformat(),
+                (now + timedelta(days=ends_offset)).isoformat(),
+                identity.workspace_row_id,
+            ),
+        )
+
+    async with api_client(config) as client:
+        response = await client.get(
+            f"/v1/admin/workspaces/{target.workspace_id}",
+            headers=identity.headers,
+        )
+
+    assert response.status_code == expected_status
+
+
+async def test_live_jv_grant_in_another_workspace_blocks_internal_admin(tmp_path):
+    config = config_for(tmp_path)
+    identity = await provision_identity(
+        config,
+        "Cross workspace administrator",
+        internal_role="platform_admin",
+    )
+    jv_workspace = await provision_target(config, "Separate JV workspace")
+    target = await provision_target(config, "Admin target")
+    repository = PlatformRepository(config.cache_db_path)
+    membership = await repository.add_membership(
+        jv_workspace.workspace_id,
+        identity.user_id,
+        "member",
+    )
+    assert membership is not None
+    EntitlementStore(config.cache_db_path).grant_access(
+        workspace=jv_workspace.workspace_id,
+        source="jv",
+        external_ref="cross-workspace-jv",
+        profile=Profile.JV_PARTNER,
+        plan_key="partner",
+        scope="workspace",
+    )
+
+    async with api_client(config) as client:
+        response = await client.get(
+            f"/v1/admin/workspaces/{target.workspace_id}",
+            headers=identity.headers,
+        )
+
+    assert response.status_code == 403
 
 
 async def test_membership_role_change_is_live_on_same_oauth_session(tmp_path):

@@ -291,11 +291,15 @@ class BrowserSessionStore(_SqliteStore):
         db_path: str | Path,
         *,
         ttl: timedelta = timedelta(minutes=30),
+        global_limit: int = 10000,
     ) -> None:
         if ttl <= timedelta(0):
             raise ValueError("browser session TTL must be positive")
+        if global_limit < 1:
+            raise ValueError("browser session global limit must be positive")
         super().__init__(db_path)
         self.ttl = ttl
+        self.global_limit = global_limit
         with self._connect() as connection:
             _create_connection_tables(connection)
 
@@ -306,6 +310,21 @@ class BrowserSessionStore(_SqliteStore):
         expires = now + self.ttl
         with self._connect() as connection:
             _create_connection_tables(connection)
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                DELETE FROM platform_browser_sessions
+                WHERE expires_at<=? OR revoked_at IS NOT NULL OR user_id=?
+                """,
+                (_iso(now), user_id),
+            )
+            count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM platform_browser_sessions"
+                ).fetchone()[0]
+            )
+            if count >= self.global_limit:
+                raise ValueError("browser session capacity reached")
             connection.execute(
                 """
                 INSERT INTO platform_browser_sessions
@@ -372,8 +391,18 @@ class PendingAuthorization:
 
 
 class PendingAuthorizationStore(_SqliteStore):
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(
+        self,
+        db_path: str | Path,
+        *,
+        per_client_limit: int = 32,
+        global_limit: int = 1024,
+    ) -> None:
+        if per_client_limit < 1 or global_limit < 1:
+            raise ValueError("pending authorization limits must be positive")
         super().__init__(db_path)
+        self.per_client_limit = per_client_limit
+        self.global_limit = global_limit
         with self._connect() as connection:
             _create_connection_tables(connection)
 
@@ -395,6 +424,36 @@ class PendingAuthorizationStore(_SqliteStore):
         now = _now()
         with self._connect() as connection:
             _create_connection_tables(connection)
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                DELETE FROM platform_oauth_authorization_requests
+                WHERE expires_at<=?
+                """,
+                (_iso(now),),
+            )
+            global_count = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*) FROM platform_oauth_authorization_requests
+                    WHERE consumed_at IS NULL
+                    """
+                ).fetchone()[0]
+            )
+            client_count = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*) FROM platform_oauth_authorization_requests
+                    WHERE client_id=? AND consumed_at IS NULL
+                    """,
+                    (authorization.client_id,),
+                ).fetchone()[0]
+            )
+            if (
+                global_count >= self.global_limit
+                or client_count >= self.per_client_limit
+            ):
+                raise ValueError("pending authorization capacity reached")
             connection.execute(
                 """
                 INSERT INTO platform_oauth_authorization_requests
@@ -420,8 +479,16 @@ class PendingAuthorizationStore(_SqliteStore):
         return handle
 
     def get(self, handle: str) -> PendingAuthorization | None:
+        now = _now()
         with self._connect() as connection:
             _create_connection_tables(connection)
+            connection.execute(
+                """
+                DELETE FROM platform_oauth_authorization_requests
+                WHERE expires_at<=?
+                """,
+                (_iso(now),),
+            )
             row = connection.execute(
                 """
                 SELECT * FROM platform_oauth_authorization_requests
@@ -429,7 +496,7 @@ class PendingAuthorizationStore(_SqliteStore):
                 """,
                 (_digest(handle),),
             ).fetchone()
-        if row is None or _parse(str(row["expires_at"])) <= _now():
+        if row is None:
             return None
         return self._from_row(row)
 
@@ -438,6 +505,13 @@ class PendingAuthorizationStore(_SqliteStore):
         with self._connect() as connection:
             _create_connection_tables(connection)
             connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                DELETE FROM platform_oauth_authorization_requests
+                WHERE expires_at<=?
+                """,
+                (_iso(now),),
+            )
             row = connection.execute(
                 """
                 SELECT * FROM platform_oauth_authorization_requests
@@ -457,6 +531,21 @@ class PendingAuthorizationStore(_SqliteStore):
             if updated.rowcount != 1:
                 return None
             return self._from_row(row)
+
+    def restore(self, handle: str) -> bool:
+        """Restore a consumed request after authorization-code creation fails."""
+        now = _now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            updated = connection.execute(
+                """
+                UPDATE platform_oauth_authorization_requests
+                SET consumed_at=NULL
+                WHERE request_hash=? AND consumed_at IS NOT NULL AND expires_at>?
+                """,
+                (_digest(handle), _iso(now)),
+            )
+        return updated.rowcount == 1
 
 
 __all__ = [

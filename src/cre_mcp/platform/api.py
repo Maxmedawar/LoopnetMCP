@@ -1,11 +1,14 @@
 """Authenticated customer-facing HTTP routes for the cloud platform."""
 from __future__ import annotations
 import asyncio
+from collections import deque
 import hmac
+import json
 import sqlite3
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime, timedelta
 from enum import Enum
+from time import monotonic
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from pydantic import BaseModel
@@ -98,13 +101,43 @@ def _oauth_error(status: int, code: str, description: str) -> JSONResponse:
     )
 
 
-OAUTH_PUBLIC_SCOPES = frozenset({"mcp:tools", "deals:read", "deals:write"})
+OAUTH_PUBLIC_SCOPES = frozenset({"mcp:tools"})
+MAX_JSON_BODY_BYTES = 64 * 1024
 AUTHORITY_SELECTORS = frozenset(
     {"workspace", "workspace_id", "user", "user_id", "profile", "plan", "territory"}
 )
 BLOCKED_ACCOUNT_STATES = frozenset(
     {"suspended", "under_review", "canceled", "deletion_pending", "deleted"}
 )
+
+
+class _WindowRateLimiter:
+    """Small per-process shield; the private edge must enforce the same limits."""
+
+    def __init__(self, limit: int, *, window_seconds: float = 60.0) -> None:
+        self.limit = limit
+        self.window_seconds = window_seconds
+        self._accepted: dict[str, deque[float]] = {}
+
+    def allow(self, source: str) -> bool:
+        now = monotonic()
+        cutoff = now - self.window_seconds
+        accepted = self._accepted.get(source)
+        if accepted is None:
+            if len(self._accepted) >= 4096:
+                self._accepted = {
+                    key: values
+                    for key, values in self._accepted.items()
+                    if values and values[-1] > cutoff
+                }
+            source = source if len(self._accepted) < 4096 else "__overflow__"
+            accepted = self._accepted.setdefault(source, deque())
+        while accepted and accepted[0] <= cutoff:
+            accepted.popleft()
+        if len(accepted) >= self.limit:
+            return False
+        accepted.append(now)
+        return True
 
 class PlatformApi:
     """Request handlers bound to one platform database."""
@@ -160,9 +193,24 @@ class PlatformApi:
         self.browser_sessions = BrowserSessionStore(
             config.cache_db_path,
             ttl=timedelta(seconds=config.browser_session_ttl_seconds),
+            global_limit=config.browser_sessions_global,
         )
         self.pending_authorizations = PendingAuthorizationStore(
-            config.cache_db_path
+            config.cache_db_path,
+            per_client_limit=config.oauth_pending_authorizations_per_client,
+            global_limit=config.oauth_pending_authorizations_global,
+        )
+        self.oauth_registration_limiter = _WindowRateLimiter(
+            config.oauth_registration_rate_limit_per_minute
+        )
+        self.oauth_authorization_limiter = _WindowRateLimiter(
+            config.oauth_authorization_rate_limit_per_minute
+        )
+        self.oauth_token_limiter = _WindowRateLimiter(
+            config.oauth_token_rate_limit_per_minute
+        )
+        self.browser_session_limiter = _WindowRateLimiter(
+            config.browser_session_rate_limit_per_minute
         )
         self.operator_sessions = OperatorSessionStore(
             config.cache_db_path,
@@ -216,6 +264,46 @@ class PlatformApi:
             return None
         return self.browser_sessions.validate(token)
 
+    def _pending_client(self, pending: PendingAuthorization):
+        client = self.oauth.get_client(pending.client_id)
+        approved_name = (
+            self._approved_client_name(client.redirect_uris)
+            if client is not None
+            else None
+        )
+        if (
+            client is None
+            or not client.active
+            or approved_name is None
+            or not hmac.compare_digest(client.name, approved_name)
+            or pending.redirect_uri not in client.redirect_uris
+            or not set(pending.scopes).issubset(OAUTH_PUBLIC_SCOPES)
+            or not set(pending.scopes).issubset(client.scopes)
+        ):
+            return None
+        return client
+
+    def _approved_client_name(self, redirect_uris: tuple[str, ...]) -> str | None:
+        requested = tuple(sorted(dict.fromkeys(uri.strip() for uri in redirect_uris)))
+        for name, approved in self.config.oauth_client_registrations.items():
+            if requested == approved:
+                return name
+        return None
+
+    @staticmethod
+    def _rate_limit_error() -> JSONResponse:
+        response = _oauth_error(
+            429,
+            "temporarily_unavailable",
+            "OAuth request rate limit exceeded",
+        )
+        response.headers["Retry-After"] = "60"
+        return response
+
+    @staticmethod
+    def _request_source(request: Request) -> str:
+        return request.client.host if request.client is not None else "unknown"
+
     def _connection_redirect(self, pending_handle: str) -> RedirectResponse:
         parsed = urlsplit(self.config.connection_url)
         query = parse_qs(parsed.query, keep_blank_values=True)
@@ -235,12 +323,58 @@ class PlatformApi:
         parsed = urlsplit(self.config.connection_url)
         return f"{parsed.scheme}://{parsed.netloc}"
 
+    def _browser_cookie_same_site(self) -> str:
+        issuer_host = (urlsplit(self.config.oauth_issuer).hostname or "").casefold()
+        connection_host = (
+            urlsplit(self.config.connection_url).hostname or ""
+        ).casefold()
+        return "strict" if issuer_host == connection_host else "none"
+
+    @staticmethod
+    def _oauth_redirect_origin(uri: str) -> str:
+        normalized = uri.strip()
+        parsed = urlsplit(normalized)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            raise ValueError("redirect URI must be an absolute HTTP URL without credentials or fragment")
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("redirect URI has an invalid port") from exc
+        loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme != "https" and not loopback:
+            raise ValueError("redirect URI must use HTTPS outside loopback development")
+        return f"{parsed.scheme}://{parsed.netloc}"
+
+    def _connection_guard(self, request: Request) -> JSONResponse | None:
+        origins = request.headers.getlist("origin")
+        hosts = request.headers.getlist("host")
+        expected_host = urlsplit(self.config.oauth_issuer).netloc
+        if (
+            len(origins) != 1
+            or not hmac.compare_digest(origins[0], self._connection_origin())
+            or len(hosts) != 1
+            or not hmac.compare_digest(hosts[0], expected_host)
+        ):
+            return _error(
+                403,
+                "connection_origin_forbidden",
+                "Connection origin or host is not allowed",
+            )
+        return None
+
     def _with_connection_cors(self, request: Request, response: Response) -> Response:
         origin = request.headers.get("origin")
         if origin and hmac.compare_digest(origin, self._connection_origin()):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Vary"] = "Origin"
+        response.headers["Cache-Control"] = "no-store"
         return response
 
     def _operations_guard(self, request: Request) -> JSONResponse | None:
@@ -373,27 +507,44 @@ class PlatformApi:
         )
 
     async def browser_session_options(self, request: Request) -> Response:
-        origin = request.headers.get("origin", "")
-        if not origin or not hmac.compare_digest(origin, self._connection_origin()):
-            return _error(403, "origin_forbidden", "Connection origin is not allowed")
+        guard = self._connection_guard(request)
+        if guard is not None:
+            return self._with_connection_cors(request, guard)
+        origin = request.headers["origin"]
+        allowed_methods = (
+            {"POST"}
+            if request.url.path.endswith("/authorization")
+            else {"POST", "DELETE"}
+        )
         requested_method = request.headers.get("access-control-request-method", "")
-        if requested_method.upper() != "POST":
-            return _error(403, "method_forbidden", "Connection method is not allowed")
+        if requested_method.upper() not in allowed_methods:
+            return self._with_connection_cors(
+                request,
+                _error(403, "method_forbidden", "Connection method is not allowed"),
+            )
         requested_headers = {
             item.strip().casefold()
             for item in request.headers.get("access-control-request-headers", "").split(",")
             if item.strip()
         }
-        if not requested_headers.issubset({"authorization", "content-type"}):
-            return _error(403, "headers_forbidden", "Connection headers are not allowed")
+        if not requested_headers.issubset(
+            {"authorization", "content-type", "x-csrf-token"}
+        ):
+            return self._with_connection_cors(
+                request,
+                _error(403, "headers_forbidden", "Connection headers are not allowed"),
+            )
         return Response(
             status_code=204,
             headers={
                 "Access-Control-Allow-Origin": origin,
                 "Access-Control-Allow-Credentials": "true",
-                "Access-Control-Allow-Methods": "POST",
-                "Access-Control-Allow-Headers": "Authorization, Content-Type",
+                "Access-Control-Allow-Methods": ", ".join(sorted(allowed_methods)),
+                "Access-Control-Allow-Headers": (
+                    "Authorization, Content-Type, X-CSRF-Token"
+                ),
                 "Access-Control-Max-Age": "600",
+                "Cache-Control": "no-store",
                 "Vary": "Origin",
             },
         )
@@ -428,6 +579,8 @@ class PlatformApi:
         )
 
     async def oauth_register(self, request: Request) -> JSONResponse:
+        if not self.oauth_registration_limiter.allow(self._request_source(request)):
+            return self._rate_limit_error()
         body, error = await self.parse_json(request)
         if error is not None:
             return error
@@ -475,10 +628,25 @@ class PlatformApi:
         if not scopes or not set(scopes).issubset(OAUTH_PUBLIC_SCOPES):
             return _oauth_error(400, "invalid_scope", "requested scope is not supported")
         try:
+            for uri in redirects:
+                self._oauth_redirect_origin(uri)
+        except ValueError as exc:
+            return _oauth_error(400, "invalid_redirect_uri", str(exc))
+        normalized_redirects = tuple(
+            sorted(dict.fromkeys(uri.strip() for uri in redirects))
+        )
+        approved_name = self._approved_client_name(normalized_redirects)
+        if approved_name is None:
+            return _oauth_error(
+                400,
+                "invalid_redirect_uri",
+                "redirect URIs are not an approved public client registration",
+            )
+        try:
             client = await asyncio.to_thread(
-                self.oauth.register_client,
-                name,
-                tuple(redirects),
+                self.oauth.register_public_client,
+                approved_name,
+                normalized_redirects,
                 scopes,
             )
         except ValueError as exc:
@@ -498,6 +666,8 @@ class PlatformApi:
         )
 
     async def oauth_authorize(self, request: Request):
+        if not self.oauth_authorization_limiter.allow(self._request_source(request)):
+            return self._rate_limit_error()
         pairs = request.query_params.multi_items()
         keys = [key for key, _ in pairs]
         if len(keys) != len(set(keys)):
@@ -528,7 +698,7 @@ class PlatformApi:
             if len(supplied) != 1:
                 return _error(400, "invalid_request", "Pending request cannot be combined with OAuth inputs")
             pending = self.pending_authorizations.get(pending_handle)
-            if pending is None:
+            if pending is None or self._pending_client(pending) is None:
                 return _error(400, "invalid_request", "Authorization request is invalid or expired")
         else:
             required = {
@@ -546,10 +716,19 @@ class PlatformApi:
             client_id = request.query_params["client_id"]
             client = self.oauth.get_client(client_id)
             redirect_uri = request.query_params["redirect_uri"]
-            if client is None or not client.active or redirect_uri not in client.redirect_uris:
+            if (
+                client is None
+                or not client.active
+                or self._approved_client_name(client.redirect_uris) != client.name
+                or redirect_uri not in client.redirect_uris
+            ):
                 return _error(400, "invalid_request", "OAuth client or redirect URI is invalid")
             scopes = tuple(dict.fromkeys(request.query_params.get("scope", "mcp:tools").split()))
-            if not scopes or not set(scopes).issubset(set(client.scopes)):
+            if (
+                not scopes
+                or not set(scopes).issubset(OAUTH_PUBLIC_SCOPES)
+                or not set(scopes).issubset(set(client.scopes))
+            ):
                 return _error(400, "invalid_scope", "Requested scope is not registered")
             resource = request.query_params.get("resource", self.config.oauth_resource)
             if resource != self.config.oauth_resource:
@@ -582,50 +761,40 @@ class PlatformApi:
                     raise ValueError("PKCE S256 code challenge is invalid")
             except ValueError as exc:
                 return _error(400, "invalid_request", str(exc))
-            pending_handle = self.pending_authorizations.issue(pending)
+            try:
+                pending_handle = self.pending_authorizations.issue(pending)
+            except ValueError:
+                return self._rate_limit_error()
 
-        browser = self._browser_session(request)
-        if browser is None:
-            return self._connection_redirect(pending_handle)
-        user, workspaces = await self._state_for_user(browser.user_id)
-        if user is None:
-            return _error(401, "browser_session_invalid", "Platform user no longer exists")
-        if len(workspaces) != 1:
-            return _error(
-                409,
-                "workspace_selection_required",
-                "Exactly one live workspace membership is required for connection",
-            )
-        if await self._account_is_blocked(workspaces[0]):
-            return _error(
-                403,
-                "account_access_blocked",
-                "This workspace is not currently permitted to connect",
-            )
-        consumed = self.pending_authorizations.consume(pending_handle)
-        if consumed is None:
-            return _error(400, "invalid_request", "Authorization request is invalid or expired")
-        try:
-            code = await asyncio.to_thread(
-                self.oauth.create_auth_code,
-                workspaces[0],
-                browser.user_id,
-                consumed.client_id,
-                consumed.redirect_uri,
-                consumed.code_challenge,
-                code_challenge_method=consumed.code_challenge_method,
-                scopes=consumed.scopes,
-                audience=consumed.audience,
-                resource=consumed.resource,
-            )
-        except ValueError as exc:
-            return _error(400, "invalid_request", str(exc))
-        location = consumed.redirect_uri + ("&" if "?" in consumed.redirect_uri else "?") + urlencode(
-            {"code": code, "state": consumed.state}
-        )
-        return RedirectResponse(location, status_code=303)
+        return self._connection_redirect(pending_handle)
 
     async def browser_session(self, request: Request) -> JSONResponse:
+        guard = self._connection_guard(request)
+        if guard is not None:
+            return self._with_connection_cors(request, guard)
+        if not self.browser_session_limiter.allow(self._request_source(request)):
+            return self._with_connection_cors(request, self._rate_limit_error())
+        pending_handle_values = request.query_params.getlist("request")
+        if len(pending_handle_values) > 1:
+            return self._with_connection_cors(
+                request,
+                _error(400, "invalid_request", "Authorization request cannot repeat"),
+            )
+        pending_handle = pending_handle_values[0] if pending_handle_values else None
+        pending = None
+        client = None
+        if pending_handle is not None:
+            pending = self.pending_authorizations.get(pending_handle)
+            client = self._pending_client(pending) if pending is not None else None
+            if pending is None or client is None:
+                return self._with_connection_cors(
+                    request,
+                    _error(
+                        400,
+                        "invalid_request",
+                        "Authorization request is invalid or expired",
+                    ),
+                )
         if self.human_identity_verifier is None:
             return self._with_connection_cors(request, _error(
                 503,
@@ -661,7 +830,10 @@ class PlatformApi:
             len(workspaces) == 1
             and await self._account_is_blocked(workspaces[0])
         )
-        issued = await asyncio.to_thread(self.browser_sessions.issue, user_id)
+        try:
+            issued = await asyncio.to_thread(self.browser_sessions.issue, user_id)
+        except ValueError:
+            return self._with_connection_cors(request, self._rate_limit_error())
         connection: dict[str, Any] = {
             "status": (
                 "access_blocked"
@@ -674,10 +846,22 @@ class PlatformApi:
         }
         if len(workspaces) == 1:
             connection["workspace_id"] = workspaces[0]
+        authorization = None
+        if pending is not None and client is not None:
+            authorization = {
+                "client_name": client.name,
+                "redirect_origin": self._oauth_redirect_origin(
+                    pending.redirect_uri
+                ),
+                "scopes": list(pending.scopes),
+            }
+            if len(workspaces) == 1:
+                authorization["workspace_id"] = workspaces[0]
         response = JSONResponse(
             {
                 "user": user,
                 "connection": connection,
+                "authorization": authorization,
                 "csrf_token": issued.csrf_token,
                 "expires_at": issued.expires_at.isoformat(),
             },
@@ -690,26 +874,139 @@ class PlatformApi:
             max_age=self.config.browser_session_ttl_seconds,
             httponly=True,
             secure=self.config.browser_cookie_secure,
-            samesite="lax",
+            samesite=self._browser_cookie_same_site(),
             path="/",
         )
         return self._with_connection_cors(request, response)
 
+    async def confirm_browser_authorization(self, request: Request) -> JSONResponse:
+        guard = self._connection_guard(request)
+        if guard is not None:
+            return self._with_connection_cors(request, guard)
+        browser = self._browser_session(request)
+        if browser is None:
+            return self._with_connection_cors(
+                request,
+                _error(
+                    401,
+                    "browser_session_required",
+                    "A current browser session is required",
+                ),
+            )
+        token = request.cookies.get(self.config.browser_cookie_name, "")
+        csrf = request.headers.get("x-csrf-token", "")
+        if not csrf or not self.browser_sessions.validate_csrf(token, csrf):
+            return self._with_connection_cors(
+                request,
+                _error(403, "csrf_failed", "Valid browser session and CSRF token required"),
+            )
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_connection_cors(request, error)
+        if set(body) != {"request"} or not isinstance(body["request"], str):
+            return self._with_connection_cors(
+                request,
+                _error(400, "invalid_request", "Exactly one authorization request is required"),
+            )
+        pending_handle = body["request"].strip()
+        if not pending_handle:
+            return self._with_connection_cors(
+                request,
+                _error(400, "invalid_request", "Authorization request cannot be blank"),
+            )
+        pending = self.pending_authorizations.get(pending_handle)
+        if pending is None or self._pending_client(pending) is None:
+            return self._with_connection_cors(
+                request,
+                _error(400, "invalid_request", "Authorization request is invalid or expired"),
+            )
+        user, workspaces = await self._state_for_user(browser.user_id)
+        if user is None:
+            return self._with_connection_cors(
+                request,
+                _error(401, "browser_session_invalid", "Platform user no longer exists"),
+            )
+        if len(workspaces) != 1:
+            return self._with_connection_cors(
+                request,
+                _error(
+                    409,
+                    "workspace_selection_required",
+                    "Exactly one live workspace membership is required for connection",
+                ),
+            )
+        if await self._account_is_blocked(workspaces[0]):
+            return self._with_connection_cors(
+                request,
+                _error(
+                    403,
+                    "account_access_blocked",
+                    "This workspace is not currently permitted to connect",
+                ),
+            )
+        consumed = self.pending_authorizations.consume(pending_handle)
+        if consumed is None:
+            return self._with_connection_cors(
+                request,
+                _error(400, "invalid_request", "Authorization request is invalid or expired"),
+            )
+        try:
+            code = await asyncio.to_thread(
+                self.oauth.create_auth_code,
+                workspaces[0],
+                browser.user_id,
+                consumed.client_id,
+                consumed.redirect_uri,
+                consumed.code_challenge,
+                code_challenge_method=consumed.code_challenge_method,
+                scopes=consumed.scopes,
+                audience=consumed.audience,
+                resource=consumed.resource,
+            )
+        except ValueError as exc:
+            self.pending_authorizations.restore(pending_handle)
+            return self._with_connection_cors(
+                request, _error(400, "invalid_request", str(exc))
+            )
+        except Exception:
+            self.pending_authorizations.restore(pending_handle)
+            return self._with_connection_cors(
+                request,
+                _error(
+                    503,
+                    "authorization_temporarily_unavailable",
+                    "Authorization could not be completed; retry this approval",
+                ),
+            )
+        location = consumed.redirect_uri + (
+            "&" if "?" in consumed.redirect_uri else "?"
+        ) + urlencode({"code": code, "state": consumed.state})
+        return self._with_connection_cors(
+            request,
+            JSONResponse({"redirect_to": location}, headers={"Cache-Control": "no-store"}),
+        )
+
     async def browser_logout(self, request: Request) -> JSONResponse:
+        guard = self._connection_guard(request)
+        if guard is not None:
+            return self._with_connection_cors(request, guard)
         token = request.cookies.get(self.config.browser_cookie_name, "")
         csrf = request.headers.get("x-csrf-token", "")
         if not token or not csrf or not self.browser_sessions.validate_csrf(token, csrf):
-            return _error(403, "csrf_failed", "Valid browser session and CSRF token required")
+            return self._with_connection_cors(
+                request,
+                _error(403, "csrf_failed", "Valid browser session and CSRF token required"),
+            )
         await asyncio.to_thread(self.browser_sessions.revoke, token)
         response = JSONResponse({"revoked": True}, headers={"Cache-Control": "no-store"})
         response.delete_cookie(
             self.config.browser_cookie_name,
             httponly=True,
             secure=self.config.browser_cookie_secure,
-            samesite="lax",
+            samesite=self._browser_cookie_same_site(),
             path="/",
         )
-        return response
+        return self._with_connection_cors(request, response)
 
     async def create_operator_session(self, request: Request) -> JSONResponse:
         guard = self._operations_guard(request)
@@ -1290,16 +1587,59 @@ class PlatformApi:
         )
         return self._with_operations_cors(request, response)
 
-    async def _parse_form(self, request: Request) -> tuple[dict[str, str] | None, JSONResponse | None]:
-        content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().casefold()
+    async def _parse_form(
+        self,
+        request: Request,
+    ) -> tuple[dict[str, str] | None, JSONResponse | None]:
+        content_type = (
+            request.headers.get("content-type", "")
+            .split(";", 1)[0]
+            .strip()
+            .casefold()
+        )
         if content_type != "application/x-www-form-urlencoded":
             return None, _oauth_error(415, "invalid_request", "Form encoding is required")
-        raw = await request.body()
-        if len(raw) > 16 * 1024:
-            return None, _oauth_error(413, "invalid_request", "OAuth form is too large")
+        maximum = 16 * 1024
+        content_lengths = request.headers.getlist("content-length")
+        if len(content_lengths) > 1:
+            return None, _oauth_error(
+                400,
+                "invalid_request",
+                "Content-Length cannot repeat",
+            )
+        if content_lengths:
+            try:
+                declared_length = int(content_lengths[0])
+            except ValueError:
+                return None, _oauth_error(
+                    400,
+                    "invalid_request",
+                    "Content-Length must be an integer",
+                )
+            if declared_length < 0:
+                return None, _oauth_error(
+                    400,
+                    "invalid_request",
+                    "Content-Length cannot be negative",
+                )
+            if declared_length > maximum:
+                return None, _oauth_error(
+                    413,
+                    "invalid_request",
+                    "OAuth form is too large",
+                )
+        raw = bytearray()
+        async for chunk in request.stream():
+            if len(raw) + len(chunk) > maximum:
+                return None, _oauth_error(
+                    413,
+                    "invalid_request",
+                    "OAuth form is too large",
+                )
+            raw.extend(chunk)
         try:
             parsed = parse_qs(
-                raw.decode("utf-8"),
+                bytes(raw).decode("utf-8"),
                 keep_blank_values=True,
                 strict_parsing=True,
                 max_num_fields=16,
@@ -1334,6 +1674,8 @@ class PlatformApi:
         )
 
     async def oauth_token(self, request: Request) -> JSONResponse:
+        if not self.oauth_token_limiter.allow(self._request_source(request)):
+            return self._rate_limit_error()
         form, error = await self._parse_form(request)
         if error is not None:
             return error
@@ -1370,6 +1712,8 @@ class PlatformApi:
         return self._token_response(tokens)
 
     async def oauth_revoke(self, request: Request) -> JSONResponse:
+        if not self.oauth_token_limiter.allow(self._request_source(request)):
+            return self._rate_limit_error()
         form, error = await self._parse_form(request)
         if error is not None:
             return error
@@ -1490,9 +1834,33 @@ class PlatformApi:
         return outcome, None
 
     async def parse_json(self, request: Request):
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                if int(content_length) > MAX_JSON_BODY_BYTES:
+                    return None, _error(
+                        413,
+                        "body_too_large",
+                        "Request body exceeds the 65,536 byte limit",
+                    )
+            except ValueError:
+                return None, _error(
+                    400,
+                    "invalid_content_length",
+                    "Content-Length must be an integer",
+                )
         try:
-            value = await request.json()
-        except Exception:
+            raw = bytearray()
+            async for chunk in request.stream():
+                if len(raw) + len(chunk) > MAX_JSON_BODY_BYTES:
+                    return None, _error(
+                        413,
+                        "body_too_large",
+                        "Request body exceeds the 65,536 byte limit",
+                    )
+                raw.extend(chunk)
+            value = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError):
             return None, _error(400, "invalid_json", "Request body must be valid JSON")
         if not isinstance(value, dict):
             return None, _error(400, "invalid_body", "Request body must be a JSON object")
@@ -2144,11 +2512,18 @@ class PlatformApi:
             return error
         return JSONResponse({"members": _jsonable(result)})
 
-    def routes(self) -> list[Route]:
+    def routes(
+        self,
+        *,
+        include_uncertified_deal_routes: bool = False,
+    ) -> list[Route]:
         """Starlette routes for this API, ready to mount under any prefix."""
+        route_specs = PLATFORM_ROUTE_SPECS
+        if include_uncertified_deal_routes:
+            route_specs += UNCERTIFIED_DEAL_ROUTE_SPECS
         return [
             Route(path, getattr(self, handler), methods=list(methods))
-            for path, methods, handler in PLATFORM_ROUTE_SPECS
+            for path, methods, handler in route_specs
         ]
 
 
@@ -2172,6 +2547,16 @@ PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("/v1/browser/session", ("POST",), "browser_session"),
     ("/v1/browser/session", ("OPTIONS",), "browser_session_options"),
     ("/v1/browser/session", ("DELETE",), "browser_logout"),
+    (
+        "/v1/browser/authorization",
+        ("POST",),
+        "confirm_browser_authorization",
+    ),
+    (
+        "/v1/browser/authorization",
+        ("OPTIONS",),
+        "browser_session_options",
+    ),
     ("/v1/operations/session", ("POST",), "create_operator_session"),
     ("/v1/operations/session", ("GET",), "get_operator_session"),
     ("/v1/operations/session", ("DELETE",), "delete_operator_session"),
@@ -2307,10 +2692,6 @@ PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ),
     ("/v1/me", ("GET",), "me"),
     ("/v1/entitlements", ("GET",), "entitlement_summary"),
-    ("/v1/deals", ("GET",), "list_deals"),
-    ("/v1/deals", ("POST",), "create_deal"),
-    ("/v1/deals/{deal_id:int}", ("GET",), "get_deal"),
-    ("/v1/deals/{deal_id:int}", ("PATCH",), "update_deal"),
     ("/v1/admin/workspaces", ("POST",), "provision_admin_workspace"),
     (
         "/v1/admin/workspaces/{workspace_id}",
@@ -2367,12 +2748,25 @@ PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 )
 
 
+# Deal persistence is still under launch certification. These routes remain
+# available only to explicit repository tests and cannot enter the hosted app.
+UNCERTIFIED_DEAL_ROUTE_SPECS: tuple[
+    tuple[str, tuple[str, ...], str], ...
+] = (
+    ("/v1/deals", ("GET",), "list_deals"),
+    ("/v1/deals", ("POST",), "create_deal"),
+    ("/v1/deals/{deal_id:int}", ("GET",), "get_deal"),
+    ("/v1/deals/{deal_id:int}", ("PATCH",), "update_deal"),
+)
+
+
 def starlette_app(
     config: CreConfig | None = None,
     *,
     human_identity_verifier: HumanIdentityVerifier | None = None,
     stripe_reconciliation_service: StripeReconciliationService | None = None,
     skool_lifecycle_service: SkoolLifecycleService | None = None,
+    include_uncertified_deal_routes: bool = False,
 ) -> Starlette:
     """Build a standalone ASGI app for the customer-facing platform routes."""
     return Starlette(
@@ -2381,7 +2775,9 @@ def starlette_app(
             human_identity_verifier=human_identity_verifier,
             stripe_reconciliation_service=stripe_reconciliation_service,
             skool_lifecycle_service=skool_lifecycle_service,
-        ).routes()
+        ).routes(
+            include_uncertified_deal_routes=include_uncertified_deal_routes
+        )
     )
 
 

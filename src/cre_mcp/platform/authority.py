@@ -202,15 +202,25 @@ class AuthorityResolver:
                 connection.execute(
                     """
                     SELECT 1
-                    FROM platform_access_grants
-                    WHERE workspace_id=? AND profile='jv_partner'
+                    FROM platform_memberships AS membership
+                    JOIN platform_access_grants AS grant
+                      ON grant.workspace_id=membership.workspace_id
+                    WHERE membership.user_id=?
+                      AND grant.profile='jv_partner'
+                      AND grant.status IN ('active','overridden','expiring')
+                      AND grant.starts_at<=?
+                      AND (grant.ends_at IS NULL OR grant.ends_at>?)
                       AND (
-                          scope='workspace'
-                          OR (scope='subject' AND subject_user_id=?)
+                          grant.scope='workspace'
+                          OR grant.subject_user_id=membership.user_id
                       )
                     LIMIT 1
                     """,
-                    (workspace.id, session.user_id),
+                    (
+                        session.user_id,
+                        now.astimezone(UTC).isoformat(),
+                        now.astimezone(UTC).isoformat(),
+                    ),
                 ).fetchone()
                 is not None
             )

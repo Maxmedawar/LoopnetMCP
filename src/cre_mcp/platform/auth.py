@@ -313,6 +313,12 @@ class OAuthSessionStore:
             raise ValueError("redirect URI fragments are not allowed")
         if not parsed.scheme or not parsed.netloc:
             raise ValueError("redirect URI must be absolute")
+        if parsed.username is not None or parsed.password is not None:
+            raise ValueError("redirect URI credentials are not allowed")
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("redirect URI has an invalid port") from exc
         host = (parsed.hostname or "").lower()
         loopback = host in {"localhost", "127.0.0.1", "::1"}
         if parsed.scheme.lower() != "https" and not (
@@ -385,6 +391,77 @@ class OAuthSessionStore:
             row_id = int(cursor.lastrowid)
         return ClientRegistration(
             row_id, name, client_id, redirects, normalized_scopes, True
+        )
+
+    def register_public_client(
+        self,
+        name: str,
+        redirect_uris: tuple[str, ...],
+        scopes: tuple[str, ...],
+    ) -> ClientRegistration:
+        """Idempotently register one server-approved public client shape."""
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValueError("client name is required")
+        redirects = tuple(
+            sorted(
+                dict.fromkeys(
+                    self._validate_redirect_uri(uri) for uri in redirect_uris
+                )
+            )
+        )
+        normalized_scopes = tuple(
+            sorted(dict.fromkeys(scope.strip() for scope in scopes if scope.strip()))
+        )
+        redirects_json = json.dumps(redirects)
+        scopes_json = json.dumps(normalized_scopes)
+
+        def existing(connection: sqlite3.Connection) -> ClientRegistration | None:
+            row = connection.execute(
+                """
+                SELECT * FROM platform_oauth_clients
+                WHERE name=? AND redirect_uris=? AND scopes=? AND active=1
+                ORDER BY id LIMIT 1
+                """,
+                (normalized_name, redirects_json, scopes_json),
+            ).fetchone()
+            return self._client(row)
+
+        with self._connect() as connection:
+            client = existing(connection)
+        if client is not None:
+            return client
+
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            client = existing(connection)
+            if client is not None:
+                return client
+            client_id = _secret("mcr_client_")
+            now = _iso(_utc_now())
+            cursor = connection.execute(
+                """
+                INSERT INTO platform_oauth_clients
+                    (name,client_id,redirect_uris,scopes,active,created_at,updated_at)
+                VALUES (?,?,?,?,1,?,?)
+                """,
+                (
+                    normalized_name,
+                    client_id,
+                    redirects_json,
+                    scopes_json,
+                    now,
+                    now,
+                ),
+            )
+            row_id = int(cursor.lastrowid)
+        return ClientRegistration(
+            row_id,
+            normalized_name,
+            client_id,
+            redirects,
+            normalized_scopes,
+            True,
         )
 
     def get_client(self, client_id: str) -> ClientRegistration | None:

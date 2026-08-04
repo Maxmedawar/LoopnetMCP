@@ -68,6 +68,23 @@ def _config(tmp_path) -> CreConfig:
     )
 
 
+@pytest.mark.parametrize(
+    "redirect_uri",
+    (
+        "https://attacker@claude.ai/callback",
+        "https://claude.ai:invalid/callback",
+    ),
+)
+def test_oauth_store_rejects_credentialed_or_invalid_port_redirects(
+    tmp_path,
+    redirect_uri,
+):
+    store = OAuthSessionStore(tmp_path / "oauth.db")
+
+    with pytest.raises(ValueError):
+        store.register_client("Invalid", (redirect_uri,), (MCP_SCOPE,))
+
+
 async def _provision(
     config: CreConfig,
     name: str,
@@ -523,7 +540,7 @@ async def test_current_authority_disables_deal_vault_on_next_request(
 ):
     config = _config(tmp_path)
     tenant = await _provision(config, f"Disable {disabled_by}")
-    api = starlette_app(config)
+    api = starlette_app(config, include_uncertified_deal_routes=True)
     transport = httpx.ASGITransport(app=api)
 
     async with httpx.AsyncClient(
@@ -596,7 +613,7 @@ async def test_disabled_customer_can_read_me_but_not_deals_or_mcp(
             tenant.workspace_id, "suspended", reason="billing"
         )
 
-    api = starlette_app(config)
+    api = starlette_app(config, include_uncertified_deal_routes=True)
     transport = httpx.ASGITransport(app=api)
     async with httpx.AsyncClient(
         transport=transport, base_url="http://platform.test"
@@ -684,7 +701,7 @@ async def test_workspace_cannot_be_selected_through_http_or_mcp_input(tmp_path):
     alpha = await _provision(config, "Authority Alpha")
     beta = await _provision(config, "Authority Beta")
 
-    api = starlette_app(config)
+    api = starlette_app(config, include_uncertified_deal_routes=True)
     transport = httpx.ASGITransport(app=api)
     async with httpx.AsyncClient(
         transport=transport, base_url="http://platform.test"

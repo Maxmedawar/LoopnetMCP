@@ -116,12 +116,18 @@ async def test_non_jv_profile_cannot_use_jv_surface(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "partner_grant_state",
-    ["live", "revoked", "expired", "outranked"],
+    ("partner_grant_state", "expected_status"),
+    [
+        ("live", 403),
+        ("revoked", 200),
+        ("expired", 200),
+        ("outranked", 403),
+    ],
 )
-async def test_any_jv_grant_history_blocks_dual_seeded_admin_identity(
+async def test_only_current_jv_authority_blocks_dual_seeded_admin_identity(
     tmp_path,
     partner_grant_state,
+    expected_status,
 ):
     config = config_for(tmp_path)
     jv = await provision_identity(
@@ -193,8 +199,13 @@ async def test_any_jv_grant_history_blocks_dual_seeded_admin_identity(
             },
         )
 
-    assert read.status_code == 403
-    assert mutation.status_code == 403
+    assert read.status_code == expected_status
+    assert mutation.status_code == expected_status
     account = entitlements.get_account(target.workspace_id)
-    assert account is not None and account.state == "active"
-    assert audit_rows(config.cache_db_path) == []
+    assert account is not None
+    if expected_status == 403:
+        assert account.state == "active"
+        assert audit_rows(config.cache_db_path) == []
+    else:
+        assert account.state == "suspended"
+        assert audit_rows(config.cache_db_path)

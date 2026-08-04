@@ -70,7 +70,9 @@ async def _provision(
 
 
 def _client(config: CreConfig) -> httpx.AsyncClient:
-    transport = httpx.ASGITransport(app=starlette_app(config))
+    transport = httpx.ASGITransport(
+        app=starlette_app(config, include_uncertified_deal_routes=True)
+    )
     return httpx.AsyncClient(transport=transport, base_url="http://platform.test")
 
 

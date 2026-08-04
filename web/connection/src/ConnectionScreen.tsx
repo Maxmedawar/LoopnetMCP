@@ -2,7 +2,21 @@ import { SignInButton, useAuth } from "@clerk/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./connection.css";
 
-type ScreenState = "signed-out" | "connecting" | "failed" | "review" | "blocked";
+type ScreenState =
+  | "signed-out"
+  | "connecting"
+  | "confirm"
+  | "failed"
+  | "review"
+  | "blocked"
+  | "cancelled";
+
+type AuthorizationSummary = {
+  client_name: string;
+  redirect_origin: string;
+  scopes: string[];
+  workspace_id?: string;
+};
 
 type ConnectionResponse = {
   connection: {
@@ -10,7 +24,11 @@ type ConnectionResponse = {
     workspace_count: number;
     workspace_id?: string;
   };
+  authorization?: AuthorizationSummary | null;
+  csrf_token: string;
 };
+
+type AuthorizationResponse = { redirect_to: string };
 
 type ConnectionScreenProps = {
   mcpOrigin: string;
@@ -53,6 +71,9 @@ export function ConnectionScreen({
   );
   const [state, setState] = useState<ScreenState>("signed-out");
   const [attempt, setAttempt] = useState(0);
+  const [authorization, setAuthorization] =
+    useState<AuthorizationSummary | null>(null);
+  const [csrfToken, setCsrfToken] = useState("");
   const inFlight = useRef(false);
 
   const connect = useCallback(async () => {
@@ -62,11 +83,14 @@ export function ConnectionScreen({
     try {
       const clerkToken = await getToken();
       if (!clerkToken) throw new Error("Clerk did not issue a session token");
-      const response = await fetch(`${mcpOrigin}/v1/browser/session`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Authorization: `Bearer ${clerkToken}` },
-      });
+      const response = await fetch(
+        `${mcpOrigin}/v1/browser/session?${new URLSearchParams({ request: requestHandle })}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { Authorization: `Bearer ${clerkToken}` },
+        },
+      );
       if (!response.ok) throw new Error("Browser session exchange failed");
       const payload = (await response.json()) as ConnectionResponse;
       if (payload.connection.status === "access_blocked") {
@@ -77,15 +101,18 @@ export function ConnectionScreen({
         setState("review");
         return;
       }
-      navigate(
-        `${mcpOrigin}/oauth/authorize?${new URLSearchParams({ request: requestHandle })}`,
-      );
+      if (!payload.authorization || !payload.csrf_token) {
+        throw new Error("Authorization summary is missing");
+      }
+      setAuthorization(payload.authorization);
+      setCsrfToken(payload.csrf_token);
+      setState("confirm");
     } catch {
       setState("failed");
     } finally {
       inFlight.current = false;
     }
-  }, [getToken, isLoaded, isSignedIn, mcpOrigin, navigate, requestHandle]);
+  }, [getToken, isLoaded, isSignedIn, mcpOrigin, requestHandle]);
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) setState("signed-out");
@@ -97,35 +124,94 @@ export function ConnectionScreen({
     setAttempt((value) => value + 1);
   };
 
-  const copy = !requestHandle
-    ? {
-        title: "Open this from your MCP client.",
-        body: "A signed connection request is required before sign-in.",
+  const confirm = async () => {
+    if (!requestHandle || !authorization || !csrfToken || inFlight.current) return;
+    inFlight.current = true;
+    setState("connecting");
+    try {
+      const response = await fetch(`${mcpOrigin}/v1/browser/authorization`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        body: JSON.stringify({ request: requestHandle }),
+      });
+      if (!response.ok) throw new Error("Authorization confirmation failed");
+      const payload = (await response.json()) as AuthorizationResponse;
+      const redirect = new URL(payload.redirect_to);
+      if (redirect.origin !== authorization.redirect_origin) {
+        throw new Error("Authorization redirect origin changed");
       }
-    : state === "connecting"
-      ? {
-          title: "Establishing the connection.",
-          body: "Your browser identity is being exchanged for a revocable MCP session.",
-        }
-      : state === "failed"
-        ? {
-            title: "Connection failed safely.",
-            body: "No MCP token was issued. Try once more or contact support if this repeats.",
-          }
-        : state === "review"
-          ? {
-              title: "Workspace access needs review.",
-              body: "Your identity matches more than one workspace. Support must resolve it before connection.",
-            }
-          : state === "blocked"
-            ? {
-                title: "Workspace access is paused.",
-                body: "No token was issued. Contact support to resolve the account hold before reconnecting.",
-              }
-          : {
-              title: "Sign in. Then return to your scout.",
-              body: "Clerk verifies you. MedawarCRE resolves access from live server records.",
-            };
+      navigate(redirect.toString());
+    } catch {
+      setState("failed");
+    } finally {
+      inFlight.current = false;
+    }
+  };
+
+  const cancel = async () => {
+    if (!csrfToken || inFlight.current) return;
+    inFlight.current = true;
+    try {
+      const response = await fetch(`${mcpOrigin}/v1/browser/session`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrfToken },
+      });
+      if (!response.ok) throw new Error("Browser session revocation failed");
+      setAuthorization(null);
+      setCsrfToken("");
+      setState("cancelled");
+    } catch {
+      setState("failed");
+    } finally {
+      inFlight.current = false;
+    }
+  };
+
+  let copy = {
+    title: "Sign in. Then return to your scout.",
+    body: "Clerk verifies you. MedawarCRE resolves access from live server records.",
+  };
+  if (!requestHandle) {
+    copy = {
+      title: "Open this from your MCP client.",
+      body: "A signed connection request is required before sign-in.",
+    };
+  } else if (state === "connecting") {
+    copy = {
+      title: "Establishing the connection.",
+      body: "Your browser identity is being exchanged for a revocable MCP session.",
+    };
+  } else if (state === "failed") {
+    copy = {
+      title: "Connection failed safely.",
+      body: "No MCP token was issued. Try once more or contact support if this repeats.",
+    };
+  } else if (state === "review") {
+    copy = {
+      title: "Workspace access needs review.",
+      body: "Your identity matches more than one workspace. Support must resolve it before connection.",
+    };
+  } else if (state === "blocked") {
+    copy = {
+      title: "Workspace access is paused.",
+      body: "No token was issued. Contact support to resolve the account hold before reconnecting.",
+    };
+  } else if (state === "confirm") {
+    copy = {
+      title: "Review this connection.",
+      body: "Approve only if you recognize the client and destination below.",
+    };
+  } else if (state === "cancelled") {
+    copy = {
+      title: "Connection cancelled.",
+      body: "The temporary MedawarCRE browser session has been revoked.",
+    };
+  }
 
   return (
     <main className="connection-shell">
@@ -158,6 +244,35 @@ export function ConnectionScreen({
           </button>
         ) : state === "review" || state === "blocked" ? (
           <p className="support-note">No access token has been issued.</p>
+        ) : state === "confirm" && authorization ? (
+          <div className="consent-review">
+            <dl>
+              <div>
+                <dt>Client</dt>
+                <dd>{authorization.client_name}</dd>
+              </div>
+              <div>
+                <dt>Destination</dt>
+                <dd>{authorization.redirect_origin}</dd>
+              </div>
+              <div>
+                <dt>Workspace</dt>
+                <dd>{authorization.workspace_id}</dd>
+              </div>
+              <div>
+                <dt>Access</dt>
+                <dd>MCP tools</dd>
+              </div>
+            </dl>
+            <div className="consent-actions">
+              <button className="primary-action" type="button" onClick={confirm}>
+                Authorize MCP connection
+              </button>
+              <button className="cancel-action" type="button" onClick={cancel}>
+                Cancel connection
+              </button>
+            </div>
+          </div>
         ) : !isSignedIn ? (
           <SignInButton mode="modal">
             <button className="primary-action" type="button">

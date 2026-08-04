@@ -241,7 +241,7 @@ async def test_every_positive_provider_grant_has_a_bounded_end(tmp_path):
     assert all(row[1] is not None for row in rows)
 
 
-async def test_expired_provider_lease_denies_v1_and_real_mcp_without_event(
+async def test_expired_provider_lease_projects_disabled_v1_state_and_denies_mcp(
     tmp_path,
 ):
     config = provider_config(tmp_path, provider_grant_lease_seconds=1)
@@ -274,7 +274,7 @@ async def test_expired_provider_lease_denies_v1_and_real_mcp_without_event(
             base_url="http://lease.test",
         ) as client:
             api = await client.get(
-                "/v1/deals",
+                "/v1/entitlements",
                 headers={"authorization": f"Bearer {tokens[0].access_token}"},
             )
             mcp = await _raw_mcp_request(
@@ -289,8 +289,9 @@ async def test_expired_provider_lease_denies_v1_and_real_mcp_without_event(
                 },
             )
 
-    assert api.status_code == 403
-    assert api.json()["error"]["code"] == "access_disabled"
+    assert api.status_code == 200
+    assert api.json()["access_enabled"] is False
+    assert api.json()["effective_access"] is None
     assert mcp.status_code == 403
     assert "mcp-session-id" not in mcp.headers
 
@@ -741,7 +742,7 @@ async def test_provider_loss_revokes_open_mcp_api_refresh_and_pending_code(
                 tokens[0].access_token,
             )
             before = await request_client.get(
-                "/v1/deals",
+                "/v1/me",
                 headers={"authorization": f"Bearer {tokens[0].access_token}"},
             )
             body = json_bytes(
@@ -760,7 +761,7 @@ async def test_provider_loss_revokes_open_mcp_api_refresh_and_pending_code(
                 headers=signed_headers("stripe", body),
             )
             after_api = await request_client.get(
-                "/v1/deals",
+                "/v1/me",
                 headers={"authorization": f"Bearer {tokens[0].access_token}"},
             )
             after_mcp = await _raw_mcp_request(

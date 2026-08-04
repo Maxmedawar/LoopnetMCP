@@ -61,7 +61,10 @@ def provider_config(tmp_path, **overrides: Any) -> CreConfig:
 
 def api_client(config: CreConfig, *, app=None) -> httpx.AsyncClient:
     return httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app or starlette_app(config)),
+        transport=httpx.ASGITransport(
+            app=app
+            or starlette_app(config, include_uncertified_deal_routes=True)
+        ),
         base_url="http://provider.test",
     )
 

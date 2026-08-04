@@ -33,28 +33,43 @@ describe("ConnectionScreen", () => {
     expect(screen.queryByRole("link", { name: /billing|dashboard|settings|deals/i })).not.toBeInTheDocument();
   });
 
-  it("exchanges the Clerk token without persistence then resumes OAuth", async () => {
+  it("exchanges the Clerk token without persistence then requires explicit consent", async () => {
     signedIn = true;
     getToken.mockResolvedValue("short-lived-clerk-token");
     const storageWrite = vi.spyOn(Storage.prototype, "setItem");
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          user: { id: 4, email: "buyer@example.test", name: "Buyer" },
-          connection: { status: "ready", workspace_count: 1, workspace_id: "ws_live" },
-          csrf_token: "not-persisted",
-          expires_at: "2026-08-04T13:00:00Z",
-        }),
-        { status: 201, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: 4, email: "buyer@example.test", name: "Buyer" },
+            connection: { status: "ready", workspace_count: 1, workspace_id: "ws_live" },
+            authorization: {
+              client_name: "Claude",
+              redirect_origin: "https://claude.ai",
+              scopes: ["mcp:tools"],
+              workspace_id: "ws_live",
+            },
+            csrf_token: "not-persisted",
+            expires_at: "2026-08-04T13:00:00Z",
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            redirect_to: "https://claude.ai/api/mcp/auth_callback?code=one&state=two",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
     const navigate = vi.fn();
 
     render(<ConnectionScreen mcpOrigin="https://mcp.example.test" navigate={navigate} />);
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        "https://mcp.example.test/v1/browser/session",
+        "https://mcp.example.test/v1/browser/session?request=mcr_req_test",
         expect.objectContaining({
           method: "POST",
           credentials: "include",
@@ -63,8 +78,23 @@ describe("ConnectionScreen", () => {
       );
     });
     expect(storageWrite).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(screen.getByText("Claude")).toBeVisible();
+    expect(screen.getByText("https://claude.ai")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Authorize MCP connection" }));
+    await waitFor(() => {
+      expect(fetch).toHaveBeenLastCalledWith(
+        "https://mcp.example.test/v1/browser/authorization",
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+          headers: expect.objectContaining({ "X-CSRF-Token": "not-persisted" }),
+        }),
+      );
+    });
     expect(navigate).toHaveBeenCalledWith(
-      "https://mcp.example.test/oauth/authorize?request=mcr_req_test",
+      "https://claude.ai/api/mcp/auth_callback?code=one&state=two",
     );
   });
 
@@ -122,5 +152,44 @@ describe("ConnectionScreen", () => {
     expect(await screen.findByText("Workspace access is paused.")).toBeVisible();
     expect(screen.getByText("No access token has been issued.")).toBeVisible();
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("revokes the MedawarCRE browser session when the customer cancels", async () => {
+    signedIn = true;
+    getToken.mockResolvedValue("token");
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: 4, email: "buyer@example.test", name: "Buyer" },
+            connection: { status: "ready", workspace_count: 1, workspace_id: "ws_live" },
+            authorization: {
+              client_name: "Unknown client",
+              redirect_origin: "https://client.example",
+              scopes: ["mcp:tools"],
+              workspace_id: "ws_live",
+            },
+            csrf_token: "csrf",
+            expires_at: "2026-08-04T13:00:00Z",
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ revoked: true }), { status: 200 }));
+
+    render(<ConnectionScreen mcpOrigin="https://mcp.example.test" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel connection" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenLastCalledWith(
+        "https://mcp.example.test/v1/browser/session",
+        expect.objectContaining({
+          method: "DELETE",
+          credentials: "include",
+          headers: { "X-CSRF-Token": "csrf" },
+        }),
+      );
+    });
+    expect(await screen.findByText("Connection cancelled.")).toBeVisible();
   });
 });

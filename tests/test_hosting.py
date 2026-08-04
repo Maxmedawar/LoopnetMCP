@@ -49,7 +49,9 @@ def test_http_app_serves_platform_routes_alongside_mcp(tmp_path):
 
     paths = {getattr(route, "path", None) for route in app.routes}
     assert "/mcp" in paths
-    assert {"/v1/me", "/v1/deals", "/v1/deals/{deal_id:int}"} <= paths
+    assert "/v1/me" in paths
+    assert "/v1/deals" not in paths
+    assert "/v1/deals/{deal_id:int}" not in paths
 
 
 async def test_platform_routes_enforce_auth_through_the_composed_app(tmp_path):

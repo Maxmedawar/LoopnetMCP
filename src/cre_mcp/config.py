@@ -10,6 +10,7 @@ from pydantic import (
     Field,
     SecretStr,
     field_validator,
+    model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -111,6 +112,52 @@ class CreConfig(BaseSettings):
     connection_url: str = Field(
         default="http://localhost:5173/connect",
         validation_alias=_env_aliases("connection_url"),
+    )
+    oauth_client_registrations: dict[str, tuple[str, ...]] = Field(
+        default_factory=dict,
+        validation_alias=_env_aliases("oauth_client_registrations"),
+    )
+    oauth_registration_rate_limit_per_minute: int = Field(
+        default=30,
+        ge=1,
+        le=600,
+        validation_alias=_env_aliases("oauth_registration_rate_limit_per_minute"),
+    )
+    oauth_authorization_rate_limit_per_minute: int = Field(
+        default=30,
+        ge=1,
+        le=3000,
+        validation_alias=_env_aliases("oauth_authorization_rate_limit_per_minute"),
+    )
+    oauth_token_rate_limit_per_minute: int = Field(
+        default=60,
+        ge=1,
+        le=3000,
+        validation_alias=_env_aliases("oauth_token_rate_limit_per_minute"),
+    )
+    oauth_pending_authorizations_per_client: int = Field(
+        default=1024,
+        ge=1,
+        le=10000,
+        validation_alias=_env_aliases("oauth_pending_authorizations_per_client"),
+    )
+    oauth_pending_authorizations_global: int = Field(
+        default=4096,
+        ge=1,
+        le=10000,
+        validation_alias=_env_aliases("oauth_pending_authorizations_global"),
+    )
+    browser_session_rate_limit_per_minute: int = Field(
+        default=10,
+        ge=1,
+        le=600,
+        validation_alias=_env_aliases("browser_session_rate_limit_per_minute"),
+    )
+    browser_sessions_global: int = Field(
+        default=10000,
+        ge=1,
+        le=100000,
+        validation_alias=_env_aliases("browser_sessions_global"),
     )
     human_identity_provider: Literal["disabled", "clerk"] = Field(
         default="disabled",
@@ -457,6 +504,38 @@ class CreConfig(BaseSettings):
             origin_only=False,
         )
 
+    @field_validator("oauth_client_registrations")
+    @classmethod
+    def validate_oauth_client_registrations(
+        cls,
+        value: dict[str, tuple[str, ...]],
+    ) -> dict[str, tuple[str, ...]]:
+        normalized: dict[str, tuple[str, ...]] = {}
+        claimed_redirects: set[str] = set()
+        for raw_name, raw_redirects in value.items():
+            name = raw_name.strip()
+            if not name or len(name) > 128:
+                raise ValueError("OAuth client names must contain 1 to 128 characters")
+            redirects = tuple(
+                sorted(
+                    dict.fromkeys(
+                        _validated_http_url(
+                            item,
+                            field_name="oauth_client_registrations",
+                            origin_only=False,
+                        )
+                        for item in raw_redirects
+                    )
+                )
+            )
+            if not redirects or len(redirects) > 8:
+                raise ValueError("OAuth clients require 1 to 8 redirect URIs")
+            if claimed_redirects.intersection(redirects):
+                raise ValueError("OAuth redirect URIs cannot belong to multiple clients")
+            claimed_redirects.update(redirects)
+            normalized[name] = redirects
+        return normalized
+
     @field_validator("clerk_issuer")
     @classmethod
     def validate_clerk_issuer(cls, value: str | None) -> str | None:
@@ -574,6 +653,28 @@ class CreConfig(BaseSettings):
                 raise ValueError("Skool community URLs must use skool.com")
             normalized[key] = validated
         return normalized
+
+    @model_validator(mode="after")
+    def validate_browser_cookie_same_site_contract(self):
+        if (
+            self.oauth_pending_authorizations_per_client
+            > self.oauth_pending_authorizations_global
+        ):
+            raise ValueError(
+                "per-client pending OAuth limit cannot exceed the global limit"
+            )
+        if (
+            self.human_identity_provider != "clerk"
+            and not self.oauth_client_registrations
+        ):
+            return self
+        issuer_host = (urlsplit(self.oauth_issuer).hostname or "").casefold()
+        connection_host = (urlsplit(self.connection_url).hostname or "").casefold()
+        if issuer_host == connection_host:
+            return self
+        if not self.browser_cookie_secure:
+            raise ValueError("cross-host browser sessions require secure cookies")
+        return self
 
     def model_post_init(self, __context) -> None:
         super().model_post_init(__context)

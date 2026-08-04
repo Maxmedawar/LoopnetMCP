@@ -180,6 +180,66 @@ button {
   font-weight: 600;
 }
 
+.consent-review {
+  max-width: 440px;
+  margin-top: 28px;
+}
+
+.consent-review dl {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+
+.consent-review dl > div {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 18px;
+  align-items: baseline;
+}
+
+.consent-review dt {
+  color: #8f9085;
+  font-size: 13px;
+}
+
+.consent-review dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #e0e0d6;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.consent-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-top: 28px;
+}
+
+.consent-actions .primary-action {
+  margin-top: 0;
+}
+
+.cancel-action {
+  padding: 10px 0;
+  border: 0;
+  color: #a9aa9d;
+  background: transparent;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.cancel-action:hover {
+  color: #ecece5;
+}
+
+.cancel-action:focus-visible {
+  outline: 3px solid #ecece5;
+  outline-offset: 4px;
+}
+
 .survey-stage {
   position: absolute;
   z-index: 1;
@@ -338,6 +398,12 @@ button {
     bottom: auto;
     margin-top: 72px;
     padding-bottom: 12px;
+  }
+
+  .consent-actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
   }
 }
 

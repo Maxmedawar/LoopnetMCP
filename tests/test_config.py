@@ -63,6 +63,14 @@ def test_env_example_documents_every_provider_setting_without_skool_secret():
         "CRE_PROVIDER_GRANT_LEASE_SECONDS",
         "CRE_STRIPE_PRICE_MAPPINGS",
         "CRE_SKOOL_TIER_MAPPINGS",
+        "CRE_OAUTH_CLIENT_REGISTRATIONS",
+        "CRE_OAUTH_REGISTRATION_RATE_LIMIT_PER_MINUTE",
+        "CRE_OAUTH_AUTHORIZATION_RATE_LIMIT_PER_MINUTE",
+        "CRE_OAUTH_TOKEN_RATE_LIMIT_PER_MINUTE",
+        "CRE_OAUTH_PENDING_AUTHORIZATIONS_PER_CLIENT",
+        "CRE_OAUTH_PENDING_AUTHORIZATIONS_GLOBAL",
+        "CRE_BROWSER_SESSION_RATE_LIMIT_PER_MINUTE",
+        "CRE_BROWSER_SESSIONS_GLOBAL",
     }
     documented = [
         line.removeprefix("# ").partition("=")[0]
@@ -98,6 +106,16 @@ def test_clerk_and_connection_urls_are_https_origins_except_loopback():
         {"connection_url": "https://connect.example.test/connect#token"},
         {"clerk_issuer": "https://clerk.example.test/path"},
         {"clerk_authorized_parties": ("https://connect.example.test/path",)},
+        {
+            "oauth_client_registrations": {
+                "Claude": ("http://claude.ai/callback",)
+            }
+        },
+        {
+            "oauth_client_registrations": {
+                "Claude": ("https://claude.ai/callback#fragment",)
+            }
+        },
     )
     for values in invalid:
         with pytest.raises(ValidationError):
@@ -114,6 +132,29 @@ def test_blank_clerk_secrets_and_text_are_unconfigured():
     assert config.clerk_secret_key is None
     assert config.clerk_publishable_key is None
     assert config.clerk_issuer is None
+
+
+def test_cross_host_customer_browser_cookie_requires_secure_none_mode():
+    values = {
+        "_env_file": None,
+        "human_identity_provider": "clerk",
+        "oauth_issuer": "https://mcp.example.test",
+        "connection_url": "https://connect.example.test/connect",
+        "oauth_client_registrations": {
+            "Claude": (
+                "https://claude.ai/api/mcp/auth_callback",
+                "https://claude.ai/api/mcp/auth_callback",
+            )
+        },
+    }
+    config = CreConfig(**values)
+    assert config.browser_cookie_secure
+    assert config.oauth_client_registrations == {
+        "Claude": ("https://claude.ai/api/mcp/auth_callback",)
+    }
+
+    with pytest.raises(ValidationError, match="cross-host browser sessions require secure"):
+        CreConfig(**values, browser_cookie_secure=False)
 
 
 def test_operations_console_origin_is_https_origin_or_disabled():
