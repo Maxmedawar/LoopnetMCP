@@ -10,6 +10,9 @@ GLOBAL_TABLES = frozenset(
         "plans",
         "staff_roles",
         "oauth_clients",
+        "browser_sessions",
+        "operator_sessions",
+        "oauth_authorization_requests",
         "internal_opportunities",
         "legacy_id_aliases",
     }
@@ -28,6 +31,8 @@ TENANT_TABLES = frozenset(
         "oauth_sessions",
         "oauth_codes",
         "oauth_refresh_history",
+        "skool_join_tasks",
+        "skool_reconciliations",
         "external_accounts",
         "provider_events",
         "provider_event_attempts",
@@ -57,6 +62,9 @@ EXPECTED_RLS_TABLES = TENANT_TABLES | frozenset(
         "users",
         "human_identities",
         "staff_roles",
+        "browser_sessions",
+        "operator_sessions",
+        "oauth_authorization_requests",
         "internal_opportunities",
         "legacy_id_aliases",
     }
@@ -255,6 +263,58 @@ ADMIN_COLUMN_READS = {
             "revoked_at",
         }
     ),
+    "browser_sessions": frozenset(
+        {
+            "id",
+            "user_id",
+            "expires_at",
+            "revoked_at",
+            "created_at",
+            "updated_at",
+        }
+    ),
+    "operator_sessions": frozenset(
+        {
+            "id",
+            "user_id",
+            "expires_at",
+            "revoked_at",
+            "created_at",
+            "updated_at",
+        }
+    ),
+    "oauth_authorization_requests": frozenset(
+        {
+            "id",
+            "client_id",
+            "redirect_uri",
+            "scopes",
+            "audience",
+            "resource",
+            "expires_at",
+            "consumed_at",
+            "created_at",
+        }
+    ),
+    "skool_reconciliations": frozenset(
+        {
+            "id",
+            "workspace_id",
+            "community_id",
+            "source",
+            "observed_at",
+            "confidence",
+            "complete",
+            "certainty",
+            "reason_code",
+            "member_count",
+            "mapped_member_count",
+            "discrepancy_count",
+            "conflict_count",
+            "created_by",
+            "created_at",
+        }
+    ),
 }
 ADMIN_READ_TABLES = EXPECTED_TABLES - frozenset(ADMIN_COLUMN_READS)
 SERVICE_OWNED_TABLES = frozenset(
@@ -266,9 +326,14 @@ SERVICE_OWNED_TABLES = frozenset(
         "oauth_sessions",
         "oauth_codes",
         "oauth_refresh_history",
+        "browser_sessions",
+        "operator_sessions",
+        "oauth_authorization_requests",
         "external_accounts",
         "provider_events",
         "provider_event_attempts",
+        "skool_join_tasks",
+        "skool_reconciliations",
     }
 )
 IMMUTABLE_TABLES = frozenset(
@@ -282,13 +347,13 @@ ADMIN_MUTATION_TABLES = (
     - SERVICE_OWNED_TABLES
     - IMMUTABLE_TABLES
 )
-EXPECTED_MIGRATION_VERSION = 1
+EXPECTED_MIGRATION_VERSION = 2
 SCHEMA_NAME = "medawarcre"
 
 # Generated from ``catalog.catalog_fingerprint()`` on the reviewed PostgreSQL
 # 16 launch schema. Any schema migration must update this value deliberately.
 EXPECTED_CATALOG_FINGERPRINT = (
-    "3119230b660bee9318b6ae86f602a3a3f6baf22a193b6c472036ee031f1fceb5"
+    "40f025fcf85251cf340428438c5e5ebf3b20462ea8ee59c5ac882f9a94e47eef"
 )
 
 __all__ = [

@@ -68,17 +68,17 @@ def test_pool_context_is_transaction_local_and_readiness_is_strict(
             connection.execute(
                 "INSERT INTO medawarcre.schema_migrations"
                 "(version,description,checksum,state,dirty) "
-                "VALUES (2,'unexpected',%s,'pending',false)",
+                "VALUES (3,'unexpected',%s,'pending',false)",
                 ("0" * 64,),
             )
         readiness = check_readiness(database, expected=load_migrations())
         assert readiness.ok is False
-        assert readiness.unexpected_versions == (2,)
-        assert readiness.non_applied_versions == (2,)
+        assert readiness.unexpected_versions == (3,)
+        assert readiness.non_applied_versions == (3,)
         with psycopg.connect(admin_dsn) as connection:
             connection.execute("SET ROLE medawarcre_migration")
             connection.execute(
-                "DELETE FROM medawarcre.schema_migrations WHERE version=2"
+                "DELETE FROM medawarcre.schema_migrations WHERE version=3"
             )
             connection.execute(
                 "UPDATE medawarcre.schema_migrations "

@@ -95,6 +95,8 @@ def test_rls_and_composite_constraints_block_cross_tenant_access(
         "search_results",
         "jobs",
         "job_attempts",
+        "skool_join_tasks",
+        "skool_reconciliations",
     )
     for table in protected_control_tables:
         with psycopg.connect(app_dsn) as connection:
@@ -131,6 +133,11 @@ def test_rls_and_composite_constraints_block_cross_tenant_access(
         "legacy_id_aliases",
         "jobs",
         "job_attempts",
+        "browser_sessions",
+        "operator_sessions",
+        "oauth_authorization_requests",
+        "skool_join_tasks",
+        "skool_reconciliations",
     ):
         with psycopg.connect(app_dsn) as connection:
             connection.execute(
@@ -673,11 +680,11 @@ def test_app_identity_rows_are_actor_owned_while_deal_content_is_shared(
             "INSERT INTO medawarcre.access_grants("
             "workspace_id,subject_user_id,scope,source,external_ref_hash,profile,"
             "status,starts_at) VALUES "
-            "(%s,NULL,'workspace','fixture',%s,'full_operator','active',"
+            "(%s,NULL,'workspace','jv',%s,'full_operator','active',"
             "statement_timestamp()),"
-            "(%s,%s,'subject','fixture',%s,'local_scout','active',"
+            "(%s,%s,'subject','manual',%s,'local_scout','active',"
             "statement_timestamp()),"
-            "(%s,%s,'subject','fixture',%s,'local_scout','active',"
+            "(%s,%s,'subject','manual',%s,'local_scout','active',"
             "statement_timestamp())",
             (
                 workspace_id,
@@ -869,10 +876,11 @@ def test_admin_console_cannot_read_or_mutate_auth_and_provider_secrets(
         )
         connection.execute(
             "INSERT INTO medawarcre.access_grants("
-            "workspace_id,scope,source,external_ref_hash,profile,status,starts_at) "
-            "VALUES (%s,'workspace','stripe',%s,'full_operator','active',"
-            "statement_timestamp())",
-            (workspace_id, b"g" * 32),
+            "workspace_id,subject_user_id,scope,source,external_ref_hash,profile,"
+            "status,starts_at,ends_at) "
+            "VALUES (%s,%s,'subject','stripe',%s,'full_operator','active',"
+            "statement_timestamp(),statement_timestamp()+interval '1 day')",
+            (workspace_id, actor_id, b"g" * 32),
         )
         external_account_id = connection.execute(
             "INSERT INTO medawarcre.external_accounts("

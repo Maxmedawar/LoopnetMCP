@@ -12,6 +12,15 @@ SERVICE_ROLES = {
     "worker": "medawarcre_worker",
     "scheduler": "medawarcre_scheduler",
 }
+SERVICE_FUNCTIONS_BY_ROLE = {
+    "medawarcre_oauth": frozenset(
+        {("resolve_oauth_authority", "bytea, text, text")}
+    ),
+    "medawarcre_provider_ingress": frozenset(),
+    "medawarcre_provider_reconcile": frozenset(),
+    "medawarcre_worker": frozenset(),
+    "medawarcre_scheduler": frozenset(),
+}
 
 
 class UnsafeDatabaseRoleError(RuntimeError):
@@ -343,15 +352,16 @@ def assert_admission_session(connection: psycopg.Connection) -> None:
     assert_exact_group_session(connection, ADMISSION_ROLE)
 
 
-def assert_group_has_no_object_authority(
+def _assert_group_object_authority(
     connection: psycopg.Connection,
     group_role: str,
+    expected_functions: frozenset[tuple[str, str]],
 ) -> None:
-    """Reject ownership, default ACLs, or direct grants on a dormant service role."""
+    """Require each service role's exact narrow object-authority contract."""
     if group_role not in SERVICE_ROLES.values():
         raise ValueError("unsupported PostgreSQL service group role")
     connection.execute("SET search_path TO pg_catalog")
-    row = connection.execute(
+    ownership = connection.execute(
         """
         SELECT
             EXISTS (
@@ -400,53 +410,147 @@ def assert_group_has_no_object_authority(
             )
             OR EXISTS (
                 SELECT 1
-                FROM (
-                    SELECT acl.grantee
-                    FROM pg_catalog.pg_database database
-                    CROSS JOIN LATERAL pg_catalog.aclexplode(database.datacl) acl
-                    WHERE database.datname=pg_catalog.current_database()
-                    UNION ALL
-                    SELECT acl.grantee
-                    FROM pg_catalog.pg_namespace namespace
-                    CROSS JOIN LATERAL pg_catalog.aclexplode(namespace.nspacl) acl
-                    UNION ALL
-                    SELECT acl.grantee
-                    FROM pg_catalog.pg_class relation
-                    CROSS JOIN LATERAL pg_catalog.aclexplode(relation.relacl) acl
-                    UNION ALL
-                    SELECT acl.grantee
-                    FROM pg_catalog.pg_attribute attribute
-                    CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) acl
-                    WHERE attribute.attnum > 0 AND NOT attribute.attisdropped
-                    UNION ALL
-                    SELECT acl.grantee
-                    FROM pg_catalog.pg_proc procedure
-                    CROSS JOIN LATERAL pg_catalog.aclexplode(procedure.proacl) acl
-                    UNION ALL
-                    SELECT acl.grantee
-                    FROM pg_catalog.pg_type type_record
-                    CROSS JOIN LATERAL pg_catalog.aclexplode(type_record.typacl) acl
-                    UNION ALL
-                    SELECT acl.grantee
-                    FROM pg_catalog.pg_default_acl default_acl
-                    CROSS JOIN LATERAL pg_catalog.aclexplode(default_acl.defaclacl) acl
-                ) direct_acl
-                WHERE direct_acl.grantee=role.oid
+                FROM pg_catalog.pg_default_acl default_acl
+                WHERE default_acl.defaclrole=role.oid
             )
             OR EXISTS (
                 SELECT 1
                 FROM pg_catalog.pg_default_acl default_acl
-                WHERE default_acl.defaclrole=role.oid
+                CROSS JOIN LATERAL pg_catalog.aclexplode(
+                    default_acl.defaclacl
+                ) acl
+                WHERE acl.grantee=role.oid
             )
         FROM pg_catalog.pg_roles role
         WHERE role.rolname=%s
         """,
         (group_role,),
     ).fetchone()
-    if row is None or bool(row[0]):
+    if ownership is None or bool(ownership[0]):
         raise UnsafeDatabaseRoleError(
-            "service group role violates the zero-privilege authority contract"
+            "service group role violates the exact authority contract"
         )
+
+    direct_acl = {
+        tuple(row)
+        for row in connection.execute(
+            """
+            SELECT object_type,schema_name,object_name,privilege_type,
+                   is_grantable,grantor_name
+            FROM (
+                SELECT 'database'::text AS object_type,
+                       ''::text AS schema_name,
+                       database.datname::text AS object_name,
+                       acl.privilege_type::text AS privilege_type,
+                       acl.is_grantable,
+                       grantor.rolname::text AS grantor_name,
+                       acl.grantee
+                FROM pg_catalog.pg_database database
+                CROSS JOIN LATERAL pg_catalog.aclexplode(database.datacl) acl
+                JOIN pg_catalog.pg_roles grantor ON grantor.oid=acl.grantor
+                WHERE database.datname=pg_catalog.current_database()
+                UNION ALL
+                SELECT 'schema',namespace.nspname,'',acl.privilege_type,
+                       acl.is_grantable,grantor.rolname,acl.grantee
+                FROM pg_catalog.pg_namespace namespace
+                CROSS JOIN LATERAL pg_catalog.aclexplode(namespace.nspacl) acl
+                JOIN pg_catalog.pg_roles grantor ON grantor.oid=acl.grantor
+                UNION ALL
+                SELECT 'relation',namespace.nspname,relation.relname,
+                       acl.privilege_type,acl.is_grantable,grantor.rolname,
+                       acl.grantee
+                FROM pg_catalog.pg_class relation
+                JOIN pg_catalog.pg_namespace namespace
+                  ON namespace.oid=relation.relnamespace
+                CROSS JOIN LATERAL pg_catalog.aclexplode(relation.relacl) acl
+                JOIN pg_catalog.pg_roles grantor ON grantor.oid=acl.grantor
+                UNION ALL
+                SELECT 'column',namespace.nspname,
+                       relation.relname || '.' || attribute.attname,
+                       acl.privilege_type,acl.is_grantable,grantor.rolname,
+                       acl.grantee
+                FROM pg_catalog.pg_attribute attribute
+                JOIN pg_catalog.pg_class relation
+                  ON relation.oid=attribute.attrelid
+                JOIN pg_catalog.pg_namespace namespace
+                  ON namespace.oid=relation.relnamespace
+                CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) acl
+                JOIN pg_catalog.pg_roles grantor ON grantor.oid=acl.grantor
+                WHERE attribute.attnum > 0 AND NOT attribute.attisdropped
+                UNION ALL
+                SELECT 'function',namespace.nspname,
+                       procedure.proname || '|' ||
+                       pg_catalog.oidvectortypes(procedure.proargtypes),
+                       acl.privilege_type,acl.is_grantable,grantor.rolname,
+                       acl.grantee
+                FROM pg_catalog.pg_proc procedure
+                JOIN pg_catalog.pg_namespace namespace
+                  ON namespace.oid=procedure.pronamespace
+                CROSS JOIN LATERAL pg_catalog.aclexplode(procedure.proacl) acl
+                JOIN pg_catalog.pg_roles grantor ON grantor.oid=acl.grantor
+                UNION ALL
+                SELECT 'type',namespace.nspname,type_record.typname,
+                       acl.privilege_type,acl.is_grantable,grantor.rolname,
+                       acl.grantee
+                FROM pg_catalog.pg_type type_record
+                JOIN pg_catalog.pg_namespace namespace
+                  ON namespace.oid=type_record.typnamespace
+                CROSS JOIN LATERAL pg_catalog.aclexplode(type_record.typacl) acl
+                JOIN pg_catalog.pg_roles grantor ON grantor.oid=acl.grantor
+            ) object_acl
+            JOIN pg_catalog.pg_roles role ON role.oid=object_acl.grantee
+            WHERE role.rolname=%s
+            ORDER BY object_type,schema_name,object_name,privilege_type
+            """,
+            (group_role,),
+        ).fetchall()
+    }
+    expected_acl = {
+        (
+            "function",
+            "medawarcre",
+            f"{function_name}|{argument_types}",
+            "EXECUTE",
+            False,
+            "medawarcre_migration",
+        )
+        for function_name, argument_types in expected_functions
+    }
+    if expected_functions:
+        expected_acl.add(
+            (
+                "schema",
+                "medawarcre",
+                "",
+                "USAGE",
+                False,
+                "medawarcre_migration",
+            )
+        )
+    if direct_acl != expected_acl:
+        raise UnsafeDatabaseRoleError(
+            "service group role violates the exact authority contract"
+        )
+
+
+def assert_group_has_no_object_authority(
+    connection: psycopg.Connection,
+    group_role: str,
+) -> None:
+    """Require a clean bootstrap role with no object authority."""
+    _assert_group_object_authority(connection, group_role, frozenset())
+
+
+def assert_group_has_exact_object_authority(
+    connection: psycopg.Connection,
+    group_role: str,
+) -> None:
+    """Require the reviewed function-only authority for a service role."""
+    try:
+        expected_functions = SERVICE_FUNCTIONS_BY_ROLE[group_role]
+    except KeyError as error:
+        raise ValueError("unsupported PostgreSQL service group role") from error
+    _assert_group_object_authority(connection, group_role, expected_functions)
 
 
 def assert_service_session(
@@ -459,15 +563,17 @@ def assert_service_session(
     except KeyError as error:
         raise ValueError("unsupported PostgreSQL service identity") from error
     assert_exact_group_session(connection, group_role)
-    assert_group_has_no_object_authority(connection, group_role)
+    assert_group_has_exact_object_authority(connection, group_role)
 
 
 __all__ = [
     "ADMISSION_ROLE",
     "SERVICE_ROLES",
+    "SERVICE_FUNCTIONS_BY_ROLE",
     "UnsafeDatabaseRoleError",
     "assert_admission_session",
     "assert_exact_group_session",
+    "assert_group_has_exact_object_authority",
     "assert_group_has_no_object_authority",
     "assert_service_session",
 ]

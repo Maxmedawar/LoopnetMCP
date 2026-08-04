@@ -3,7 +3,8 @@ FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup,
      medawarcre_admission, medawarcre_oauth, medawarcre_provider_ingress,
      medawarcre_provider_reconcile, medawarcre_worker, medawarcre_scheduler;
 GRANT USAGE ON SCHEMA medawarcre
-TO medawarcre_app, medawarcre_admin, medawarcre_backup, medawarcre_admission;
+TO medawarcre_app, medawarcre_admin, medawarcre_backup, medawarcre_admission,
+   medawarcre_oauth;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA medawarcre
 FROM PUBLIC, medawarcre_app, medawarcre_admin, medawarcre_backup,
@@ -129,6 +130,22 @@ GRANT SELECT (
     id, workspace_id, subject_user_id, tool_name, request_correlation_id,
     issued_at, expires_at, consumed_at, revoked_at
 ) ON medawarcre.tool_approvals TO medawarcre_admin;
+GRANT SELECT (
+    id, user_id, expires_at, revoked_at, created_at, updated_at
+) ON medawarcre.browser_sessions TO medawarcre_admin;
+GRANT SELECT (
+    id, user_id, expires_at, revoked_at, created_at, updated_at
+) ON medawarcre.operator_sessions TO medawarcre_admin;
+GRANT SELECT (
+    id, client_id, redirect_uri, scopes, audience, resource,
+    expires_at, consumed_at, created_at
+) ON medawarcre.oauth_authorization_requests TO medawarcre_admin;
+GRANT SELECT ON medawarcre.skool_join_tasks TO medawarcre_admin;
+GRANT SELECT (
+    id, workspace_id, community_id, source, observed_at, confidence,
+    complete, certainty, reason_code, member_count, mapped_member_count,
+    discrepancy_count, conflict_count, created_by, created_at
+) ON medawarcre.skool_reconciliations TO medawarcre_admin;
 GRANT INSERT, UPDATE, DELETE ON
     medawarcre.users,
     medawarcre.workspaces,
@@ -173,6 +190,9 @@ GRANT EXECUTE ON FUNCTION medawarcre.consume_daily_quota(
 GRANT EXECUTE ON FUNCTION medawarcre.record_access_decision(
     uuid, text, boolean, uuid, uuid, bytea, uuid, text, text, text, text
 ) TO medawarcre_admission;
+GRANT EXECUTE ON FUNCTION medawarcre.resolve_oauth_authority(
+    bytea, text, text
+) TO medawarcre_oauth;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE medawarcre_migration IN SCHEMA medawarcre
     REVOKE ALL ON TABLES FROM PUBLIC;

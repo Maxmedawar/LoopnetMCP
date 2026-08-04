@@ -24,9 +24,11 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from cre_mcp.postgres.authority import (
     ADMISSION_ROLE,
+    SERVICE_FUNCTIONS_BY_ROLE,
     SERVICE_ROLES,
     UnsafeDatabaseRoleError,
     assert_exact_group_session,
+    assert_group_has_exact_object_authority,
     assert_group_has_no_object_authority,
 )
 from cre_mcp.postgres.catalog import catalog_fingerprint
@@ -605,7 +607,11 @@ def _assert_clean_target(connection: psycopg.Connection) -> None:
         )
 
 
-def _assert_bootstrap_roles(connection: psycopg.Connection) -> None:
+def _assert_bootstrap_roles(
+    connection: psycopg.Connection,
+    *,
+    provisioned: bool = False,
+) -> None:
     connection.execute("SET search_path TO pg_catalog")
     rows = {
         str(row[0]): tuple(row[1:])
@@ -653,7 +659,10 @@ def _assert_bootstrap_roles(connection: psycopg.Connection) -> None:
         )
     try:
         for role in _SERVICE_ROLE_NAMES:
-            assert_group_has_no_object_authority(connection, role)
+            if provisioned:
+                assert_group_has_exact_object_authority(connection, role)
+            else:
+                assert_group_has_no_object_authority(connection, role)
     except UnsafeDatabaseRoleError as error:
         raise BackupVerificationError(
             "target service role bootstrap authority is invalid"
@@ -689,7 +698,7 @@ def _table_inventory(connection: psycopg.Connection) -> tuple[str, ...]:
 
 
 def _verify_exact_privileges(connection: psycopg.Connection) -> None:
-    _assert_bootstrap_roles(connection)
+    _assert_bootstrap_roles(connection, provisioned=True)
     database_row = connection.execute(
         "SELECT owner.rolname,database.datacl IS NULL "
         "FROM pg_catalog.pg_database database "
@@ -870,7 +879,10 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
             "has_schema_privilege(%s,%s,'CREATE')",
             (role, SCHEMA_NAME, role, SCHEMA_NAME),
         ).fetchone()
-        expected_usage = role not in _SERVICE_ROLE_NAMES
+        expected_usage = (
+            role not in _SERVICE_ROLE_NAMES
+            or bool(SERVICE_FUNCTIONS_BY_ROLE[role])
+        )
         if bool(usage) != expected_usage or create:
             raise BackupVerificationError(
                 "restored schema privileges do not match the exact role contract"
@@ -921,6 +933,10 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
             "record_access_decision",
             "uuid, text, boolean, uuid, uuid, bytea, uuid, text, text, text, text",
         ): {ADMISSION_ROLE},
+        (
+            "resolve_oauth_authority",
+            "bytea, text, text",
+        ): {SERVICE_ROLES["oauth"]},
     }
     if functions != set(function_contract):
         raise BackupVerificationError(

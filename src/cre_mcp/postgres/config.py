@@ -63,8 +63,13 @@ class PostgresSettings:
         )
 
     @classmethod
-    def from_env(cls, prefix: str = "MEDAWARCRE_POSTGRES_") -> "PostgresSettings":
-        dsn = os.environ.get("MEDAWARCRE_DATABASE_URL", "")
+    def from_env(
+        cls,
+        prefix: str = "MEDAWARCRE_POSTGRES_",
+        *,
+        dsn_env: str = "MEDAWARCRE_DATABASE_URL",
+    ) -> "PostgresSettings":
+        dsn = os.environ.get(dsn_env, "")
 
         def integer(name: str, default: int) -> int:
             raw = os.environ.get(prefix + name)

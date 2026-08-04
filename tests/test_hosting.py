@@ -317,16 +317,26 @@ def test_hosting_artifacts_are_present_and_keep_secrets_out_of_image():
     dockerignore = (ROOT / ".dockerignore").read_text().splitlines()
     tunnel = (ROOT / "deploy/cloudflared-config.example.yml").read_text()
     deploy = (ROOT / "deploy/DEPLOY.md").read_text()
+    env_example = (ROOT / ".env.example").read_text()
 
     assert dockerfile.startswith("FROM python:3.11-slim")
     assert "CRE_TRANSPORT=http" in dockerfile
     assert "CRE_BROWSER_PATH=/usr/bin/chromium" in dockerfile
     assert "EXPOSE 8000" in dockerfile
     assert '["python", "-m", "cre_mcp", "--http"]' in dockerfile
+    assert "pip install '.[truth]'" in dockerfile
+    assert 'python -c "import cre_mcp.server"' in dockerfile
+    assert "pip install -e ." not in dockerfile
     assert ".env" in dockerignore
+    assert "LAUNCH BLOCKED" in tunnel
     assert "service: http://cre-mcp:8000" in tunnel
     assert "service: http_status:404" in tunnel
-    assert "Cloudflare Access" in deploy
-    assert "claude mcp add --transport http" in deploy
-    assert "CRE_PROXY_URL" in deploy
-    assert "Max's steps" in deploy
+    assert "Status: **not runnable and not approved for public deployment**" in deploy
+    assert "docs/launch/PROGRAM_STATUS.md" in deploy
+    assert "there is no supported deployment command" in deploy
+    assert "docker run -d" not in deploy
+    assert "cloudflared tunnel route dns" not in deploy
+    assert "claude mcp add --transport http" not in deploy
+    assert "not a production deployment template" in env_example
+    assert "MEDAWARCRE_DATABASE_URL" not in env_example
+    assert "MEDAWARCRE_OAUTH_DATABASE_URL" not in env_example

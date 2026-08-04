@@ -33,7 +33,8 @@ RUN useradd --create-home --uid 10001 cremcp \
 WORKDIR /app
 COPY --chown=cremcp:cremcp pyproject.toml ./
 COPY --chown=cremcp:cremcp src ./src
-RUN pip install -e .
+RUN pip install '.[truth]'
+RUN python -c "import cre_mcp.server"
 
 USER cremcp
 

@@ -1,4 +1,6 @@
-# Replace both placeholders after `cloudflared tunnel create medawar-cre`.
+# LAUNCH BLOCKED. Historical ingress shape only. Do not create a tunnel, route
+# DNS, or replace these placeholders until deploy/DEPLOY.md is replaced by an
+# approved executable runbook.
 tunnel: <TUNNEL_UUID>
 credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
 

@@ -61,22 +61,22 @@ def _parse_daily_quotas(value: object) -> dict[str, int] | None:
 
 @dataclass(frozen=True)
 class WorkspaceAuthority:
-    id: int
+    id: int | str
     public_id: str
     name: str
-    plan_id: int | None
+    plan_id: int | str | None
 
 
 @dataclass(frozen=True)
 class MembershipAuthority:
-    id: int
-    user_id: int
+    id: int | str
+    user_id: int | str
     role: str
 
 
 @dataclass(frozen=True)
 class InternalAdminAuthority:
-    user_id: int
+    user_id: int | str
     role: str
 
 

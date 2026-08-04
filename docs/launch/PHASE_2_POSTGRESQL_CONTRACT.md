@@ -1,10 +1,11 @@
 # Phase 2 PostgreSQL implementation contract
 
-Status: implemented foundation under test, not production approval
+Status: migration `0002` and OAuth authority checkpoint under final review,
+not hosted-functionality or production approval
 
-Branch: `feature/production-postgresql`
+Branch: `integration/cloud-platform-launch`
 
-Base: `289241601ed6aec9fd8999a7601a22a62d4b45e1`
+Checkpoint base: `e00f90fca171b8218dfcaf90ccb9c06bce48b027`
 
 ## Outcome and boundary
 
@@ -47,12 +48,14 @@ logins require `INHERIT FALSE` both on the login and its membership.
 - `medawarcre_admission`: `NOLOGIN NOINHERIT`, receives schema usage and
   EXECUTE only on the three admission functions. Its login must also be
   `NOINHERIT` and must explicitly `SET ROLE medawarcre_admission`.
-- `medawarcre_oauth`, `medawarcre_provider_ingress`,
-  `medawarcre_provider_reconcile`, `medawarcre_worker`, and
-  `medawarcre_scheduler`: `NOLOGIN NOINHERIT` service boundaries. Their login
-  roles must also be `NOINHERIT`, receive one exact membership, and explicitly
-  `SET ROLE`. They intentionally receive no object privilege until a reviewed
-  migration grants execution on their narrow service functions.
+- `medawarcre_oauth`: `NOLOGIN NOINHERIT`, receives schema usage and EXECUTE
+  only on `resolve_oauth_authority(bytea,text,text)`. Its exact login, group,
+  direct ACL, ownership, and default-ACL contract is verified before opening
+  the dedicated pool and before every resolution.
+- `medawarcre_provider_ingress`, `medawarcre_provider_reconcile`,
+  `medawarcre_worker`, and `medawarcre_scheduler`: `NOLOGIN NOINHERIT` dormant
+  service boundaries. Their logins must also be `NOINHERIT`, receive one exact
+  membership, and explicitly `SET ROLE`. They receive no object privilege yet.
 
 Every preflight rejects superusers, `BYPASSRLS`, cluster capabilities, unsafe
 or extra transitive memberships, membership-option drift, direct database,
@@ -95,6 +98,13 @@ have one active matching row in `staff_roles`. The exact staff vocabulary is
 `owner`, `admin`, `jv_operations`, `support`, `security_audit`, and
 `read_only_analyst`.
 
+The OAuth authority repository uses a separate bounded pool configured only
+from `MEDAWARCRE_OAUTH_DATABASE_URL` and the `MEDAWARCRE_OAUTH_POSTGRES_`
+settings prefix. It exposes no general SQL or connection API. Each operation is
+a read-only transaction, revalidates the exact service authority, explicitly
+sets the OAuth role, hashes the raw bearer token with SHA-256, and invokes one
+fixed function statement. Reset clears the role and restores `pg_catalog`.
+
 ## Migration protocol
 
 Ordered SQL resources are the source of truth. Version, description, and
@@ -111,18 +121,22 @@ reason. Applied checksum drift, description drift, version gaps, unexpected
 versions, non-applied rows, or dirty rows fail closed. There are no automatic
 down migrations.
 
-The repository has no released PostgreSQL schema and this branch has not been
-applied to external infrastructure. For that reason, the Phase 2 launch schema
-is folded into fresh migration `0001_authoritative_cloud.sql`. Once any shared
-or production-like database applies it, the file becomes immutable and every
-change must be a new migration.
+The certified foundation is migration `0001_authoritative_cloud.sql`.
+Migration `0002_hosted_lifecycle_and_oauth_authority.sql` adds this checkpoint's
+hosted lifecycle tables, durable grant invariants, exact OAuth function ACL,
+and one-snapshot authority function. Neither migration has been applied to
+external infrastructure in this program. Once a shared or production-like
+database applies a migration, that file is immutable and every later change
+must use a new migration.
 
 ## Launch schema
 
 The schema uses UUID, `timestamptz`, `date`, `jsonb`, `text[]`, `bytea`, and
-bounded `numeric` types. Money does not use floating point. Tenant child rows
-use composite foreign keys containing `workspace_id` so a foreign identifier
-cannot silently cross tenants.
+bounded `numeric` types. Money does not use floating point. Tenant-owned
+subject and object references use composite foreign keys containing
+`workspace_id` so a foreign identifier cannot silently cross tenants. Global
+staff audit actors reference `users` directly because platform admins do not
+become tenant members merely to perform authorized operations.
 
 The schema covers:
 
@@ -130,9 +144,13 @@ The schema covers:
   `memberships`, `staff_roles`, and `territories`;
 - account and entitlement: `workspace_accounts`, `plans`, `subscriptions`,
   and `access_grants`, including invited, grace, unpaid, override, expiring,
-  expired, and revoked launch states;
-- OAuth persistence: `oauth_clients`, `oauth_codes`, `oauth_sessions`, and
-  `oauth_refresh_history`, with only hashes stored for bearer material;
+  expired, and revoked launch states. Grant source vocabulary, source/scope
+  binding, and mandatory Stripe/Skool leases are validated constraints;
+- OAuth persistence: `oauth_clients`, `oauth_codes`, `oauth_sessions`,
+  `oauth_refresh_history`, `browser_sessions`, `operator_sessions`, and
+  `oauth_authorization_requests`, with only hashes stored for bearer material;
+- audited Skool lifecycle: `skool_join_tasks` and `skool_reconciliations`, with
+  tenant-bound subjects and globally authorized staff actor attribution;
 - provider persistence: `external_accounts`, `provider_events`, and
   `provider_event_attempts`;
 - customer integrations: `connected_clients` and `integration_events`;
@@ -206,8 +224,18 @@ are explicit:
   customer-readable. A customer can create or mutate only an unowned or
   self-owned deal and only their own notes;
 - OAuth sessions, codes, refresh history, external accounts, provider receipts,
-  and job rows receive no customer ACL. Their user references use composite
-  workspace-membership foreign keys and cannot cross a tenant boundary.
+  hosted browser/operator sessions, authorization requests, Skool lifecycle
+  rows, and job rows receive no customer ACL. Tenant subject references use
+  composite workspace-membership foreign keys and cannot cross a tenant
+  boundary.
+
+The fixed OAuth function returns one database-snapshot decision covering the
+token target and version, client, user, workspace lifecycle, membership,
+commercial account, structurally valid grants, plan and quotas, normalized
+territories, staff role, and identity-wide JV authority. Disabled or malformed
+live authority yields a stable denial reason and no tenant context. Revoked,
+expired, wrong-target, inactive-client, or obsolete-version credentials return
+no row. The function re-enforces provider grant invariants as defense in depth.
 
 Internal reads require live staff authorization. The admin console has safe
 metadata column grants on auth and provider tables, but cannot select credential
@@ -262,20 +290,23 @@ The operator CLI accepts DSNs only through environment variables. Its JSON
 results and errors never interpolate database exception text or connection
 strings.
 
-## Exact Phase 3 launch blockers
+## Exact remaining Phase 3 launch blockers
 
-- [PHASE 3 LAUNCH BLOCKER] Provision a dedicated OAuth and authentication
-  bootstrap group role, login, pool, narrow functions, ACL tests, and rotation
-  procedure. Neither app nor admin may stand in for it.
+- [CHECKPOINT IMPLEMENTED, NOT WIRED] The dedicated OAuth group role, exact
+  function-only ACL, pool, one-statement live-authority repository, catalog
+  checks, and restore tests are present. Hosted HTTP still does not consume the
+  repository, and production login provisioning and secret rotation remain
+  blocked.
 - [PHASE 3 LAUNCH BLOCKER] Provision dedicated provider-ingress and provider-
   reconciliation group roles, logins, pools, narrow functions, ACL tests, and
   replay operations. Neither app nor admin may stand in for them.
 - [PHASE 3 LAUNCH BLOCKER] Provision distinct cross-tenant worker and scheduler
   roles, pools, claim functions, lease recovery rules, and ACL tests. The admin
   role is not an implicit worker identity.
-- [PHASE 3 LAUNCH BLOCKER] Replace every authoritative OAuth, provider,
-  entitlement, access registry, audit JSONL, and cloud persistence call site
-  with the reviewed PostgreSQL repositories and admission functions.
+- [PHASE 3 LAUNCH BLOCKER] Wire the OAuth repository into one request-scoped
+  hosted persistence bundle, then replace every provider, entitlement, access,
+  audit, and cloud-persistence call site with reviewed PostgreSQL repositories
+  and admission functions. No compatibility fallback is allowed.
 - [PHASE 3 LAUNCH BLOCKER] Boot the real service and all required endpoints
   against a restored PostgreSQL target using only their dedicated service
   logins. The Phase 2 synthetic smoke is necessary but does not prove this.

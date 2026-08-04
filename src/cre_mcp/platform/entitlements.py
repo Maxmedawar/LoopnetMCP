@@ -154,7 +154,7 @@ def provider_entitlement_target(
     return (_required(plan_key, "plan_key"), Profile(profile).value)
 @dataclass(frozen=True)
 class AccountRecord:
-    workspace_id: int
+    workspace_id: WorkspaceRef
     state: str
     reason: str | None
     updated_at: datetime
@@ -204,10 +204,10 @@ class ProviderEvent:
 
 @dataclass(frozen=True)
 class EffectiveAccess:
-    workspace_id: int
+    workspace_id: WorkspaceRef
     profile: Profile
     plan_key: str
-    grant_ids: tuple[int, ...]
+    grant_ids: tuple[int | str, ...]
     sources: tuple[str, ...]
     expires_at: datetime | None
 

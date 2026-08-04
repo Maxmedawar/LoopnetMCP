@@ -264,7 +264,7 @@ class AuthenticatedSession:
 
     session_id: str
     workspace_id: str
-    user_id: int
+    user_id: int | str
     client_id: str
     scopes: tuple[str, ...]
     audience: str
