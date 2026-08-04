@@ -103,3 +103,28 @@ def test_blank_clerk_secrets_and_text_are_unconfigured():
     assert config.clerk_secret_key is None
     assert config.clerk_publishable_key is None
     assert config.clerk_issuer is None
+
+
+def test_operations_console_origin_is_https_origin_or_disabled():
+    assert (
+        CreConfig(
+            _env_file=None,
+            operations_console_origin="https://operations.example.test/",
+        ).operations_console_origin
+        == "https://operations.example.test"
+    )
+    assert (
+        CreConfig(
+            _env_file=None,
+            operations_console_origin="   ",
+        ).operations_console_origin
+        is None
+    )
+
+    for value in (
+        "http://operations.example.test",
+        "https://operations.example.test/console",
+        "https://operations.example.test?workspace=attacker",
+    ):
+        with pytest.raises(ValidationError):
+            CreConfig(_env_file=None, operations_console_origin=value)

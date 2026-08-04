@@ -54,7 +54,7 @@ and an independent audit are recorded here.
 | 🟢 | Launch integration branch | Certified OAuth `88e3082`, PostgreSQL `5089748`, and source rights `3185ccb` integrated as `0b5a87b`; shared enforcement-order regressions repaired; 4,444 repository tests passed |
 | 🟢 | Consolidated customer MCP surface | Hosted HTTP uses 20 coherent grouped facades with profile listings Local 8, National 10, Full 20, JV 14; all grouped actions resolve to exact server-owned capability IDs; internal services and 21 internal MCP capabilities remain unexposed; commit `802b16c`; 4,459 repository tests passed |
 | 🟡 | Clerk identity and connection flow | Implementation and local gates complete: official Clerk adapter, connection-only React screen, OAuth discovery/DCR/PKCE/revocation, live authority rechecks, and a real hosted MCP call. Integrated audit remains scheduled after Stripe and Skool per the founder-approved sequence |
-| 🔴 | Internal Operations Console | React, Reicon, role enforcement, browser authorization matrix, anti-slop audit |
+| 🟡 | Internal Operations Console | Implementation and local gates complete: separate React control ledger, pinned Reicon provenance, opaque Clerk operator sessions, live staff and JV separation, exact Origin and Host, CSRF, reasoned mutations, provider quarantine, source rights, health, and append-only audit. Integrated security and real-browser staging gates remain scheduled |
 | 🔴 | Search and deal persistence | Tenant records, evidence, score versions, object-ID isolation, privacy behavior |
 | 🔴 | Combined opportunity index | Server-side deduplication, provenance, staff-only access, pagination and conflict tests |
 | 🔴 | Scheduled saved searches | Idempotent queue, current entitlement and territory checks, audit, internal status |
@@ -654,6 +654,57 @@ Evidence:
   the missing external note remains an evidence limitation, not a release claim.
 - Fresh integrated security review remains scheduled in the founder-approved
   audit step. No public deployment, DNS, billing, or customer data action ran.
+
+## Internal Operations Console checkpoint 2026-08-04
+
+The Operations Console is a separate, internal-only React application. It is
+not served by the customer connection origin and contains no customer portal,
+deal, pricing, billing, or account-management surface. Clerk proves the staff
+identity once; MedawarCRE exchanges that proof for an opaque, short-lived,
+HttpOnly, Secure, SameSite=Strict operator cookie. Only token and CSRF digests
+are stored. Every request then re-reads the server-owned internal role. Support
+is read-only, platform administrators may perform reasoned mutations, and any
+identity with a live JV grant is denied even if it also appears in the internal
+operator table.
+
+The server exposes bounded workspace lookup and details, membership and grant
+state, territory and provider mappings, account state, payload-free provider
+quarantine and replay, source-rights state, runtime health, and append-only
+audit. Exact Origin and Host checks, credentialed CORS, CSRF, target ownership,
+reason codes, and reason text gate mutations. Provider payloads and credentials
+are never returned to the browser.
+
+Evidence:
+
+- Worktree `/Users/maxmedawar/LoopnetMCP-cloud-integration`, branch
+  `integration/cloud-platform-launch`, base
+  `103d08e3d1b2066d13ead198e70d15c109308d9d`.
+- Backend authorization and BFF gate: 9 Operations Console tests; related
+  operations, admin, OAuth, source-rights, schema, and configuration gate:
+  57 passed with one categorized third-party Authlib deprecation.
+- Complete repository gate: 4,485 passed in 132.09 seconds with the same
+  categorized warning.
+- Operations application gate: 7 Vitest cases passed; TypeScript and production
+  Vite build succeeded; npm audit reported zero vulnerabilities.
+- Dependency provenance: `reicon@1.1.103` is locked with its npm integrity and
+  MIT upstream commit in `web/operations/REICON_PROVENANCE.md`.
+- Static gates: source and tests compile, `pip check` is clean, and
+  `git diff --check` is clean.
+- Anti-slop review: the surveyor field-ledger world uses one restrained
+  warm-charcoal palette, a custom populated survey plat, a treated section
+  index, sharp chamfered geometry, native controls, and specific operational
+  data. It has no purple gradient, generic hero, pill clutter, icon tiles,
+  decorative glow, card lift, fake controls, hidden entrance content, or hover
+  movement. Responsive and reduced-motion rules are present. A real contrast
+  defect found during review was repaired: placeholder text now measures
+  5.13:1 against its field.
+- The in-app Browser runtime reported no available browser instance, so a real
+  pointer, keyboard, zoom, and viewport pass was not fabricated. That check is
+  retained as a private-staging gate, and this row remains yellow pending the
+  integrated audit.
+- No public deployment, DNS, billing, or real customer-data action ran.
+- The exact phase commit is recorded by the following program checkpoint because
+  a Git commit cannot contain its own content-derived hash.
 
 ## Phase evidence template
 

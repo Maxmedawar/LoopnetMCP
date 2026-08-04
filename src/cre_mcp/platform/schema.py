@@ -39,6 +39,7 @@ PLATFORM_TABLES = frozenset(
         "platform_admin_audit",
         "platform_human_identities",
         "platform_browser_sessions",
+        "platform_operator_sessions",
         "platform_oauth_authorization_requests",
     }
 )
@@ -244,6 +245,20 @@ CREATE TABLE IF NOT EXISTS platform_browser_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_platform_browser_sessions_user
     ON platform_browser_sessions(user_id, revoked_at, expires_at);
+
+CREATE TABLE IF NOT EXISTS platform_operator_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_hash TEXT NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL,
+    csrf_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES platform_users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_platform_operator_sessions_user
+    ON platform_operator_sessions(user_id, revoked_at, expires_at);
 
 CREATE TABLE IF NOT EXISTS platform_oauth_authorization_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

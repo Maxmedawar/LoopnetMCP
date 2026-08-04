@@ -35,6 +35,7 @@ from cre_mcp.platform.connection import (
     PendingAuthorizationStore,
 )
 from cre_mcp.platform.entitlements import EntitlementStore
+from cre_mcp.platform.operations import OperationsReadStore, OperatorSessionStore
 from cre_mcp.platform.repository import PlatformRepository
 from cre_mcp.platform.providers.core import (
     ProviderSyncService,
@@ -146,6 +147,11 @@ class PlatformApi:
         self.pending_authorizations = PendingAuthorizationStore(
             config.cache_db_path
         )
+        self.operator_sessions = OperatorSessionStore(
+            config.cache_db_path,
+            ttl=timedelta(seconds=config.operations_session_ttl_seconds),
+        )
+        self.operations_read = OperationsReadStore(config.cache_db_path)
         self.human_identity_verifier = self._injected_human_identity_verifier
         if (
             self.human_identity_verifier is None
@@ -219,6 +225,135 @@ class PlatformApi:
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Vary"] = "Origin"
         return response
+
+    def _operations_guard(self, request: Request) -> JSONResponse | None:
+        configured_origin = self.config.operations_console_origin
+        if configured_origin is None:
+            return _error(
+                404,
+                "operations_disabled",
+                "The internal Operations Console is not configured",
+            )
+        origins = request.headers.getlist("origin")
+        hosts = request.headers.getlist("host")
+        expected_host = urlsplit(self.config.oauth_issuer).netloc
+        if (
+            len(origins) != 1
+            or not hmac.compare_digest(origins[0], configured_origin)
+            or len(hosts) != 1
+            or not hmac.compare_digest(hosts[0].casefold(), expected_host.casefold())
+        ):
+            return _error(
+                403,
+                "operations_origin_forbidden",
+                "Operations Console origin or host is not allowed",
+            )
+        return None
+
+    def _with_operations_cors(
+        self,
+        request: Request,
+        response: Response,
+    ) -> Response:
+        origin = request.headers.get("origin", "")
+        configured = self.config.operations_console_origin
+        if configured is not None and hmac.compare_digest(origin, configured):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Vary"] = "Origin"
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    def _operations_operator(
+        self,
+        request: Request,
+        *,
+        mutate: bool,
+    ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+        guard = self._operations_guard(request)
+        if guard is not None:
+            return None, guard
+        token = request.cookies.get(self.config.operations_cookie_name, "")
+        session = self.operator_sessions.validate(token)
+        if session is None:
+            return None, _error(
+                401,
+                "operator_session_required",
+                "A live internal operator session is required",
+            )
+        operator = self.operations_read.live_operator(session.user_id)
+        if operator is None:
+            return None, _error(
+                403,
+                "operator_access_revoked",
+                "Internal operator authority is not active",
+            )
+        if operator.pop("jv_grant_present"):
+            return None, _error(
+                403,
+                "operator_separation_required",
+                "JV identities cannot use the internal Operations Console",
+            )
+        if mutate:
+            csrf = request.headers.get("x-csrf-token", "")
+            if not self.operator_sessions.validate_csrf(token, csrf):
+                return None, _error(
+                    403,
+                    "csrf_failed",
+                    "A valid operator session and CSRF token are required",
+                )
+            if operator["role"] != "platform_admin":
+                return None, _error(
+                    403,
+                    "operator_read_only",
+                    "The support role is read-only",
+                )
+        return operator, None
+
+    async def operations_options(self, request: Request) -> Response:
+        guard = self._operations_guard(request)
+        if guard is not None:
+            return self._with_operations_cors(request, guard)
+        method = request.headers.get("access-control-request-method", "").upper()
+        if method not in {"GET", "POST", "PATCH", "DELETE"}:
+            return self._with_operations_cors(
+                request,
+                _error(403, "method_forbidden", "Operations method is not allowed"),
+            )
+        requested = {
+            item.strip().casefold()
+            for item in request.headers.get(
+                "access-control-request-headers", ""
+            ).split(",")
+            if item.strip()
+        }
+        allowed = {
+            "authorization",
+            "content-type",
+            "x-csrf-token",
+            "x-admin-reason-code",
+            "x-admin-reason",
+        }
+        if not requested.issubset(allowed):
+            return self._with_operations_cors(
+                request,
+                _error(403, "headers_forbidden", "Operations headers are not allowed"),
+            )
+        return Response(
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": request.headers["origin"],
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE",
+                "Access-Control-Allow-Headers": (
+                    "Authorization, Content-Type, X-CSRF-Token, "
+                    "X-Admin-Reason-Code, X-Admin-Reason"
+                ),
+                "Access-Control-Max-Age": "600",
+                "Cache-Control": "no-store",
+                "Vary": "Origin",
+            },
+        )
 
     async def browser_session_options(self, request: Request) -> Response:
         origin = request.headers.get("origin", "")
@@ -558,6 +693,456 @@ class PlatformApi:
             path="/",
         )
         return response
+
+    async def create_operator_session(self, request: Request) -> JSONResponse:
+        guard = self._operations_guard(request)
+        if guard is not None:
+            return self._with_operations_cors(request, guard)
+        if self.human_identity_verifier is None:
+            return self._with_operations_cors(
+                request,
+                _error(
+                    503,
+                    "human_identity_unconfigured",
+                    "Staff identity verification is not configured",
+                ),
+            )
+        header = request.headers.get("authorization", "")
+        scheme, separator, token = header.partition(" ")
+        if not separator or scheme.casefold() != "bearer" or not token.strip():
+            return self._with_operations_cors(
+                request,
+                _error(401, "human_identity_required", "Clerk bearer token is required"),
+            )
+        identity = await self.human_identity_verifier.verify_bearer(token.strip())
+        if identity is None:
+            return self._with_operations_cors(
+                request,
+                _error(
+                    401,
+                    "human_identity_invalid",
+                    "Clerk session is invalid or expired",
+                ),
+            )
+        try:
+            user_id = await asyncio.to_thread(
+                self.human_identities.resolve_or_bind,
+                identity,
+            )
+        except ValueError as exc:
+            return self._with_operations_cors(
+                request,
+                _error(403, "identity_not_provisioned", str(exc)),
+            )
+        operator = await asyncio.to_thread(self.operations_read.live_operator, user_id)
+        if operator is None:
+            return self._with_operations_cors(
+                request,
+                _error(
+                    403,
+                    "operator_access_required",
+                    "Active internal operator authority is required",
+                ),
+            )
+        if operator.pop("jv_grant_present"):
+            return self._with_operations_cors(
+                request,
+                _error(
+                    403,
+                    "operator_separation_required",
+                    "JV identities cannot use the internal Operations Console",
+                ),
+            )
+        issued = await asyncio.to_thread(self.operator_sessions.issue, user_id)
+        response = JSONResponse(
+            {
+                "operator": operator,
+                "csrf_token": issued.csrf_token,
+                "expires_at": issued.expires_at.isoformat(),
+            },
+            status_code=201,
+        )
+        response.set_cookie(
+            self.config.operations_cookie_name,
+            issued.token,
+            max_age=self.config.operations_session_ttl_seconds,
+            httponly=True,
+            secure=self.config.browser_cookie_secure,
+            samesite="strict",
+            path="/v1/operations",
+        )
+        return self._with_operations_cors(request, response)
+
+    async def get_operator_session(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=False)
+        response = error or JSONResponse({"operator": operator})
+        return self._with_operations_cors(request, response)
+
+    async def delete_operator_session(self, request: Request) -> JSONResponse:
+        _operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        token = request.cookies.get(self.config.operations_cookie_name, "")
+        await asyncio.to_thread(self.operator_sessions.revoke, token)
+        response = JSONResponse({"revoked": True})
+        response.delete_cookie(
+            self.config.operations_cookie_name,
+            httponly=True,
+            secure=self.config.browser_cookie_secure,
+            samesite="strict",
+            path="/v1/operations",
+        )
+        return self._with_operations_cors(request, response)
+
+    async def search_operations_workspaces(self, request: Request) -> JSONResponse:
+        _operator, error = self._operations_operator(request, mutate=False)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        try:
+            result = await asyncio.to_thread(
+                self.operations_read.search_workspaces,
+                request.query_params.get("q"),
+                limit=request.query_params.get("limit", "25"),
+                cursor=request.query_params.get("cursor"),
+            )
+        except ValueError as exc:
+            result_response = _error(422, "invalid_request", str(exc))
+        else:
+            result_response = JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, result_response)
+
+    async def get_operations_workspace(self, request: Request) -> JSONResponse:
+        _operator, error = self._operations_operator(request, mutate=False)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.get_workspace,
+            request.path_params["workspace_id"],
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def update_operations_account_state(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.set_account_state,
+            actor_user_id=operator["user_id"],
+            public_id=request.path_params["workspace_id"],
+            state=body.get("state"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def provision_operations_workspace(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.provision_workspace,
+            actor_user_id=operator["user_id"],
+            name=body.get("name"),
+            slug=body.get("slug"),
+            plan_id=body.get("plan_id"),
+            owner_email=body.get("owner_email"),
+            owner_name=body.get("owner_name"),
+            account_state=body.get("account_state", "active"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result), status_code=201)
+        return self._with_operations_cors(request, response)
+
+    async def update_operations_membership(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.update_membership_role,
+            actor_user_id=operator["user_id"],
+            public_id=request.path_params["workspace_id"],
+            membership_id=request.path_params["membership_id"],
+            role=body.get("role"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def create_operations_grant(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.create_grant,
+            actor_user_id=operator["user_id"],
+            public_id=request.path_params["workspace_id"],
+            source=body.get("source"),
+            external_ref=body.get("external_ref"),
+            profile=body.get("profile"),
+            plan_key=body.get("plan_key"),
+            status=body.get("status", "active"),
+            starts_at=body.get("starts_at"),
+            ends_at=body.get("ends_at"),
+            subject_user_id=body.get("subject_user_id"),
+            scope=body.get("scope"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result), status_code=201)
+        return self._with_operations_cors(request, response)
+
+    async def revoke_operations_grant(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.revoke_grant,
+            actor_user_id=operator["user_id"],
+            public_id=request.path_params["workspace_id"],
+            grant_id=request.path_params["grant_id"],
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def create_operations_territory(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.create_territory,
+            actor_user_id=operator["user_id"],
+            public_id=request.path_params["workspace_id"],
+            name=body.get("name"),
+            state=body.get("state"),
+            market=body.get("market"),
+            asset_type=body.get("asset_type"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result), status_code=201)
+        return self._with_operations_cors(request, response)
+
+    async def delete_operations_territory(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.delete_territory,
+            actor_user_id=operator["user_id"],
+            public_id=request.path_params["workspace_id"],
+            territory_id=request.path_params["territory_id"],
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def list_operations_external_accounts(self, request: Request) -> JSONResponse:
+        _operator, error = self._operations_operator(request, mutate=False)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.list_external_accounts,
+            request.path_params["workspace_id"],
+        )
+        response = error or JSONResponse({"external_accounts": _jsonable(result)})
+        return self._with_operations_cors(request, response)
+
+    async def create_operations_external_account(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.create_external_account,
+            actor_user_id=operator["user_id"],
+            public_id=request.path_params["workspace_id"],
+            provider=body.get("provider"),
+            external_account_id=body.get("external_account_id"),
+            subject_user_id=body.get("subject_user_id"),
+            metadata=body.get("metadata"),
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result), status_code=201)
+        return self._with_operations_cors(request, response)
+
+    async def delete_operations_external_account(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.admin.delete_external_account,
+            actor_user_id=operator["user_id"],
+            public_id=request.path_params["workspace_id"],
+            mapping_id=request.path_params["mapping_id"],
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def list_operations_provider_quarantine(
+        self,
+        request: Request,
+    ) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=False)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.provider_reconciliation.quarantine_queue,
+            actor_user_id=operator["user_id"],
+            provider=request.query_params.get("provider"),
+            limit=request.query_params.get("limit", "50"),
+            cursor=request.query_params.get("cursor"),
+            reason_code="support_resolution",
+            reason="Operations Console provider quarantine review.",
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def list_operations_workspace_provider_events(
+        self,
+        request: Request,
+    ) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=False)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.provider_reconciliation.workspace_events,
+            actor_user_id=operator["user_id"],
+            workspace_public_id=request.path_params["workspace_id"],
+            provider=request.query_params.get("provider"),
+            limit=request.query_params.get("limit", "50"),
+            cursor=request.query_params.get("cursor"),
+            reason_code="support_resolution",
+            reason="Operations Console workspace provider-event review.",
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def replay_operations_provider_event(self, request: Request) -> JSONResponse:
+        operator, error = self._operations_operator(request, mutate=True)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        body, error = await self.parse_json(request)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result, error = await self.call_admin(
+            self.provider_reconciliation.replay,
+            actor_user_id=operator["user_id"],
+            provider_event_id=request.path_params["provider_event_id"],
+            reason_code=body.get("reason_code"),
+            reason=body.get("reason"),
+        )
+        response = error or JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def list_operations_audit(self, request: Request) -> JSONResponse:
+        _operator, error = self._operations_operator(request, mutate=False)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        try:
+            result = await asyncio.to_thread(
+                self.operations_read.list_audit,
+                workspace_public_id=request.query_params.get("workspace_id"),
+                limit=request.query_params.get("limit", "50"),
+                cursor=request.query_params.get("cursor"),
+            )
+        except ValueError as exc:
+            response = _error(422, "invalid_request", str(exc))
+        except LookupError as exc:
+            response = _error(404, "not_found", str(exc))
+        else:
+            response = JSONResponse(_jsonable(result))
+        return self._with_operations_cors(request, response)
+
+    async def operations_health(self, request: Request) -> JSONResponse:
+        _operator, error = self._operations_operator(request, mutate=False)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        result = await asyncio.to_thread(self.operations_read.health)
+        return self._with_operations_cors(request, JSONResponse(result))
+
+    async def operations_source_rights(self, request: Request) -> JSONResponse:
+        _operator, error = self._operations_operator(request, mutate=False)
+        if error is not None:
+            return self._with_operations_cors(request, error)
+        try:
+            from cre_mcp.source_rights.registry import SourceRightsRegistry
+
+            registry = await asyncio.to_thread(
+                SourceRightsRegistry,
+                self.config.source_rights_registry_path,
+            )
+        except Exception:
+            return self._with_operations_cors(
+                request,
+                _error(
+                    503,
+                    "source_rights_unavailable",
+                    "Source-rights registry is unavailable",
+                ),
+            )
+        sources = [
+            {
+                "source_id": record.source_id,
+                "owner": record.owner,
+                "dataset": record.dataset,
+                "rights_state": record.rights_state.value,
+                "hosted_cloud_allowed": record.hosted_cloud_allowed,
+                "evidence_status": record.evidence_status.value,
+                "enabled": bool(
+                    self.config.source_rights_enabled.get(record.source_id, False)
+                ),
+                "required_proofs": list(record.required_proofs),
+            }
+            for record in registry.catalog.sources
+        ]
+        allowed = sum(item["hosted_cloud_allowed"] for item in sources)
+        response = JSONResponse(
+            {
+                "summary": {
+                    "total": len(sources),
+                    "hosted_allowed": allowed,
+                    "hosted_blocked": len(sources) - allowed,
+                },
+                "sources": sources,
+            }
+        )
+        return self._with_operations_cors(request, response)
 
     async def _parse_form(self, request: Request) -> tuple[dict[str, str] | None, JSONResponse | None]:
         content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().casefold()
@@ -1431,6 +2016,92 @@ PLATFORM_ROUTE_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("/v1/browser/session", ("POST",), "browser_session"),
     ("/v1/browser/session", ("OPTIONS",), "browser_session_options"),
     ("/v1/browser/session", ("DELETE",), "browser_logout"),
+    ("/v1/operations/session", ("POST",), "create_operator_session"),
+    ("/v1/operations/session", ("GET",), "get_operator_session"),
+    ("/v1/operations/session", ("DELETE",), "delete_operator_session"),
+    (
+        "/v1/operations/workspaces",
+        ("GET",),
+        "search_operations_workspaces",
+    ),
+    (
+        "/v1/operations/workspaces",
+        ("POST",),
+        "provision_operations_workspace",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}",
+        ("GET",),
+        "get_operations_workspace",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/account-state",
+        ("POST",),
+        "update_operations_account_state",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/memberships/{membership_id:int}",
+        ("PATCH",),
+        "update_operations_membership",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/grants",
+        ("POST",),
+        "create_operations_grant",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/grants/{grant_id:int}",
+        ("DELETE",),
+        "revoke_operations_grant",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/territories",
+        ("POST",),
+        "create_operations_territory",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/territories/{territory_id:int}",
+        ("DELETE",),
+        "delete_operations_territory",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/external-accounts",
+        ("GET",),
+        "list_operations_external_accounts",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/external-accounts",
+        ("POST",),
+        "create_operations_external_account",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/external-accounts/{mapping_id:int}",
+        ("DELETE",),
+        "delete_operations_external_account",
+    ),
+    (
+        "/v1/operations/provider-events/quarantine",
+        ("GET",),
+        "list_operations_provider_quarantine",
+    ),
+    (
+        "/v1/operations/provider-events/{provider_event_id:int}/replay",
+        ("POST",),
+        "replay_operations_provider_event",
+    ),
+    (
+        "/v1/operations/workspaces/{workspace_id}/provider-events",
+        ("GET",),
+        "list_operations_workspace_provider_events",
+    ),
+    ("/v1/operations/audit", ("GET",), "list_operations_audit"),
+    ("/v1/operations/health", ("GET",), "operations_health"),
+    (
+        "/v1/operations/source-rights",
+        ("GET",),
+        "operations_source_rights",
+    ),
+    ("/v1/operations/{path:path}", ("OPTIONS",), "operations_options"),
     ("/v1/webhooks/stripe", ("POST",), "stripe_webhook"),
     ("/v1/webhooks/skool", ("POST",), "skool_webhook"),
     (

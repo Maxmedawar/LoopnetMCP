@@ -149,6 +149,23 @@ class CreConfig(BaseSettings):
         default=True,
         validation_alias=_env_aliases("browser_cookie_secure"),
     )
+    operations_console_origin: str | None = Field(
+        default=None,
+        validation_alias=_env_aliases("operations_console_origin"),
+    )
+    operations_session_ttl_seconds: int = Field(
+        default=30 * 60,
+        ge=60,
+        le=8 * 60 * 60,
+        validation_alias=_env_aliases("operations_session_ttl_seconds"),
+    )
+    operations_cookie_name: str = Field(
+        default="mcr_ops",
+        min_length=1,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        validation_alias=_env_aliases("operations_cookie_name"),
+    )
     request_delay_seconds: float = Field(
         default=3.0,
         validation_alias=_env_aliases("request_delay_seconds"),
@@ -323,7 +340,11 @@ class CreConfig(BaseSettings):
             return None
         return value if value.get_secret_value().strip() else None
 
-    @field_validator("clerk_publishable_key", "clerk_issuer")
+    @field_validator(
+        "clerk_publishable_key",
+        "clerk_issuer",
+        "operations_console_origin",
+    )
     @classmethod
     def blank_clerk_text_is_unconfigured(cls, value: str | None) -> str | None:
         if value is None:
@@ -357,6 +378,17 @@ class CreConfig(BaseSettings):
         return _validated_http_url(
             value,
             field_name="clerk_issuer",
+            origin_only=True,
+        )
+
+    @field_validator("operations_console_origin")
+    @classmethod
+    def validate_operations_console_origin(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validated_http_url(
+            value,
+            field_name="operations_console_origin",
             origin_only=True,
         )
 
