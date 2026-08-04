@@ -5,6 +5,18 @@ from __future__ import annotations
 import psycopg
 
 ADMISSION_ROLE = "medawarcre_admission"
+ADMISSION_FUNCTIONS = frozenset(
+    {
+        (
+            "atomic_admit_tool_call",
+            "uuid, uuid, text, uuid, uuid, text, text, text, text, text[], text, bytea, text, boolean, bytea",
+        ),
+        (
+            "record_tool_call_final",
+            "uuid, uuid, text, uuid, uuid, text, boolean, text, text",
+        ),
+    }
+)
 SERVICE_ROLES = {
     "oauth": "medawarcre_oauth",
     "provider_ingress": "medawarcre_provider_ingress",
@@ -352,13 +364,22 @@ def assert_admission_session(connection: psycopg.Connection) -> None:
     assert_exact_group_session(connection, ADMISSION_ROLE)
 
 
+def assert_admission_object_authority(connection: psycopg.Connection) -> None:
+    """Require the migrated admission group to expose only the two fixed calls."""
+    _assert_group_object_authority(
+        connection,
+        ADMISSION_ROLE,
+        ADMISSION_FUNCTIONS,
+    )
+
+
 def _assert_group_object_authority(
     connection: psycopg.Connection,
     group_role: str,
     expected_functions: frozenset[tuple[str, str]],
 ) -> None:
     """Require each service role's exact narrow object-authority contract."""
-    if group_role not in SERVICE_ROLES.values():
+    if group_role not in {*SERVICE_ROLES.values(), ADMISSION_ROLE}:
         raise ValueError("unsupported PostgreSQL service group role")
     connection.execute("SET search_path TO pg_catalog")
     ownership = connection.execute(
@@ -567,11 +588,13 @@ def assert_service_session(
 
 
 __all__ = [
+    "ADMISSION_FUNCTIONS",
     "ADMISSION_ROLE",
     "SERVICE_ROLES",
     "SERVICE_FUNCTIONS_BY_ROLE",
     "UnsafeDatabaseRoleError",
     "assert_admission_session",
+    "assert_admission_object_authority",
     "assert_exact_group_session",
     "assert_group_has_exact_object_authority",
     "assert_group_has_no_object_authority",

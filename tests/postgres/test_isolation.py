@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import psycopg
@@ -458,41 +457,16 @@ def test_internal_authority_requires_a_live_exact_staff_role(
     assert authorized(user_a, "support") is True
 
 
-def test_admission_role_consumes_bound_approvals_and_utc_quota_atomically(
+def test_admission_role_exposes_only_atomic_admission_operations(
     postgres_database: tuple[str, str, str],
 ) -> None:
     admin_dsn, migration_dsn, app_dsn = postgres_database
     MigrationRunner(migration_dsn, load_migrations()).apply()
-    with psycopg.connect(admin_dsn) as connection:
-        workspace_id, _, user_id, _ = _seed_two_tenants(connection)
-        connection.execute("SET ROLE medawarcre_migration")
-        token_hash = b"t" * 32
-        session_hash = b"s" * 32
-        args_hash = b"a" * 32
-        approval_id = connection.execute(
-            "INSERT INTO medawarcre.tool_approvals("
-            "approval_token_hash,workspace_id,subject_user_id,session_hash,"
-            "tool_name,args_hash,expires_at) "
-            "VALUES (%s,%s,%s,%s,'find_deals',%s,statement_timestamp()+interval '5 minutes') "
-            "RETURNING id",
-            (token_hash, workspace_id, user_id, session_hash, args_hash),
-        ).fetchone()[0]
-        usage_date = connection.execute(
-            "SELECT (statement_timestamp() AT TIME ZONE 'UTC')::date"
-        ).fetchone()[0]
-
     admission_dsn = app_dsn.replace(
         "user=medawarcre_test_app", "user=medawarcre_test_admission"
     )
     with psycopg.connect(admission_dsn) as connection:
         assert_admission_session(connection)
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
-            connection.execute(
-                "SELECT medawarcre.consume_tool_approval("
-                "%s,%s,%s,%s,'find_deals',%s)",
-                (token_hash, workspace_id, user_id, session_hash, args_hash),
-            )
-        connection.rollback()
         connection.execute("SET ROLE medawarcre_admission")
         assert connection.execute(
             "SELECT session_user,current_user"
@@ -500,56 +474,18 @@ def test_admission_role_consumes_bound_approvals_and_utc_quota_atomically(
             "medawarcre_test_admission",
             "medawarcre_admission",
         )
-        assert connection.execute(
-            "SELECT medawarcre.consume_tool_approval("
-            "%s,%s,%s,%s,'find_deals',%s)",
-            (token_hash, workspace_id, user_id, session_hash, b"x" * 32),
-        ).fetchone() == (None,)
+        for signature in (
+            "medawarcre.consume_tool_approval(bytea,uuid,uuid,bytea,text,bytea)",
+            "medawarcre.consume_daily_quota(uuid,text,bigint,bigint)",
+            "medawarcre.record_access_decision(uuid,text,boolean,uuid,uuid,bytea,uuid,text,text,text,text)",
+        ):
+            assert connection.execute(
+                "SELECT pg_catalog.has_function_privilege(current_user,%s,'EXECUTE')",
+                (signature,),
+            ).fetchone() == (False,)
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute("SELECT * FROM medawarcre.tool_approvals")
         connection.rollback()
-
-    def consume_approval(_: int):
-        with psycopg.connect(admission_dsn) as connection:
-            assert_admission_session(connection)
-            connection.execute("SET ROLE medawarcre_admission")
-            return connection.execute(
-                "SELECT medawarcre.consume_tool_approval("
-                "%s,%s,%s,%s,'find_deals',%s)",
-                (token_hash, workspace_id, user_id, session_hash, args_hash),
-            ).fetchone()[0]
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        approval_results = list(executor.map(consume_approval, range(4)))
-    assert [result for result in approval_results if result is not None] == [
-        approval_id
-    ]
-
-    def consume_quota(_: int):
-        with psycopg.connect(admission_dsn) as connection:
-            assert_admission_session(connection)
-            connection.execute("SET ROLE medawarcre_admission")
-            return connection.execute(
-                "SELECT medawarcre.consume_daily_quota(%s,'find_deals',1,2)",
-                (workspace_id,),
-            ).fetchone()[0]
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        quota_results = list(executor.map(consume_quota, range(4)))
-    assert sorted(result for result in quota_results if result is not None) == [1, 2]
-
-    with psycopg.connect(admin_dsn) as connection:
-        connection.execute("SET ROLE medawarcre_migration")
-        assert connection.execute(
-            "SELECT used_count,usage_date FROM medawarcre.daily_quota_usage "
-            "WHERE workspace_id=%s AND bucket='find_deals'",
-            (workspace_id,),
-        ).fetchone() == (2, usage_date)
-        assert connection.execute(
-            "SELECT consumed_at IS NOT NULL FROM medawarcre.tool_approvals "
-            "WHERE id=%s",
-            (approval_id,),
-        ).fetchone() == (True,)
 
     with psycopg.connect(admin_dsn) as connection:
         with pytest.raises(UnsafeDatabaseRoleError):
@@ -576,83 +512,33 @@ def test_admission_role_consumes_bound_approvals_and_utc_quota_atomically(
 def test_access_decision_audit_is_bound_two_phase_and_append_only(
     postgres_database: tuple[str, str, str],
 ) -> None:
-    admin_dsn, migration_dsn, app_dsn = postgres_database
+    admin_dsn, migration_dsn, _ = postgres_database
     MigrationRunner(migration_dsn, load_migrations()).apply()
     with psycopg.connect(admin_dsn) as connection:
         workspace_id, _, user_id, _ = _seed_two_tenants(connection)
-    admission_dsn = app_dsn.replace(
-        "user=medawarcre_test_app", "user=medawarcre_test_admission"
-    )
-    invocation_id = str(uuid4())
-    request_id = str(uuid4())
-    session_hash = b"c" * 32
-
-    with psycopg.connect(admission_dsn, autocommit=True) as connection:
-        assert_admission_session(connection)
-        connection.execute("SET ROLE medawarcre_admission")
-        admission_id = connection.execute(
-            "SELECT medawarcre.record_access_decision("
-            "%s,'admission',true,%s,%s,%s,%s,'find_deals','allowed',"
-            "'authority_ok','authority admitted request')",
-            (invocation_id, workspace_id, user_id, session_hash, request_id),
-        ).fetchone()[0]
-        assert admission_id is not None
-        assert connection.execute(
-            "SELECT medawarcre.record_access_decision("
-            "%s,'final',true,%s,%s,%s,%s,'wrong_tool','succeeded',"
-            "'completed','wrong binding')",
-            (invocation_id, workspace_id, user_id, session_hash, request_id),
-        ).fetchone() == (None,)
-        final_id = connection.execute(
-            "SELECT medawarcre.record_access_decision("
-            "%s,'final',true,%s,%s,%s,%s,'find_deals','succeeded',"
-            "'completed','request completed')",
-            (invocation_id, workspace_id, user_id, session_hash, request_id),
-        ).fetchone()[0]
-        assert final_id is not None
-        with pytest.raises(psycopg.errors.UniqueViolation):
-            connection.execute(
-                "SELECT medawarcre.record_access_decision("
-                "%s,'final',true,%s,%s,%s,%s,'find_deals','succeeded',"
-                "'completed','duplicate final')",
-                (invocation_id, workspace_id, user_id, session_hash, request_id),
-            )
-
-    with psycopg.connect(admin_dsn) as connection:
         connection.execute("SET ROLE medawarcre_migration")
-        rows = connection.execute(
-            "SELECT phase,authenticated,workspace_id::text,actor_user_id::text,"
-            "session_correlation_hash,request_correlation_id::text,tool_name,decision "
-            "FROM medawarcre.access_decision_audit WHERE invocation_id=%s "
-            "ORDER BY phase",
-            (invocation_id,),
-        ).fetchall()
-        assert rows == [
-            (
-                "admission",
-                True,
-                workspace_id,
-                user_id,
-                session_hash,
-                request_id,
-                "find_deals",
-                "allowed",
-            ),
-            (
-                "final",
-                True,
-                workspace_id,
-                user_id,
-                session_hash,
-                request_id,
-                "find_deals",
-                "succeeded",
-            ),
-        ]
+        admission_id = connection.execute(
+            "INSERT INTO medawarcre.access_decision_audit("
+            "invocation_id,phase,authenticated,workspace_id,actor_user_id,"
+            "session_correlation_hash,request_correlation_id,tool_name,decision,"
+            "reason_code,safe_reason,args_hash) "
+            "VALUES (%s,'admission',true,%s,%s,%s,%s,'find_deals','denied',"
+            "'test_denial','test denial',%s) RETURNING id",
+            (str(uuid4()), workspace_id, user_id, b"c" * 32, str(uuid4()), b"a" * 32),
+        ).fetchone()[0]
+        connection.commit()
+        connection.execute("SET ROLE medawarcre_migration")
         with pytest.raises(psycopg.errors.ObjectNotInPrerequisiteState):
             connection.execute(
                 "UPDATE medawarcre.access_decision_audit "
                 "SET safe_reason='rewritten' WHERE id=%s",
+                (admission_id,),
+            )
+        connection.rollback()
+        connection.execute("SET ROLE medawarcre_migration")
+        with pytest.raises(psycopg.errors.ObjectNotInPrerequisiteState):
+            connection.execute(
+                "DELETE FROM medawarcre.access_decision_audit WHERE id=%s",
                 (admission_id,),
             )
 

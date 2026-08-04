@@ -11,6 +11,7 @@ from psycopg_pool import ConnectionPool
 
 from cre_mcp.access.context import TenantContext
 from cre_mcp.access.profiles import Profile
+from cre_mcp.access.quota import is_canonical_quota_bucket
 from cre_mcp.platform.auth import (
     DEFAULT_AUDIENCE,
     DEFAULT_RESOURCE,
@@ -45,13 +46,12 @@ def _quotas(value: object) -> dict[str, int] | None:
     parsed: dict[str, int] = {}
     for bucket, limit in value.items():
         if (
-            not isinstance(bucket, str)
-            or not bucket.strip()
+            not is_canonical_quota_bucket(bucket)
             or type(limit) is not int
             or limit < 0
         ):
             return None
-        parsed[bucket.strip()] = limit
+        parsed[bucket] = limit
     return parsed
 
 

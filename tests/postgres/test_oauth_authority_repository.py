@@ -154,9 +154,9 @@ def _repository(oauth_dsn: str) -> PostgresOAuthAuthorityRepository:
 
 def test_migration_0002_inventory_is_explicit() -> None:
     migrations = load_migrations()
-    assert [migration.version for migration in migrations] == [1, 2]
+    assert [migration.version for migration in migrations] == [1, 2, 3]
     assert migrations[1].name == "hosted lifecycle and oauth authority"
-    assert EXPECTED_MIGRATION_VERSION == 2
+    assert EXPECTED_MIGRATION_VERSION == 3
     assert LIFECYCLE_TABLES <= EXPECTED_TABLES
     assert LIFECYCLE_TABLES <= EXPECTED_RLS_TABLES
     assert "state text NOT NULL" in migrations[1].sql

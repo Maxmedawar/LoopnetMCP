@@ -181,14 +181,12 @@ GRANT EXECUTE ON FUNCTION medawarcre.current_actor_user_id()
 TO medawarcre_app, medawarcre_admin;
 GRANT EXECUTE ON FUNCTION medawarcre.internal_authorized() TO medawarcre_admin;
 GRANT EXECUTE ON FUNCTION medawarcre.internal_can_mutate() TO medawarcre_admin;
-GRANT EXECUTE ON FUNCTION medawarcre.consume_tool_approval(
-    bytea, uuid, uuid, bytea, text, bytea
+GRANT EXECUTE ON FUNCTION medawarcre.atomic_admit_tool_call(
+    uuid, uuid, text, uuid, uuid, text, text, text, text, text[], text,
+    bytea, text, boolean, bytea
 ) TO medawarcre_admission;
-GRANT EXECUTE ON FUNCTION medawarcre.consume_daily_quota(
-    uuid, text, bigint, bigint
-) TO medawarcre_admission;
-GRANT EXECUTE ON FUNCTION medawarcre.record_access_decision(
-    uuid, text, boolean, uuid, uuid, bytea, uuid, text, text, text, text
+GRANT EXECUTE ON FUNCTION medawarcre.record_tool_call_final(
+    uuid, uuid, text, uuid, uuid, text, boolean, text, text
 ) TO medawarcre_admission;
 GRANT EXECUTE ON FUNCTION medawarcre.resolve_oauth_authority(
     bytea, text, text

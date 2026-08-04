@@ -924,14 +924,22 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
         (
             "consume_tool_approval",
             "bytea, uuid, uuid, bytea, text, bytea",
-        ): {ADMISSION_ROLE},
+        ): set(),
         (
             "consume_daily_quota",
             "uuid, text, bigint, bigint",
-        ): {ADMISSION_ROLE},
+        ): set(),
         (
             "record_access_decision",
             "uuid, text, boolean, uuid, uuid, bytea, uuid, text, text, text, text",
+        ): set(),
+        (
+            "atomic_admit_tool_call",
+            "uuid, uuid, text, uuid, uuid, text, text, text, text, text[], text, bytea, text, boolean, bytea",
+        ): {ADMISSION_ROLE},
+        (
+            "record_tool_call_final",
+            "uuid, uuid, text, uuid, uuid, text, boolean, text, text",
         ): {ADMISSION_ROLE},
         (
             "resolve_oauth_authority",

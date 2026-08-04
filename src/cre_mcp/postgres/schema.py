@@ -347,13 +347,13 @@ ADMIN_MUTATION_TABLES = (
     - SERVICE_OWNED_TABLES
     - IMMUTABLE_TABLES
 )
-EXPECTED_MIGRATION_VERSION = 2
+EXPECTED_MIGRATION_VERSION = 3
 SCHEMA_NAME = "medawarcre"
 
 # Generated from ``catalog.catalog_fingerprint()`` on the reviewed PostgreSQL
 # 16 launch schema. Any schema migration must update this value deliberately.
 EXPECTED_CATALOG_FINGERPRINT = (
-    "40f025fcf85251cf340428438c5e5ebf3b20462ea8ee59c5ac882f9a94e47eef"
+    "c93a3060257613ef34b13f9bd8d75c6784ff46f6df3e1bde5f5006bc8f13bffd"
 )
 
 __all__ = [
