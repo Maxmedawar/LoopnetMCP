@@ -29,7 +29,7 @@ and an independent audit are recorded here.
 | Customer portal commits | `8a44d4c`, `13abbf5`, local-only, superseded for product routing |
 | PostgreSQL certified phase | Exact replacement candidate `f68a9a489602ef0b22614e899e5800820c0579e12002afce83c7aaa613f0e9e6` passed both fresh read-only reviews unchanged and was committed as `5089748aaa6f9f726db5801f866a130974d1eb89` |
 | Source-rights certified phase | Exact replacement candidate `4c33265f12dec0927fb34a6c344158174ef5bb89f8bda2a2c3363fd873986f04` passed both fresh read-only reviews unchanged and was committed as `3185ccb595cf305f9c69f15ae2730f2d6fa75ee7` |
-| Cloud integration phase | `integration/cloud-platform-launch` at `5bcd5c0`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; OAuth/JV audit repair and fail-closed hosted persistence boundary committed; 4,535 repository tests passed |
+| Cloud integration phase | `integration/cloud-platform-launch` at `46e79a8`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; OAuth/JV repair, fail-closed hosted persistence, and exact dormant service-role boundaries committed; 4,548 repository tests passed |
 | Customer MCP surface | Commit `802b16cec823f74fc41cab10cb4de9602d56fea7`; 274 internal capabilities retained, 253 exact actions grouped, 21 MCP capabilities internal-only, all 45 historical IDs reconciled; visible counts Local 8, National 10, Full 20, JV 14 |
 | SQLite dbops salvage | 4,513 uncommitted lines in the protected dbops worktree; not production DR |
 | Protected backup | SHA-256 `8361a9db47bb4ea5276f009309cdc8b0401c0272dc4ae6b8711d9f4b0e489095`, read-only integrity `ok` |
@@ -63,7 +63,7 @@ and an independent audit are recorded here.
 | 🔴 | Privacy and retention | Notice, export, correction, deletion, retention, processor propagation, audit |
 | 🟢 | Source-rights controls | First replacement `e58c721...` was rejected and repaired. Exact replacement `4c33265...` fails closed on contradictory local/hosted policy and cleanly imports; 164 focused and 1,950 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `3185ccb` |
 | 🔴 | Private staging | Reproducible package, TLS, migrations, workers, monitoring, backup and restore exercise, rollback |
-| 🔴 | Integrated security audit | OAuth consent, public-client, route exposure, request-bound, browser-session, logout, and identity-wide JV findings repaired in `d82e600`; all public HTTP entrypoints now fail closed through `5bcd5c0` instead of constructing legacy persistence; PostgreSQL domain repositories, durable atomic admission/audit, jobs/privacy, and deployment correctness remain open blockers |
+| 🔴 | Integrated security audit | OAuth consent, public-client, route exposure, request-bound, browser-session, logout, and identity-wide JV findings repaired in `d82e600`; all public HTTP entrypoints fail closed through `5bcd5c0`; exact dormant OAuth, provider-ingress, provider-reconciliation, worker, and scheduler roles are committed in `46e79a8`; PostgreSQL domain repositories, durable atomic admission/audit, jobs/privacy, and deployment correctness remain open blockers |
 | 🔴 | Production-readiness packet | Exact hashes, artifacts, evidence, limitations, credentials, rollback, first-user plan |
 | 🔴 | Public production cutover | Explicit founder approval after the readiness packet only |
 
@@ -655,6 +655,7 @@ unless trusted-host validation is proven.
 | 2026-08-03 | Consolidated customer MCP surface | Lock and export the full 45-versus-274 reconciliation; construct a separate hosted facade; preserve exact entitlement, quota, territory, source-rights, approval, result, and audit enforcement; verify real HTTP OAuth and full repository | `802b16cec823f74fc41cab10cb4de9602d56fea7`; 4,459 passed in 164.56 seconds; one categorized third-party Authlib deprecation; 253 grouped actions, 21 internal-only MCP capabilities, profile counts 8/10/20/14; no old server implementation imported and no deployment performed |
 | 2026-08-04 | Integrated audit round one RED | Fresh independent authorization, database/isolation, provider/deployment, source-rights, and lifecycle review of integrated HEAD `4167d50` | Critical consentless OAuth code exfiltration; high uncertified hosted deal exposure, hosted SQLite authority, obsolete deployment path, approval/audit/jobs/privacy gaps; medium historical-JV, logout CORS, request exhaustion, and cookie-site findings; no public action performed |
 | 2026-08-04 | OAuth/JV audit repair and second review | Tests-first exact-client DCR, explicit consent, exact Origin and Host, CSRF, one-time pending requests, public deal-route removal, streamed body caps, bounded/rate-limited public state, one-per-user browser sessions, identity-wide live JV separation, and retryable consent | Independent reviewer rejected two intermediate candidates, then approved the repaired candidate after adversarial concurrency and cross-workspace checks; 140 focused tests, 4,526 repository tests, 5 connection tests, 10 Operations tests, both builds and audits, compile, pip, secret-pattern, and diff gates passed; committed as `d82e600286682c70639c3130e4f96661d7085a3c` |
+| 2026-08-04 | Exact hosted PostgreSQL service-role checkpoint | Add dormant no-login, no-inherit OAuth, provider-ingress, provider-reconciliation, worker, and scheduler roles; require one exact login membership; pin `search_path` before every shared preflight and restore it on pool reset; reject group ownership, direct ACLs, and default ACLs across the current database; extend catalog and clean-restore verification | First reviewer rejected the candidate for late/resettable `search_path`, unverified group-role ACLs, and stale restore inventory. A second reviewer found broader shared-preflight and cross-schema variants. All findings were repaired. Final independent revalidation found no remaining scope finding; 82 PostgreSQL and 4,548 repository tests passed; committed as `46e79a8` |
 | 2026-08-01 | Protected backup | SQLite URI read-only integrity and FK checks | `integrity_check=ok`; zero FK violations; file unchanged |
 | 2026-08-01 | Hosted persistence archaeology | Enumerate every direct SQLite connector plus JSON, JSONL, and blob authority from HTTP registration to storage | Generic compatibility shim rejected; explicit cloud persistence bundle and domain-port migration required |
 | 2026-08-01 | Portal salvage archaeology | Inspect backend `8a44d4c` and frontend `13abbf5` with file-level provenance and route boundaries | No wholesale merge; React rebuild required; exact safe primitives and forbidden customer surfaces mapped |
@@ -794,7 +795,7 @@ Evidence:
 - No deployment, DNS, billing, provider mutation, customer-data access, or
   production action occurred.
 
-The next active phase is hosted persistence correctness. Commit `5bcd5c0`
+The active phase remains hosted persistence correctness. Commit `5bcd5c0`
 establishes the first fail-closed boundary: `create_http_app`, `run_server`, the
 standalone Starlette factory, and the exported global MCP catalog cannot bind a
 public HTTP surface through SQLite, JSON, or JSONL. They require the PostgreSQL
@@ -809,9 +810,16 @@ lifecycle leaks, uncertified standalone deal-route mounting, the raw internal
 MCP HTTP bypass, and default stdio compatibility, then approved the unchanged
 boundary as safe to commit. It does not certify hosted functionality.
 
-PostgreSQL OAuth/provider bootstrap, request-scoped repositories, atomic
-approval, quota, and durable audit, then jobs, privacy, container, migration,
-recovery, and private-staging proof remain release blockers. The integrated
+Commit `46e79a8` establishes separate dormant OAuth, provider-ingress,
+provider-reconciliation, worker, and scheduler database group roles. The roles
+have no object authority yet and cannot be used as generic runtime identities.
+Their exact login and catalog contracts are verified at startup and restore.
+
+The next unfinished checkpoint is migration `0002` plus the narrow OAuth
+function pool and one-statement live-authority repository. Request-scoped domain
+repositories, atomic approval, quota, and durable audit, then jobs, privacy,
+container, migration, recovery, and private-staging proof remain release
+blockers. The integrated
 audit row cannot turn green until those paths are repaired and receive a fresh
 full-system review.
 
