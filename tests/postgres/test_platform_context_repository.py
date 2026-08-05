@@ -537,6 +537,50 @@ async def test_detached_task_cannot_retain_platform_repository_lease(
 
 
 @pytest.mark.asyncio
+async def test_inflight_platform_read_cannot_return_after_lease_revocation(
+    postgres_database: tuple[str, str, str],
+) -> None:
+    _, _, app_dsn = postgres_database
+    admission = _admission()
+    database = _database(app_dsn)
+    repository = PostgresPlatformRepository(database, admission)
+    worker_authorized = threading.Event()
+    release_worker = threading.Event()
+    escaped = PlatformContextSnapshot(
+        actor=None,  # type: ignore[arg-type]
+        workspace=None,  # type: ignore[arg-type]
+        membership=None,  # type: ignore[arg-type]
+        account=None,  # type: ignore[arg-type]
+        plan=None,
+        territories=(),
+    )
+
+    def blocking_read():
+        repository._require_active_scope()
+        worker_authorized.set()
+        assert release_worker.wait(timeout=5)
+        return escaped
+
+    try:
+        with (
+            patch.object(repository, "_get_snapshot", side_effect=blocking_read),
+            use_context(_context(admission)),
+            use_hosted_request_repositories(_repositories(admission, repository)),
+        ):
+            task = asyncio.create_task(repository.get_snapshot())
+            assert await asyncio.to_thread(worker_authorized.wait, 2)
+        release_worker.set()
+        with pytest.raises(
+            PlatformContextUnavailable,
+            match="^platform-context persistence unavailable$",
+        ):
+            await task
+    finally:
+        release_worker.set()
+        database.close()
+
+
+@pytest.mark.asyncio
 async def test_detached_task_cannot_fall_back_to_local_platform_repository(
     tmp_path,
 ) -> None:

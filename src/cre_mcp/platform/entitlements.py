@@ -1864,6 +1864,19 @@ PROVIDER_SYNC_MIGRATIONS = (
 
 class EntitlementStore:
     def __init__(self, db_path: str | Path) -> None:
+        from cre_mcp.access.context import current_context
+        from cre_mcp.postgres.domains import (
+            AdmittedRequestUnavailable,
+            current_hosted_request_repositories,
+        )
+
+        context = current_context()
+        if current_hosted_request_repositories() is not None or (
+            context is not None and not context.trusted
+        ):
+            raise AdmittedRequestUnavailable(
+                "hosted provider persistence cannot construct a local repository"
+            )
         self.db_path = Path(db_path).expanduser()
         self._ensure_schema()
 

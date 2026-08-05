@@ -522,6 +522,7 @@ class PostgresPlatformRepository:
         with self._database.admitted_connection(self._admission) as connection:
             with connection.cursor(row_factory=dict_row) as cursor:
                 rows = cursor.execute(_PLATFORM_CONTEXT_QUERY).fetchall()
+        self._require_active_scope()
         return _snapshot(rows, self._admission)
 
     async def get_snapshot(self) -> PlatformContextSnapshot:
@@ -529,6 +530,7 @@ class PostgresPlatformRepository:
         try:
             self._require_active_scope()
             result = await _finish_thread_before_cancellation(self._get_snapshot)
+            self._require_active_scope()
             if not isinstance(result, PlatformContextSnapshot):
                 raise ValueError("invalid platform-context result")
             return result

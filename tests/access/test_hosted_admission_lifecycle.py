@@ -14,12 +14,18 @@ from mcp.shared.exceptions import McpError
 from mcp.types import CallToolRequestParams
 
 from cre_mcp.access.audit import AuditLog
-from cre_mcp.access.context import TenantContext, use_context, use_runtime_config
+from cre_mcp.access.context import (
+    TenantContext,
+    current_context,
+    use_context,
+    use_runtime_config,
+)
 from cre_mcp.access.engine import AccessEngine
 from cre_mcp.access.middleware import AccessMiddleware, install_access
 from cre_mcp.access.profiles import Profile
 from cre_mcp.access.registry import WorkspaceRegistry
 from cre_mcp.config import CreConfig
+from cre_mcp.platform.entitlements import EntitlementStore
 from cre_mcp.postgres.admission import AdmissionOutcome, AdmissionUnavailable
 from cre_mcp.postgres.domains import (
     HostedRequestRepositories,
@@ -388,6 +394,48 @@ async def test_hosted_domain_provider_failure_finalizes_without_execution(
     assert admission.final_calls[0]["succeeded"] is False
     assert admission.final_calls[0]["reason_code"] == "request_setup_failed"
     assert current_hosted_request_repositories() is None
+
+
+async def test_hosted_domain_binding_cannot_construct_local_provider_store(
+    tmp_path,
+) -> None:
+    context = _context()
+    admission = RecordingAdmission(context)
+    forbidden = tmp_path / "forbidden-provider.db"
+    app = FastMCP(name="hosted-domain-local-provider-guard")
+    app.executions = 0
+    observed_contexts: list[TenantContext | None] = []
+
+    @app.tool
+    async def save_deal(url_or_id: str) -> dict:
+        app.executions += 1
+        return {"saved": url_or_id}
+
+    class LocalConstructingDomainProvider:
+        def bind(self, current_admission):
+            observed_contexts.append(current_context())
+            EntitlementStore(forbidden)
+            return RecordingDomainProvider().bind(current_admission)
+
+    uninstall = install_access(
+        app,
+        registry=None,
+        audit_log=AuditLog(tmp_path / "audit.jsonl"),
+        identity_resolver=lambda _context: context,
+        runtime_mode="http",
+        admission_repository=admission,
+        domain_repository_provider=LocalConstructingDomainProvider(),
+    )
+    try:
+        with pytest.raises(ToolError, match="hosted persistence is unavailable"):
+            await call_data(app, "save_deal", {"url_or_id": "deal-1"})
+    finally:
+        uninstall()
+
+    assert observed_contexts == [context]
+    assert app.executions == 0
+    assert not forbidden.exists()
+    assert admission.final_calls[0]["reason_code"] == "request_setup_failed"
 
 
 async def test_hosted_document_repository_is_bound_only_during_execution(

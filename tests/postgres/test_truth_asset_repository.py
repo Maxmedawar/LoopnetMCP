@@ -634,6 +634,57 @@ async def test_detached_task_cannot_retain_truth_asset_repository_lease(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["save", "list", "claims"])
+async def test_inflight_truth_operation_cannot_return_after_lease_revocation(
+    postgres_database: tuple[str, str, str],
+    operation: str,
+) -> None:
+    _, _, app_dsn = postgres_database
+    admission = _admission()
+    database = _database(app_dsn)
+    repository = PostgresTruthAssetRepository(database, admission)
+    record, blob, claims = _asset()
+    worker_authorized = threading.Event()
+    release_worker = threading.Event()
+
+    def blocking_operation(*_args):
+        repository._require_active_scope()
+        worker_authorized.set()
+        assert release_worker.wait(timeout=5)
+        return record if operation == "save" else []
+
+    async def invoke():
+        if operation == "save":
+            return await repository.save_document(record, blob, claims, ext="csv")
+        if operation == "list":
+            return await repository.list_documents(record.deal_id)
+        return await repository.get_claims(record.deal_id)
+
+    implementation = {
+        "save": "_save_document",
+        "list": "_list_documents",
+        "claims": "_get_claims",
+    }[operation]
+    try:
+        with (
+            patch.object(repository, implementation, side_effect=blocking_operation),
+            use_context(_context(admission)),
+            use_hosted_request_repositories(_repositories(admission, repository)),
+        ):
+            task = asyncio.create_task(invoke())
+            assert await asyncio.to_thread(worker_authorized.wait, 2)
+        release_worker.set()
+        with pytest.raises(
+            TruthAssetUnavailable,
+            match="^truth-asset persistence unavailable$",
+        ):
+            await task
+    finally:
+        release_worker.set()
+        database.close()
+
+
+@pytest.mark.asyncio
 async def test_detached_task_cannot_fall_back_to_local_truth_store(tmp_path) -> None:
     admission = _admission(tool_name="list_deal_documents")
     repository = object()

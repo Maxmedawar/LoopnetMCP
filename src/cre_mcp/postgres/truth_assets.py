@@ -368,6 +368,7 @@ class PostgresTruthAssetRepository:
                         list(claim.flags),
                     ),
                 )
+            self._require_active_scope()
         return record
 
     async def save_document(
@@ -380,13 +381,16 @@ class PostgresTruthAssetRepository:
     ) -> DocumentRecord:
         """Atomically store one content-addressed document and its claims."""
         try:
-            return await _finish_thread_before_cancellation(
+            self._require_active_scope()
+            result = await _finish_thread_before_cancellation(
                 self._save_document,
                 record,
                 blob,
                 claims,
                 ext,
             )
+            self._require_active_scope()
+            return result
         except TruthAssetUnavailable:
             raise
         except Exception as error:
@@ -429,10 +433,13 @@ class PostgresTruthAssetRepository:
     async def list_documents(self, deal_id: str) -> list[dict[str, Any]]:
         """Return one workspace's document metadata without raw blob content."""
         try:
-            return await _finish_thread_before_cancellation(
+            self._require_active_scope()
+            result = await _finish_thread_before_cancellation(
                 self._list_documents,
                 deal_id,
             )
+            self._require_active_scope()
+            return result
         except TruthAssetUnavailable:
             raise
         except Exception as error:
@@ -503,10 +510,13 @@ class PostgresTruthAssetRepository:
     async def get_claims(self, deal_id: str) -> list[dict[str, Any]]:
         """Return native structured claims for one admitted workspace."""
         try:
-            return await _finish_thread_before_cancellation(
+            self._require_active_scope()
+            result = await _finish_thread_before_cancellation(
                 self._get_claims,
                 deal_id,
             )
+            self._require_active_scope()
+            return result
         except TruthAssetUnavailable:
             raise
         except Exception as error:

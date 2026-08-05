@@ -450,9 +450,14 @@ class AccessMiddleware(Middleware):
     async def _bind_hosted_repositories(
         self,
         admission: AdmissionOutcome,
+        context: TenantContext,
     ) -> HostedRequestRepositories:
+        def bind() -> HostedRequestRepositories:
+            with use_context(context):
+                return self._domain_repositories.bind(admission)
+
         task = asyncio.create_task(
-            asyncio.to_thread(self._domain_repositories.bind, admission)
+            asyncio.to_thread(bind)
         )
         try:
             repositories = await asyncio.shield(task)
@@ -618,7 +623,10 @@ class AccessMiddleware(Middleware):
             if admission.replayed or admission.finalized:
                 raise ToolError(EXECUTION_OWNERSHIP_UNAVAILABLE)
             try:
-                hosted_repositories = await self._bind_hosted_repositories(admission)
+                hosted_repositories = await self._bind_hosted_repositories(
+                    admission,
+                    ctx,
+                )
             except asyncio.CancelledError:
                 try:
                     await self._record_hosted_final(
