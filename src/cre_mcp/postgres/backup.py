@@ -915,6 +915,7 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
     function_contract = {
         ("current_workspace_id", ""): {"medawarcre_app", "medawarcre_admin"},
         ("current_actor_user_id", ""): {"medawarcre_app", "medawarcre_admin"},
+        ("current_oauth_session_id", ""): {"medawarcre_app"},
         ("internal_authorized", ""): {"medawarcre_admin"},
         ("internal_can_mutate", ""): {"medawarcre_admin"},
         ("reject_audit_mutation", ""): set(),

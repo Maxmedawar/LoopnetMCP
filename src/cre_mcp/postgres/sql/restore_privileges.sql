@@ -35,7 +35,8 @@ GRANT SELECT ON
     medawarcre.deal_outcomes,
     medawarcre.deal_events,
     medawarcre.consents,
-    medawarcre.privacy_requests
+    medawarcre.privacy_requests,
+    medawarcre.source_document_attestations
 TO medawarcre_app;
 GRANT SELECT (
     id, workspace_id, provider, status, plan_key, current_period_end,
@@ -91,7 +92,8 @@ GRANT SELECT ON
     medawarcre.access_decision_audit,
     medawarcre.daily_quota_usage,
     medawarcre.jobs,
-    medawarcre.job_attempts
+    medawarcre.job_attempts,
+    medawarcre.source_document_attestations
 TO medawarcre_admin;
 GRANT SELECT (
     id, user_id, provider, subject_hint, verified_at, created_at, updated_at
@@ -179,6 +181,8 @@ GRANT EXECUTE ON FUNCTION medawarcre.current_workspace_id()
 TO medawarcre_app, medawarcre_admin;
 GRANT EXECUTE ON FUNCTION medawarcre.current_actor_user_id()
 TO medawarcre_app, medawarcre_admin;
+GRANT EXECUTE ON FUNCTION medawarcre.current_oauth_session_id()
+TO medawarcre_app;
 GRANT EXECUTE ON FUNCTION medawarcre.internal_authorized() TO medawarcre_admin;
 GRANT EXECUTE ON FUNCTION medawarcre.internal_can_mutate() TO medawarcre_admin;
 GRANT EXECUTE ON FUNCTION medawarcre.atomic_admit_tool_call(

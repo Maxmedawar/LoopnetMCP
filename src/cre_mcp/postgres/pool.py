@@ -33,6 +33,7 @@ INTERNAL_ROLES = frozenset(
 _CONTEXT_KEYS = (
     "app.workspace_id",
     "app.actor_user_id",
+    "app.oauth_session_id",
     "app.internal_role",
     "app.audit_reason",
 )
@@ -284,6 +285,7 @@ class PostgresDatabase:
                 "" if context.workspace_id is None else context.workspace_id
             ),
             "app.actor_user_id": context.actor_user_id,
+            "app.oauth_session_id": "",
             "app.internal_role": (
                 "" if context.internal_role is None else context.internal_role
             ),
