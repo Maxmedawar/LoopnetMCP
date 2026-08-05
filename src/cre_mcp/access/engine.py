@@ -2497,7 +2497,7 @@ def _result_contract_matches(
 class AccessEngine:
     def __init__(
         self,
-        registry: WorkspaceRegistry,
+        registry: WorkspaceRegistry | None,
         capabilities: dict[str, ToolCapability] | None = None,
     ) -> None:
         self.registry = registry
@@ -2541,10 +2541,15 @@ class AccessEngine:
             and cap.result_territory_contracts
         )
 
-    def check_call(
-        self, ctx: TenantContext | None, tool_name: str, args: dict | None
+    def _check_call(
+        self,
+        ctx: TenantContext | None,
+        tool_name: str,
+        args: dict | None,
+        *,
+        enforce_stateful: bool,
     ) -> tuple[Decision, dict]:
-        """Execution-level check. Returns the decision and sanitized args."""
+        """Run shared call policy, optionally applying local mutable gates."""
         args = dict(args or {})
         approval_id = args.pop(APPROVAL_ARG, None)
 
@@ -2751,6 +2756,9 @@ class AccessEngine:
                     "access denied: the supplied location could not be resolved to this workspace's territory"
                 ), sanitized
 
+        if not enforce_stateful:
+            return Decision(outcome="allowed"), sanitized
+
         if cap is not None and cap.quota:
             limit = ctx.quota_limits.get(cap.quota)
             if limit is not None and self.registry.usage_today(
@@ -2785,6 +2793,43 @@ class AccessEngine:
         if cap is not None and cap.quota:
             self.registry.record_usage(ctx.workspace_id, cap.quota)
         return Decision(outcome="allowed"), sanitized
+
+    def check_call(
+        self, ctx: TenantContext | None, tool_name: str, args: dict | None
+    ) -> tuple[Decision, dict]:
+        """Apply complete local execution policy and mutable local gates."""
+        return self._check_call(
+            ctx,
+            tool_name,
+            args,
+            enforce_stateful=True,
+        )
+
+    def check_call_policy(
+        self, ctx: TenantContext | None, tool_name: str, args: dict | None
+    ) -> tuple[Decision, dict]:
+        """Apply hosted-safe policy without local quota or approval mutation."""
+        return self._check_call(
+            ctx,
+            tool_name,
+            args,
+            enforce_stateful=False,
+        )
+
+    def call_admission_requirements(
+        self,
+        tool_name: str,
+        sanitized_args: Mapping[str, object],
+    ) -> tuple[str | None, bool]:
+        """Return the exact stateful gates for one policy-approved call."""
+        cap = self.capabilities.get(tool_name)
+        if cap is None:
+            return None, False
+        requires_approval = cap.sensitive or any(
+            _has_value(sanitized_args.get(param))
+            for param in cap.sensitive_params
+        )
+        return cap.quota, requires_approval
 
     def check_result(
         self,

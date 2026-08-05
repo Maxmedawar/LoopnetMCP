@@ -306,8 +306,9 @@ def _quota_http_app(config: CreConfig):
         runtime_mode="http",
         server=server,
         platform_api=platform,
-        access_registry=bundle.access_registry,
         audit_log=bundle.audit_log,
+        oauth_authority=bundle.oauth_authority,
+        admission_repository=bundle.admission_repository,
     )
     return server.http_app(
         path="/mcp",

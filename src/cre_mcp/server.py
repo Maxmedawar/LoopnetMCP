@@ -178,6 +178,8 @@ def install_access_control(
     platform_api=None,
     access_registry=None,
     audit_log=None,
+    oauth_authority=None,
+    admission_repository=None,
     surface_catalog=None,
 ):
     """Install tenant-aware access control on the module server instance.
@@ -188,36 +190,40 @@ def install_access_control(
     (and two apps never stack duplicate enforcement); returns the uninstaller.
     """
     from cre_mcp.access.audit import AuditLog
-    from cre_mcp.access.middleware import AccessMiddleware, install_access
+    from cre_mcp.access.middleware import AccessMiddleware
     from cre_mcp.access.registry import WorkspaceRegistry
     from cre_mcp.platform.authority import AuthoritativeOAuthVerifier
 
-    # Drop any existing access middleware rather than no-op, so a later call
-    # with a different registry/audit config is honored instead of ignored.
     target = server or mcp
-    for existing in [m for m in target.middleware if isinstance(m, AccessMiddleware)]:
-        target.middleware.remove(existing)
     config = config or CreConfig()
     # Point the platform routes at the same resolved config (shared cache DB).
     if runtime_mode == "http" and (
-        platform_api is None or access_registry is None or audit_log is None
+        platform_api is None
+        or audit_log is None
+        or oauth_authority is None
+        or admission_repository is None
     ):
         raise RuntimeError(
-            "hosted HTTP requires an explicit persistence bundle"
+            "hosted HTTP requires explicit PostgreSQL authority services"
         )
+    if runtime_mode == "http" and access_registry is not None:
+        raise RuntimeError("hosted HTTP forbids a local access registry")
     platform = platform_api if platform_api is not None else _platform(config)
-    if runtime_mode == "http":
-        target.auth = AuthoritativeOAuthVerifier(platform.authority)
-    else:
-        target.auth = None
-    access_dir = config.cache_db_path.parent / "access"
-    registry = (
-        access_registry
-        if access_registry is not None
-        else WorkspaceRegistry(
-            config.access_registry_path or access_dir / "registry.json"
-        )
+    resolved_auth = (
+        AuthoritativeOAuthVerifier(oauth_authority)
+        if runtime_mode == "http"
+        else None
     )
+    access_dir = config.cache_db_path.parent / "access"
+    registry = None
+    if runtime_mode != "http":
+        registry = (
+            access_registry
+            if access_registry is not None
+            else WorkspaceRegistry(
+                config.access_registry_path or access_dir / "registry.json"
+            )
+        )
     resolved_audit_log = (
         audit_log
         if audit_log is not None
@@ -234,15 +240,38 @@ def install_access_control(
             catalog=surface_catalog,
         )
         tool_visibility_resolver = surface_catalog.is_visible
-    return install_access(
-        target,
+    middleware = AccessMiddleware(
         registry=registry,
         audit_log=resolved_audit_log,
         runtime_mode=runtime_mode,
         config=config,
         tool_call_resolver=tool_call_resolver,
         tool_visibility_resolver=tool_visibility_resolver,
+        admission_repository=admission_repository,
     )
+    # Replace only after the complete successor has been constructed, so a
+    # failed reconfiguration never strips the currently installed guard.
+    prior_middleware = list(target.middleware)
+    prior_auth = target.auth
+    try:
+        for existing in [
+            item for item in target.middleware if isinstance(item, AccessMiddleware)
+        ]:
+            target.middleware.remove(existing)
+        target.auth = resolved_auth
+        target.add_middleware(middleware)
+    except BaseException:
+        target.middleware[:] = prior_middleware
+        target.auth = prior_auth
+        raise
+
+    def uninstall() -> None:
+        try:
+            target.middleware.remove(middleware)
+        except ValueError:
+            pass
+
+    return uninstall
 
 
 def _build_hosted_customer_server() -> FastMCP:
@@ -291,8 +320,9 @@ def create_http_app(
             runtime_mode="http",
             server=hosted_server,
             platform_api=platform,
-            access_registry=bundle.access_registry,
             audit_log=bundle.audit_log,
+            oauth_authority=bundle.oauth_authority,
+            admission_repository=bundle.admission_repository,
             surface_catalog=CUSTOMER_SURFACE,
         )
         # JSON responses avoid creating an SSE watcher and per-request stream for
@@ -332,8 +362,9 @@ def run_server(
                 runtime_mode="http",
                 server=hosted_server,
                 platform_api=platform,
-                access_registry=bundle.access_registry,
                 audit_log=bundle.audit_log,
+                oauth_authority=bundle.oauth_authority,
+                admission_repository=bundle.admission_repository,
                 surface_catalog=CUSTOMER_SURFACE,
             )
             hosted_server.run(

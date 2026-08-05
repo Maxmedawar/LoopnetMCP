@@ -40,7 +40,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"cre_mcp.access" = ["data/*.gz", "data/*.md"]
+"cre_mcp.access" = ["capability_matrix.json", "data/*.gz", "data/*.md"]
 "cre_mcp.postgres" = ["sql/*.sql"]
 "cre_mcp.source_rights" = ["registry.json"]
 

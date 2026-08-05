@@ -10,10 +10,12 @@ Trusted-local identity exists only when the caller explicitly selects the
 stdio runtime. Missing context and dependency failures always fail closed.
 """
 
+import asyncio
 import json
 import math
 from collections.abc import Callable, Mapping
 from typing import Any, Literal
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware, MiddlewareContext
@@ -28,12 +30,26 @@ from cre_mcp.access.context import (
     use_context,
     use_runtime_config,
 )
-from cre_mcp.access.engine import AccessEngine, RESULT_TERRITORY_DENIAL
+from cre_mcp.access.engine import (
+    APPROVAL_ARG,
+    AccessEngine,
+    RESULT_TERRITORY_DENIAL,
+)
 from cre_mcp.access.registry import WorkspaceRegistry
+from cre_mcp.postgres.admission import AdmissionOutcome
 from cre_mcp.source_rights.gate import collect_authorized_sources
 from cre_mcp.source_rights.output import safe_error_message, sanitize_tool_result
 
 UNAUTHENTICATED = "(unauthenticated)"
+ADMISSION_UNAVAILABLE = "access denied: request admission is unavailable"
+EXECUTION_OWNERSHIP_UNAVAILABLE = (
+    "access denied: request execution ownership is unavailable"
+)
+FINALIZATION_UNAVAILABLE = "access denied: request finalization is unavailable"
+AUDIT_UNAVAILABLE = "access denied: request audit is unavailable"
+HOSTED_TOOL_FAILED = "tool execution failed"
+HOSTED_RESULT_RELEASE_DENIED = "tool result could not be released"
+MAX_REQUEST_BINDING_BYTES = 2048
 MAX_RESULT_JSON_DEPTH = 64
 _CANONICAL_TOOL_RESULT_FIELDS = frozenset(
     {"content", "structured_content", "meta"}
@@ -206,7 +222,7 @@ class AccessMiddleware(Middleware):
     def __init__(
         self,
         *,
-        registry: WorkspaceRegistry,
+        registry: WorkspaceRegistry | None,
         audit_log: AuditLog,
         identity_resolver: IdentityResolver | None = None,
         capabilities: dict[str, ToolCapability] | None = None,
@@ -214,13 +230,200 @@ class AccessMiddleware(Middleware):
         config: Any | None = None,
         tool_call_resolver: ToolCallResolver | None = None,
         tool_visibility_resolver: ToolVisibilityResolver | None = None,
+        admission_repository: Any | None = None,
     ) -> None:
+        if runtime_mode == "http" and admission_repository is None:
+            raise ValueError("hosted HTTP requires an atomic admission repository")
+        if runtime_mode != "http" and admission_repository is not None:
+            raise ValueError("atomic admission is available only to hosted HTTP")
+        if runtime_mode != "http" and registry is None:
+            raise ValueError("local access control requires a workspace registry")
         self.engine = AccessEngine(registry, capabilities)
         self.audit = audit_log
         self._resolve = identity_resolver or _default_resolver_for(runtime_mode)
         self._config = config
         self._resolve_tool_call = tool_call_resolver
         self._tool_is_visible = tool_visibility_resolver
+        self._admission = admission_repository
+
+    @staticmethod
+    def _valid_admission_binding(
+        admission: object,
+        context: TenantContext,
+        tool_name: str,
+        invocation_id: str,
+        request_correlation_id: str,
+    ) -> bool:
+        if not isinstance(admission, AdmissionOutcome):
+            return False
+        try:
+            UUID(admission.invocation_id)
+            UUID(admission.request_correlation_id)
+        except (ValueError, TypeError, AttributeError):
+            return False
+        if (
+            admission.workspace_public_id != context.workspace_id
+            or admission.actor_user_id != context.actor_id
+            or admission.session_id != context.session_id
+            or admission.tool_name != tool_name
+            or admission.invocation_id != invocation_id
+            or admission.request_correlation_id != request_correlation_id
+            or admission.decision
+            not in {"allowed", "denied", "approval_required"}
+            or type(admission.reason_code) is not str
+            or not admission.reason_code.strip()
+            or type(admission.safe_reason) is not str
+            or not admission.safe_reason.strip()
+            or type(admission.replayed) is not bool
+            or type(admission.finalized) is not bool
+        ):
+            return False
+        if admission.decision == "approval_required":
+            return admission.approval_id == admission.invocation_id
+        return admission.approval_id is None
+
+    @staticmethod
+    def _hosted_request_binding(
+        middleware_context: MiddlewareContext,
+        tenant_context: TenantContext,
+    ) -> tuple[str, str]:
+        fastmcp_context = middleware_context.fastmcp_context
+        if fastmcp_context is None or fastmcp_context.request_context is None:
+            raise ValueError("hosted request context is unavailable")
+        request_id = fastmcp_context.request_context.request_id
+        transport_session_id = fastmcp_context.session_id
+        if type(request_id) not in {str, int}:
+            raise ValueError("hosted request id is invalid")
+        if (
+            type(transport_session_id) is not str
+            or not transport_session_id
+        ):
+            raise ValueError("hosted transport session is invalid")
+        binding = json.dumps(
+            [
+                tenant_context.workspace_id,
+                tenant_context.actor_id,
+                tenant_context.session_id,
+                transport_session_id,
+                type(request_id).__name__,
+                request_id,
+            ],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        if len(binding.encode("utf-8")) > MAX_REQUEST_BINDING_BYTES:
+            raise ValueError("hosted request binding is too large")
+        invocation_id = uuid5(
+            NAMESPACE_URL,
+            f"https://medawarcre.com/mcp/invocation/{binding}",
+        )
+        request_correlation_id = uuid5(
+            NAMESPACE_URL,
+            f"https://medawarcre.com/mcp/request/{binding}",
+        )
+        return str(invocation_id), str(request_correlation_id)
+
+    async def _record_audit(
+        self,
+        *,
+        workspace_id: str,
+        tool: str,
+        decision: str,
+        reason: str,
+    ) -> None:
+        if self._admission is None:
+            self.audit.record(
+                workspace_id=workspace_id,
+                tool=tool,
+                decision=decision,
+                reason=reason,
+            )
+            return
+        try:
+            await asyncio.to_thread(
+                self.audit.record,
+                workspace_id=workspace_id,
+                tool=tool,
+                decision=decision,
+                reason=reason,
+            )
+        except Exception:
+            raise ToolError(AUDIT_UNAVAILABLE) from None
+
+    async def _record_hosted_final(
+        self,
+        admission: AdmissionOutcome,
+        *,
+        succeeded: bool,
+        reason_code: str,
+        safe_reason: str,
+    ) -> None:
+        try:
+            final_id = await asyncio.to_thread(
+                self._admission.record_final,
+                admission,
+                succeeded=succeeded,
+                reason_code=reason_code,
+                safe_reason=safe_reason,
+            )
+            UUID(final_id)
+        except Exception:
+            raise ToolError(FINALIZATION_UNAVAILABLE) from None
+
+    async def _admit_hosted(
+        self,
+        context: TenantContext,
+        tool_name: str,
+        sanitized: dict[str, Any],
+        *,
+        quota_bucket: str | None,
+        requires_approval: bool,
+        approval_token: object,
+        invocation_id: str,
+        request_correlation_id: str,
+    ) -> AdmissionOutcome:
+        task = asyncio.create_task(
+            asyncio.to_thread(
+                self._admission.admit,
+                context,
+                tool_name,
+                sanitized,
+                quota_bucket=quota_bucket,
+                requires_approval=requires_approval,
+                approval_token=approval_token if requires_approval else None,
+                invocation_id=invocation_id,
+                request_correlation_id=request_correlation_id,
+            )
+        )
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            try:
+                admission = await task
+            except Exception:
+                raise
+            if (
+                self._valid_admission_binding(
+                    admission,
+                    context,
+                    tool_name,
+                    invocation_id,
+                    request_correlation_id,
+                )
+                and admission.decision == "allowed"
+                and not admission.replayed
+                and not admission.finalized
+            ):
+                try:
+                    await self._record_hosted_final(
+                        admission,
+                        succeeded=False,
+                        reason_code="request_cancelled",
+                        safe_reason="request cancelled before execution",
+                    )
+                except ToolError:
+                    pass
+            raise
 
     async def on_list_tools(self, context: MiddlewareContext, call_next) -> Any:
         ctx = self._resolve(context)
@@ -237,7 +440,7 @@ class AccessMiddleware(Middleware):
                 for tool in tools
                 if self._tool_is_visible(ctx, tool.name, self.engine)
             ]
-        self.audit.record(
+        await self._record_audit(
             workspace_id=ctx.workspace_id if ctx else UNAUTHENTICATED,
             tool="__list_tools__",
             decision="allowed" if ctx and ctx.active else "denied",
@@ -259,7 +462,7 @@ class AccessMiddleware(Middleware):
             if resolved_call is None:
                 workspace = ctx.workspace_id if ctx else UNAUTHENTICATED
                 reason = "access denied: grouped action is not available"
-                self.audit.record(
+                await self._record_audit(
                     workspace_id=workspace,
                     tool=requested_tool,
                     decision="denied",
@@ -267,12 +470,20 @@ class AccessMiddleware(Middleware):
                 )
                 raise ToolError(reason)
             tool_name, args, wrap_arguments = resolved_call
-        decision, sanitized = self.engine.check_call(ctx, tool_name, args)
+        approval_token = args.get(APPROVAL_ARG) if isinstance(args, dict) else None
+        if self._admission is None:
+            decision, sanitized = self.engine.check_call(ctx, tool_name, args)
+        else:
+            decision, sanitized = self.engine.check_call_policy(
+                ctx,
+                tool_name,
+                args,
+            )
         workspace = ctx.workspace_id if ctx else UNAUTHENTICATED
         safe_reason = safe_error_message(decision.reason, config=self._config)
 
         if decision.outcome == "denied":
-            self.audit.record(
+            await self._record_audit(
                 workspace_id=workspace,
                 tool=tool_name,
                 decision="denied",
@@ -281,7 +492,7 @@ class AccessMiddleware(Middleware):
             raise ToolError(safe_reason)
 
         if decision.outcome == "approval_required":
-            self.audit.record(
+            await self._record_audit(
                 workspace_id=workspace,
                 tool=tool_name,
                 decision="approval_required",
@@ -297,11 +508,92 @@ class AccessMiddleware(Middleware):
                 approval_payload["capability_id"] = tool_name
             return ToolResult(structured_content=approval_payload)
 
-        context.message.arguments = wrap_arguments(sanitized)
-        requires_result_check = self.engine.requires_result_territory_check(
-            ctx,
-            tool_name,
-        )
+        admission = None
+        if self._admission is not None:
+            if ctx is None or ctx.trusted:
+                raise ToolError(ADMISSION_UNAVAILABLE)
+            quota_bucket, requires_approval = (
+                self.engine.call_admission_requirements(tool_name, sanitized)
+            )
+            try:
+                invocation_id, request_correlation_id = (
+                    self._hosted_request_binding(context, ctx)
+                )
+                admission = await self._admit_hosted(
+                    ctx,
+                    tool_name,
+                    sanitized,
+                    quota_bucket=quota_bucket,
+                    requires_approval=requires_approval,
+                    approval_token=approval_token,
+                    invocation_id=invocation_id,
+                    request_correlation_id=request_correlation_id,
+                )
+            except Exception:
+                raise ToolError(ADMISSION_UNAVAILABLE) from None
+            if not self._valid_admission_binding(
+                admission,
+                ctx,
+                tool_name,
+                invocation_id,
+                request_correlation_id,
+            ):
+                raise ToolError(ADMISSION_UNAVAILABLE)
+            try:
+                safe_reason = safe_error_message(
+                    admission.safe_reason,
+                    config=self._config,
+                )
+            except Exception:
+                if (
+                    admission.decision == "allowed"
+                    and not admission.replayed
+                    and not admission.finalized
+                ):
+                    await self._record_hosted_final(
+                        admission,
+                        succeeded=False,
+                        reason_code="request_setup_failed",
+                        safe_reason="request setup failed closed",
+                    )
+                raise ToolError(ADMISSION_UNAVAILABLE) from None
+            if admission.decision == "denied":
+                raise ToolError(safe_reason)
+            if admission.decision == "approval_required":
+                approval_payload = {
+                    "approval_required": True,
+                    "approval_id": admission.approval_id,
+                    "tool": requested_tool,
+                    "message": safe_reason,
+                }
+                if requested_tool != tool_name:
+                    approval_payload["capability_id"] = tool_name
+                return ToolResult(structured_content=approval_payload)
+            if admission.replayed or admission.finalized:
+                raise ToolError(EXECUTION_OWNERSHIP_UNAVAILABLE)
+
+        try:
+            context.message.arguments = wrap_arguments(sanitized)
+            requires_result_check = self.engine.requires_result_territory_check(
+                ctx,
+                tool_name,
+            )
+        except Exception:
+            if admission is not None:
+                await self._record_hosted_final(
+                    admission,
+                    succeeded=False,
+                    reason_code="request_setup_failed",
+                    safe_reason="request setup failed closed",
+                )
+            else:
+                await self._record_audit(
+                    workspace_id=workspace,
+                    tool=tool_name,
+                    decision="denied",
+                    reason="access denied: request setup failed",
+                )
+            raise ToolError("access denied: request setup failed") from None
         authorized_sources: dict[str, object] = {}
         try:
             with (
@@ -311,37 +603,90 @@ class AccessMiddleware(Middleware):
             ):
                 result = await call_next(context)
                 authorized_sources = dict(collected_sources)
+        except asyncio.CancelledError:
+            if admission is not None:
+                try:
+                    await self._record_hosted_final(
+                        admission,
+                        succeeded=False,
+                        reason_code="request_cancelled",
+                        safe_reason="request cancelled before completion",
+                    )
+                except ToolError:
+                    pass
+            raise
         except Exception as exc:
             if requires_result_check:
                 # Provider and tool exceptions are client-visible output. A
                 # restricted search cannot release their untyped messages because
                 # those strings may contain property data outside the territory.
-                self.audit.record(
-                    workspace_id=workspace,
-                    tool=tool_name,
-                    decision="denied",
-                    reason=RESULT_TERRITORY_DENIAL,
-                )
+                if admission is None:
+                    await self._record_audit(
+                        workspace_id=workspace,
+                        tool=tool_name,
+                        decision="denied",
+                        reason=RESULT_TERRITORY_DENIAL,
+                    )
+                else:
+                    await self._record_hosted_final(
+                        admission,
+                        succeeded=False,
+                        reason_code="result_policy_denied",
+                        safe_reason=RESULT_TERRITORY_DENIAL,
+                    )
                 raise ToolError(RESULT_TERRITORY_DENIAL) from None
             if ctx is not None and ctx.trusted:
                 raise
-            raise ToolError(
-                safe_error_message(exc, config=self._config)
-            )
-        if requires_result_check:
-            result_decision = self.engine.check_result(
-                ctx,
-                tool_name,
-                _result_payloads(result),
-                sanitized,
-            )
-            if result_decision.outcome == "denied":
-                self.audit.record(
-                    workspace_id=workspace,
-                    tool=tool_name,
-                    decision="denied",
-                    reason=result_decision.reason,
+            if admission is not None:
+                failure_reason = HOSTED_TOOL_FAILED
+                await self._record_hosted_final(
+                    admission,
+                    succeeded=False,
+                    reason_code="tool_failed",
+                    safe_reason=failure_reason,
                 )
+            else:
+                failure_reason = safe_error_message(exc, config=self._config)
+            raise ToolError(failure_reason) from None
+        if requires_result_check:
+            try:
+                result_decision = self.engine.check_result(
+                    ctx,
+                    tool_name,
+                    _result_payloads(result),
+                    sanitized,
+                )
+            except Exception:
+                if admission is None:
+                    await self._record_audit(
+                        workspace_id=workspace,
+                        tool=tool_name,
+                        decision="denied",
+                        reason=RESULT_TERRITORY_DENIAL,
+                    )
+                else:
+                    await self._record_hosted_final(
+                        admission,
+                        succeeded=False,
+                        reason_code="result_policy_denied",
+                        safe_reason=RESULT_TERRITORY_DENIAL,
+                    )
+                raise ToolError(RESULT_TERRITORY_DENIAL) from None
+            if result_decision.outcome == "denied":
+                if admission is None:
+                    await self._record_audit(
+                        workspace_id=workspace,
+                        tool=tool_name,
+                        decision="denied",
+                        reason=result_decision.reason,
+                    )
+                else:
+                    await self._record_hosted_final(
+                        admission,
+                        succeeded=False,
+                        reason_code="result_policy_denied",
+                        safe_reason=result_decision.reason,
+                    )
                 raise ToolError(result_decision.reason)
         try:
             with use_context(ctx), use_runtime_config(self._config):
@@ -352,31 +697,55 @@ class AccessMiddleware(Middleware):
                 )
         except Exception as exc:
             if requires_result_check:
-                self.audit.record(
-                    workspace_id=workspace,
-                    tool=tool_name,
-                    decision="denied",
-                    reason=RESULT_TERRITORY_DENIAL,
-                )
+                if admission is None:
+                    await self._record_audit(
+                        workspace_id=workspace,
+                        tool=tool_name,
+                        decision="denied",
+                        reason=RESULT_TERRITORY_DENIAL,
+                    )
+                else:
+                    await self._record_hosted_final(
+                        admission,
+                        succeeded=False,
+                        reason_code="result_policy_denied",
+                        safe_reason=RESULT_TERRITORY_DENIAL,
+                    )
                 raise ToolError(RESULT_TERRITORY_DENIAL) from None
             if ctx is not None and ctx.trusted:
                 raise
-            raise ToolError(
-                safe_error_message(exc, config=self._config)
-            ) from None
-        self.audit.record(
-            workspace_id=workspace,
-            tool=tool_name,
-            decision="allowed",
-            reason=safe_reason,
-        )
+            if admission is not None:
+                failure_reason = HOSTED_RESULT_RELEASE_DENIED
+                await self._record_hosted_final(
+                    admission,
+                    succeeded=False,
+                    reason_code="source_rights_denied",
+                    safe_reason=failure_reason,
+                )
+            else:
+                failure_reason = safe_error_message(exc, config=self._config)
+            raise ToolError(failure_reason) from None
+        if admission is None:
+            await self._record_audit(
+                workspace_id=workspace,
+                tool=tool_name,
+                decision="allowed",
+                reason=safe_reason,
+            )
+        else:
+            await self._record_hosted_final(
+                admission,
+                succeeded=True,
+                reason_code="tool_completed",
+                safe_reason="request completed",
+            )
         return result
 
 
 def install_access(
     mcp,
     *,
-    registry: WorkspaceRegistry,
+    registry: WorkspaceRegistry | None,
     audit_log: AuditLog,
     identity_resolver: IdentityResolver | None = None,
     capabilities: dict[str, ToolCapability] | None = None,
@@ -384,6 +753,7 @@ def install_access(
     config: Any | None = None,
     tool_call_resolver: ToolCallResolver | None = None,
     tool_visibility_resolver: ToolVisibilityResolver | None = None,
+    admission_repository: Any | None = None,
 ) -> Callable[[], None]:
     """Install access control on a FastMCP server; returns an uninstaller."""
     middleware = AccessMiddleware(
@@ -395,6 +765,7 @@ def install_access(
         config=config,
         tool_call_resolver=tool_call_resolver,
         tool_visibility_resolver=tool_visibility_resolver,
+        admission_repository=admission_repository,
     )
     mcp.add_middleware(middleware)
 

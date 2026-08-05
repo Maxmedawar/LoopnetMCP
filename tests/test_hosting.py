@@ -123,7 +123,8 @@ async def test_http_app_closes_postgres_bundle_once_with_asgi_lifespan(tmp_path)
     close = Mock()
     bundle = type(seeded)(
         platform_api=seeded.platform_api,
-        access_registry=seeded.access_registry,
+        oauth_authority=seeded.oauth_authority,
+        admission_repository=seeded.admission_repository,
         audit_log=seeded.audit_log,
         close_callback=close,
     )
@@ -146,7 +147,8 @@ def test_http_app_closes_postgres_bundle_on_construction_failure(tmp_path):
     close = Mock()
     bundle = type(seeded)(
         platform_api=seeded.platform_api,
-        access_registry=seeded.access_registry,
+        oauth_authority=seeded.oauth_authority,
+        admission_repository=seeded.admission_repository,
         audit_log=seeded.audit_log,
         close_callback=close,
     )
@@ -157,6 +159,24 @@ def test_http_app_closes_postgres_bundle_on_construction_failure(tmp_path):
         "cre_mcp.server._build_hosted_customer_server",
         side_effect=RuntimeError("construction failed"),
     ), pytest.raises(RuntimeError, match="construction failed"):
+        create_http_app(config=config)
+
+    close.assert_called_once_with()
+
+
+def test_http_app_rejects_incomplete_lifecycle_bundle_and_closes(tmp_path):
+    config = _config(cache_db_path=tmp_path / "platform.db")
+    seeded = make_testing_persistence_bundle(config)
+    close = Mock()
+    bundle = type(seeded)(
+        platform_api=seeded.platform_api,
+        audit_log=seeded.audit_log,
+        close_callback=close,
+    )
+    with patch(
+        "cre_mcp.postgres.runtime.build_postgres_hosted_persistence",
+        return_value=bundle,
+    ), pytest.raises(RuntimeError, match="explicit PostgreSQL authority"):
         create_http_app(config=config)
 
     close.assert_called_once_with()

@@ -79,6 +79,7 @@ async def test_hosted_dependency_failure_never_defaults_to_trusted_local(
         registry=registry,
         audit_log=audit,
         runtime_mode="http",
+        admission_repository=object(),
     )
     try:
         names = await tool_names(app)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from collections.abc import Iterator
@@ -362,31 +363,34 @@ class AuthoritativeOAuthVerifier(TokenVerifier):
         self.resolver = resolver
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        outcome = self.resolver.resolve(token)
-        if outcome is None:
+        try:
+            outcome = await asyncio.to_thread(self.resolver.resolve, token)
+            if outcome is None:
+                return None
+            session = outcome.session
+            scopes = list(session.scopes)
+            claims: dict[str, object] = {"session_id": session.session_id}
+            if outcome.access_allowed and outcome.context is not None:
+                claims["tenant_context"] = outcome.context.model_dump(mode="json")
+            else:
+                # Keep valid credential identity distinct from authorization. By
+                # withholding the mandatory MCP scope, FastMCP emits a standards-
+                # consistent 403 before allocating an MCP transport session.
+                scopes = [
+                    scope for scope in scopes if scope not in self.required_scopes
+                ]
+                claims["access_disabled_reason"] = outcome.reason
+            return AccessToken(
+                token=token,
+                client_id=session.client_id,
+                scopes=scopes,
+                expires_at=int(session.access_expires_at.timestamp()),
+                resource=session.resource,
+                subject=str(session.user_id),
+                claims=claims,
+            )
+        except Exception:
             return None
-        session = outcome.session
-        scopes = list(session.scopes)
-        claims: dict[str, object] = {"session_id": session.session_id}
-        if outcome.access_allowed and outcome.context is not None:
-            claims["tenant_context"] = outcome.context.model_dump(mode="json")
-        else:
-            # Keep valid credential identity distinct from authorization. By
-            # withholding the mandatory MCP scope, FastMCP emits a standards-
-            # consistent 403 before allocating an MCP transport session.
-            scopes = [
-                scope for scope in scopes if scope not in self.required_scopes
-            ]
-            claims["access_disabled_reason"] = outcome.reason
-        return AccessToken(
-            token=token,
-            client_id=session.client_id,
-            scopes=scopes,
-            expires_at=int(session.access_expires_at.timestamp()),
-            resource=session.resource,
-            subject=str(session.user_id),
-            claims=claims,
-        )
 
 
 __all__ = [

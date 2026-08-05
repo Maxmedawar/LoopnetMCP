@@ -1,11 +1,36 @@
 """Coverage 7: unclassified tools are denied in cloud mode, and the
 capability matrix must cover every registered tool exactly."""
 
+import tomllib
+from pathlib import Path
+
 import pytest
 from fastmcp.exceptions import ToolError
 from pydantic import ValidationError
 
 from tests.access.helpers import call_data, tool_names
+
+
+def test_capability_matrix_is_declared_as_wheel_package_data():
+    project = tomllib.loads(
+        Path("pyproject.toml").read_text(encoding="utf-8")
+    )
+    package_data = project["tool"]["setuptools"]["package-data"]
+
+    assert "capability_matrix.json" in package_data["cre_mcp.access"]
+
+
+def test_missing_capability_matrix_fails_closed(tmp_path, monkeypatch):
+    from cre_mcp.access import capabilities
+
+    monkeypatch.setattr(
+        capabilities,
+        "_MATRIX_PATH",
+        tmp_path / "missing-capability-matrix.json",
+    )
+
+    with pytest.raises(RuntimeError, match="capability matrix is unavailable"):
+        capabilities._load()
 
 
 async def test_unclassified_tool_is_hidden_in_cloud(mini_mcp, identity, ctx_op):

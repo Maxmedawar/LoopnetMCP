@@ -300,7 +300,7 @@ _MATRIX_PATH = Path(__file__).with_name("capability_matrix.json")
 
 def _load() -> dict[str, ToolCapability]:
     if not _MATRIX_PATH.exists():
-        return {}
+        raise RuntimeError("capability matrix is unavailable")
     raw = json.loads(_MATRIX_PATH.read_text(encoding="utf-8"))
     return {
         name: ToolCapability.model_validate({"tool": name, **entry})

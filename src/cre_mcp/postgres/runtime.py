@@ -28,8 +28,9 @@ class HostedPersistenceBundle:
     """All durable services required by one hosted server process."""
 
     platform_api: Any
-    access_registry: Any
     audit_log: Any
+    oauth_authority: Any = None
+    admission_repository: Any = None
     backend: str = "postgres"
     close_callback: Callable[[], None] = lambda: None
     _closed: bool = field(default=False, init=False, repr=False)
