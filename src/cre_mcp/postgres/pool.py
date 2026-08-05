@@ -15,6 +15,10 @@ from cre_mcp.postgres.authority import (
     assert_exact_group_session,
 )
 from cre_mcp.postgres.config import PostgresSettings
+from cre_mcp.postgres.domains import (
+    AdmittedRequestUnavailable,
+    require_fresh_admission,
+)
 
 INTERNAL_ROLES = frozenset(
     {
@@ -297,11 +301,51 @@ class PostgresDatabase:
                     )
                 yield connection
 
+    @contextmanager
+    def admitted_connection(self, admission) -> Iterator[psycopg.Connection]:
+        """Bind one app transaction to an exact fresh PostgreSQL admission."""
+        if self.settings.runtime_mode != "app":
+            raise AdmittedRequestUnavailable(
+                "admitted domain connections require the app runtime"
+            )
+        admission = require_fresh_admission(admission)
+        with self._pool.connection(
+            timeout=self.settings.acquire_timeout
+        ) as connection:
+            with connection.transaction():
+                try:
+                    row = connection.execute(
+                        "SELECT * FROM medawarcre.bind_admitted_request("
+                        "%s,%s,%s,%s,%s,%s)",
+                        (
+                            admission.invocation_id,
+                            admission.request_correlation_id,
+                            admission.workspace_public_id,
+                            admission.actor_user_id,
+                            admission.session_id,
+                            admission.tool_name,
+                        ),
+                    ).fetchone()
+                except Exception as error:
+                    raise AdmittedRequestUnavailable(
+                        "admitted request domain authority is unavailable"
+                    ) from error
+                if (
+                    row is None
+                    or str(row[1]) != admission.actor_user_id
+                    or not str(row[0]).strip()
+                ):
+                    raise AdmittedRequestUnavailable(
+                        "admitted request domain binding was rejected"
+                    )
+                yield connection
+
     def stats(self) -> dict[str, int]:
         return dict(self._pool.get_stats())
 
 
 __all__ = [
+    "AdmittedRequestUnavailable",
     "AuthorityContext",
     "DatabaseReadinessSnapshot",
     "INTERNAL_ROLES",

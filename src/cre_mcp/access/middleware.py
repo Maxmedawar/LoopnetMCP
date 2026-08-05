@@ -14,6 +14,7 @@ import asyncio
 import json
 import math
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -37,7 +38,15 @@ from cre_mcp.access.engine import (
 )
 from cre_mcp.access.registry import WorkspaceRegistry
 from cre_mcp.postgres.admission import AdmissionOutcome
+from cre_mcp.postgres.domains import (
+    HostedRequestRepositories,
+    require_fresh_admission,
+    use_hosted_request_repositories,
+)
 from cre_mcp.source_rights.gate import collect_authorized_sources
+from cre_mcp.source_rights.attestations import (
+    use_hosted_document_attestation_repository,
+)
 from cre_mcp.source_rights.output import safe_error_message, sanitize_tool_result
 
 UNAUTHENTICATED = "(unauthenticated)"
@@ -47,6 +56,9 @@ EXECUTION_OWNERSHIP_UNAVAILABLE = (
 )
 FINALIZATION_UNAVAILABLE = "access denied: request finalization is unavailable"
 AUDIT_UNAVAILABLE = "access denied: request audit is unavailable"
+DOMAIN_PERSISTENCE_UNAVAILABLE = (
+    "access denied: hosted persistence is unavailable"
+)
 HOSTED_TOOL_FAILED = "tool execution failed"
 HOSTED_RESULT_RELEASE_DENIED = "tool result could not be released"
 MAX_REQUEST_BINDING_BYTES = 2048
@@ -231,11 +243,20 @@ class AccessMiddleware(Middleware):
         tool_call_resolver: ToolCallResolver | None = None,
         tool_visibility_resolver: ToolVisibilityResolver | None = None,
         admission_repository: Any | None = None,
+        domain_repository_provider: Any | None = None,
     ) -> None:
-        if runtime_mode == "http" and admission_repository is None:
-            raise ValueError("hosted HTTP requires an atomic admission repository")
-        if runtime_mode != "http" and admission_repository is not None:
-            raise ValueError("atomic admission is available only to hosted HTTP")
+        if runtime_mode == "http" and (
+            admission_repository is None or domain_repository_provider is None
+        ):
+            raise ValueError(
+                "hosted HTTP requires atomic admission and domain repositories"
+            )
+        if runtime_mode != "http" and (
+            admission_repository is not None or domain_repository_provider is not None
+        ):
+            raise ValueError(
+                "hosted admission and domain repositories are available only to HTTP"
+            )
         if runtime_mode != "http" and registry is None:
             raise ValueError("local access control requires a workspace registry")
         self.engine = AccessEngine(registry, capabilities)
@@ -245,6 +266,7 @@ class AccessMiddleware(Middleware):
         self._resolve_tool_call = tool_call_resolver
         self._tool_is_visible = tool_visibility_resolver
         self._admission = admission_repository
+        self._domain_repositories = domain_repository_provider
 
     @staticmethod
     def _valid_admission_binding(
@@ -425,6 +447,29 @@ class AccessMiddleware(Middleware):
                     pass
             raise
 
+    async def _bind_hosted_repositories(
+        self,
+        admission: AdmissionOutcome,
+    ) -> HostedRequestRepositories:
+        task = asyncio.create_task(
+            asyncio.to_thread(self._domain_repositories.bind, admission)
+        )
+        try:
+            repositories = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            try:
+                await task
+            except Exception:
+                pass
+            raise
+        if (
+            not isinstance(repositories, HostedRequestRepositories)
+            or repositories.admission is not admission
+        ):
+            raise ValueError("hosted domain provider returned a mismatched scope")
+        require_fresh_admission(repositories.admission)
+        return repositories
+
     async def on_list_tools(self, context: MiddlewareContext, call_next) -> Any:
         ctx = self._resolve(context)
         tools = await call_next(context)
@@ -509,6 +554,7 @@ class AccessMiddleware(Middleware):
             return ToolResult(structured_content=approval_payload)
 
         admission = None
+        hosted_repositories = None
         if self._admission is not None:
             if ctx is None or ctx.trusted:
                 raise ToolError(ADMISSION_UNAVAILABLE)
@@ -571,6 +617,27 @@ class AccessMiddleware(Middleware):
                 return ToolResult(structured_content=approval_payload)
             if admission.replayed or admission.finalized:
                 raise ToolError(EXECUTION_OWNERSHIP_UNAVAILABLE)
+            try:
+                hosted_repositories = await self._bind_hosted_repositories(admission)
+            except asyncio.CancelledError:
+                try:
+                    await self._record_hosted_final(
+                        admission,
+                        succeeded=False,
+                        reason_code="request_cancelled",
+                        safe_reason="request cancelled before execution",
+                    )
+                except ToolError:
+                    pass
+                raise
+            except Exception:
+                await self._record_hosted_final(
+                    admission,
+                    succeeded=False,
+                    reason_code="request_setup_failed",
+                    safe_reason="hosted persistence setup failed closed",
+                )
+                raise ToolError(DOMAIN_PERSISTENCE_UNAVAILABLE) from None
 
         try:
             context.message.arguments = wrap_arguments(sanitized)
@@ -599,6 +666,14 @@ class AccessMiddleware(Middleware):
             with (
                 use_context(ctx),
                 use_runtime_config(self._config),
+                use_hosted_request_repositories(hosted_repositories)
+                if hosted_repositories is not None
+                else nullcontext(),
+                use_hosted_document_attestation_repository(
+                    hosted_repositories.require("document")
+                )
+                if hosted_repositories is not None
+                else nullcontext(),
                 collect_authorized_sources() as collected_sources,
             ):
                 result = await call_next(context)
@@ -754,6 +829,7 @@ def install_access(
     tool_call_resolver: ToolCallResolver | None = None,
     tool_visibility_resolver: ToolVisibilityResolver | None = None,
     admission_repository: Any | None = None,
+    domain_repository_provider: Any | None = None,
 ) -> Callable[[], None]:
     """Install access control on a FastMCP server; returns an uninstaller."""
     middleware = AccessMiddleware(
@@ -766,6 +842,7 @@ def install_access(
         tool_call_resolver=tool_call_resolver,
         tool_visibility_resolver=tool_visibility_resolver,
         admission_repository=admission_repository,
+        domain_repository_provider=domain_repository_provider,
     )
     mcp.add_middleware(middleware)
 

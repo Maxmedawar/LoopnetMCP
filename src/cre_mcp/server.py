@@ -180,6 +180,7 @@ def install_access_control(
     audit_log=None,
     oauth_authority=None,
     admission_repository=None,
+    domain_repository_provider=None,
     surface_catalog=None,
 ):
     """Install tenant-aware access control on the module server instance.
@@ -202,6 +203,7 @@ def install_access_control(
         or audit_log is None
         or oauth_authority is None
         or admission_repository is None
+        or domain_repository_provider is None
     ):
         raise RuntimeError(
             "hosted HTTP requires explicit PostgreSQL authority services"
@@ -248,6 +250,7 @@ def install_access_control(
         tool_call_resolver=tool_call_resolver,
         tool_visibility_resolver=tool_visibility_resolver,
         admission_repository=admission_repository,
+        domain_repository_provider=domain_repository_provider,
     )
     # Replace only after the complete successor has been constructed, so a
     # failed reconfiguration never strips the currently installed guard.
@@ -323,6 +326,7 @@ def create_http_app(
             audit_log=bundle.audit_log,
             oauth_authority=bundle.oauth_authority,
             admission_repository=bundle.admission_repository,
+            domain_repository_provider=bundle.domain_repository_provider,
             surface_catalog=CUSTOMER_SURFACE,
         )
         # JSON responses avoid creating an SSE watcher and per-request stream for
@@ -365,6 +369,7 @@ def run_server(
                 audit_log=bundle.audit_log,
                 oauth_authority=bundle.oauth_authority,
                 admission_repository=bundle.admission_repository,
+                domain_repository_provider=bundle.domain_repository_provider,
                 surface_catalog=CUSTOMER_SURFACE,
             )
             hosted_server.run(

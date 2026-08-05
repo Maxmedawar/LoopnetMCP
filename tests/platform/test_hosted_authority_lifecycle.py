@@ -102,6 +102,24 @@ def test_hosted_install_requires_explicit_oauth_and_admission(tmp_path) -> None:
         )
 
 
+def test_hosted_install_requires_explicit_domain_repository_provider(
+    tmp_path,
+) -> None:
+    server = FastMCP(name="missing-hosted-domain-provider")
+    config = CreConfig(_env_file=None, cache_db_path=tmp_path / "platform.db")
+
+    with pytest.raises(RuntimeError, match="explicit PostgreSQL authority"):
+        install_access_control(
+            config,
+            runtime_mode="http",
+            server=server,
+            platform_api=object(),
+            audit_log=AuditLog(tmp_path / "audit.jsonl"),
+            oauth_authority=RecordingAuthority(),
+            admission_repository=object(),
+        )
+
+
 def test_hosted_install_uses_explicit_authorities_without_local_registry(
     tmp_path,
 ) -> None:
@@ -109,6 +127,7 @@ def test_hosted_install_uses_explicit_authorities_without_local_registry(
     config = CreConfig(_env_file=None, cache_db_path=tmp_path / "platform.db")
     authority = RecordingAuthority()
     admission = object()
+    domain_provider = object()
 
     uninstall = install_access_control(
         config,
@@ -118,6 +137,7 @@ def test_hosted_install_uses_explicit_authorities_without_local_registry(
         audit_log=AuditLog(tmp_path / "audit.jsonl"),
         oauth_authority=authority,
         admission_repository=admission,
+        domain_repository_provider=domain_provider,
     )
     try:
         middleware = next(
@@ -126,6 +146,7 @@ def test_hosted_install_uses_explicit_authorities_without_local_registry(
         assert server.auth.resolver is authority
         assert middleware.engine.registry is None
         assert middleware._admission is admission
+        assert middleware._domain_repositories is domain_provider
     finally:
         uninstall()
 
@@ -144,6 +165,7 @@ def test_hosted_install_rejects_local_registry(tmp_path) -> None:
             audit_log=AuditLog(tmp_path / "audit.jsonl"),
             oauth_authority=RecordingAuthority(),
             admission_repository=object(),
+            domain_repository_provider=object(),
         )
 
 
@@ -197,6 +219,7 @@ def test_installation_failure_rolls_back_guard_and_auth(tmp_path, monkeypatch) -
                 audit_log=AuditLog(tmp_path / "audit.jsonl"),
                 oauth_authority=RecordingAuthority(),
                 admission_repository=object(),
+                domain_repository_provider=object(),
             )
         assert server.middleware == original_middleware
         assert server.auth is original_auth

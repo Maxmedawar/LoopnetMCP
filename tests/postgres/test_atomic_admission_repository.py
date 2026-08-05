@@ -342,11 +342,12 @@ def test_oauth_and_admission_share_exact_quota_identifier_grammar() -> None:
         assert _quotas({invalid: 1}) is None
 
 
-def test_migration_0003_and_exact_admission_function_inventory() -> None:
+def test_migration_0004_and_exact_admission_function_inventory() -> None:
     migrations = load_migrations()
-    assert [migration.version for migration in migrations] == [1, 2, 3]
+    assert [migration.version for migration in migrations] == [1, 2, 3, 4]
     assert migrations[2].name == "atomic request admission"
-    assert EXPECTED_MIGRATION_VERSION == 3
+    assert migrations[3].name == "request scoped domain authority"
+    assert EXPECTED_MIGRATION_VERSION == 4
     assert ADMISSION_FUNCTIONS == {
         (
             "atomic_admit_tool_call",
@@ -359,13 +360,13 @@ def test_migration_0003_and_exact_admission_function_inventory() -> None:
     }
 
 
-def test_migration_0003_upgrades_immutable_0002(
+def test_migrations_upgrade_immutable_0002(
     postgres_database: tuple[str, str, str],
 ) -> None:
     _, migration_dsn, _ = postgres_database
     migrations = load_migrations()
     assert MigrationRunner(migration_dsn, migrations[:2]).apply() == [1, 2]
-    assert MigrationRunner(migration_dsn, migrations).apply() == [3]
+    assert MigrationRunner(migration_dsn, migrations).apply() == [3, 4]
 
 
 def test_atomic_admission_revalidates_authority_and_mutates_nothing_on_denial(

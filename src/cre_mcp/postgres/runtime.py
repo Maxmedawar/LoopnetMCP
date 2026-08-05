@@ -29,6 +29,7 @@ class HostedPersistenceBundle:
 
     platform_api: Any
     audit_log: Any
+    domain_repository_provider: Any
     oauth_authority: Any = None
     admission_repository: Any = None
     backend: str = "postgres"

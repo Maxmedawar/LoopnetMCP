@@ -123,6 +123,7 @@ async def test_http_app_closes_postgres_bundle_once_with_asgi_lifespan(tmp_path)
     close = Mock()
     bundle = type(seeded)(
         platform_api=seeded.platform_api,
+        domain_repository_provider=seeded.domain_repository_provider,
         oauth_authority=seeded.oauth_authority,
         admission_repository=seeded.admission_repository,
         audit_log=seeded.audit_log,
@@ -147,6 +148,7 @@ def test_http_app_closes_postgres_bundle_on_construction_failure(tmp_path):
     close = Mock()
     bundle = type(seeded)(
         platform_api=seeded.platform_api,
+        domain_repository_provider=seeded.domain_repository_provider,
         oauth_authority=seeded.oauth_authority,
         admission_repository=seeded.admission_repository,
         audit_log=seeded.audit_log,
@@ -171,6 +173,7 @@ def test_http_app_rejects_incomplete_lifecycle_bundle_and_closes(tmp_path):
     bundle = type(seeded)(
         platform_api=seeded.platform_api,
         audit_log=seeded.audit_log,
+        domain_repository_provider=None,
         close_callback=close,
     )
     with patch(

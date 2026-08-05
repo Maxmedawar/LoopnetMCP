@@ -14,12 +14,23 @@ from mcp.shared.exceptions import McpError
 from mcp.types import CallToolRequestParams
 
 from cre_mcp.access.audit import AuditLog
-from cre_mcp.access.context import TenantContext
+from cre_mcp.access.context import TenantContext, use_context, use_runtime_config
 from cre_mcp.access.engine import AccessEngine
 from cre_mcp.access.middleware import AccessMiddleware, install_access
 from cre_mcp.access.profiles import Profile
 from cre_mcp.access.registry import WorkspaceRegistry
+from cre_mcp.config import CreConfig
 from cre_mcp.postgres.admission import AdmissionOutcome, AdmissionUnavailable
+from cre_mcp.postgres.domains import (
+    HostedRequestRepositories,
+    current_hosted_request_repositories,
+)
+from cre_mcp.source_rights.attestations import (
+    current_hosted_document_attestation_repository,
+    require_external_document_attestation,
+    use_hosted_document_attestation_repository,
+)
+from cre_mcp.source_rights.gate import SourceRightsDeniedError
 from tests.access.helpers import call_data, tool_names
 
 
@@ -148,6 +159,73 @@ class RecordingAudit:
             raise self.error
 
 
+class RecordingDomainProvider:
+    def __init__(
+        self,
+        error: Exception | None = None,
+        document_repository: object | None = None,
+    ) -> None:
+        self.calls: list[dict] = []
+        self.error = error
+        self.document_repository = document_repository
+
+    def bind(self, admission: AdmissionOutcome) -> HostedRequestRepositories:
+        if self.error is not None:
+            raise self.error
+        marker = object()
+        repositories = HostedRequestRepositories(
+            admission=admission,
+            platform=marker,
+            provider=marker,
+            search=marker,
+            deal=marker,
+            privacy=marker,
+            job=marker,
+            document=self.document_repository or marker,
+            truth_asset=marker,
+        )
+        self.calls.append(
+            {
+                "thread": threading.get_ident(),
+                "admission": admission,
+                "repositories": repositories,
+            }
+        )
+        return repositories
+
+
+class RecordingDocumentRepository:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def require(self, **kwargs):
+        self.calls.append(kwargs)
+        return {"attested": True}
+
+
+async def test_detached_task_cannot_retain_document_repository_lease() -> None:
+    document_repository = RecordingDocumentRepository()
+    child_started = asyncio.Event()
+    inspect_scope = asyncio.Event()
+
+    async def detached_child():
+        child_started.set()
+        await inspect_scope.wait()
+        return current_hosted_document_attestation_repository()
+
+    with use_hosted_document_attestation_repository(document_repository):
+        task = asyncio.create_task(detached_child())
+        await child_started.wait()
+        assert (
+            current_hosted_document_attestation_repository()
+            is document_repository
+        )
+
+    assert current_hosted_document_attestation_repository() is None
+    inspect_scope.set()
+    assert await task is None
+
+
 class BlockingAdmission(RecordingAdmission):
     def __init__(self, context: TenantContext) -> None:
         super().__init__(context)
@@ -188,6 +266,8 @@ def _app(tmp_path, context, admission, *, failing: bool = False):
     app = FastMCP(name="hosted-admission-lifecycle")
     app.executions = 0
     app.received = None
+    app.domain_scope = None
+    app.domain_provider = RecordingDomainProvider()
 
     @app.tool
     async def save_deal(
@@ -196,6 +276,7 @@ def _app(tmp_path, context, admission, *, failing: bool = False):
         db_path: str | None = None,
     ) -> dict:
         app.executions += 1
+        app.domain_scope = current_hosted_request_repositories()
         app.received = {
             "url_or_id": url_or_id,
             "workspace_id": workspace_id,
@@ -212,6 +293,7 @@ def _app(tmp_path, context, admission, *, failing: bool = False):
         identity_resolver=lambda _context: context,
         runtime_mode="http",
         admission_repository=admission,
+        domain_repository_provider=app.domain_provider,
     )
     return app, uninstall
 
@@ -238,6 +320,12 @@ async def test_hosted_admission_receives_only_sanitized_arguments_off_loop(
         uninstall()
 
     assert result == {"ok": True, "saved": "deal-1"}
+    assert app.domain_scope is app.domain_provider.calls[0]["repositories"]
+    assert app.domain_provider.calls[0]["admission"] is admission.final_calls[0][
+        "admission"
+    ]
+    assert app.domain_provider.calls[0]["thread"] != event_loop_thread
+    assert current_hosted_request_repositories() is None
     assert app.received == {
         "url_or_id": "deal-1",
         "workspace_id": None,
@@ -264,6 +352,95 @@ async def test_hosted_admission_receives_only_sanitized_arguments_off_loop(
     assert admission.final_calls[0]["thread"] != event_loop_thread
     assert admission.final_calls[0]["succeeded"] is True
     assert admission.final_calls[0]["reason_code"] == "tool_completed"
+
+
+async def test_hosted_domain_provider_failure_finalizes_without_execution(
+    tmp_path,
+) -> None:
+    context = _context()
+    admission = RecordingAdmission(context)
+    app = FastMCP(name="hosted-domain-failure")
+    app.executions = 0
+
+    @app.tool
+    async def save_deal(url_or_id: str) -> dict:
+        app.executions += 1
+        return {"saved": url_or_id}
+
+    provider = RecordingDomainProvider(RuntimeError("database secret"))
+    uninstall = install_access(
+        app,
+        registry=None,
+        audit_log=AuditLog(tmp_path / "audit.jsonl"),
+        identity_resolver=lambda _context: context,
+        runtime_mode="http",
+        admission_repository=admission,
+        domain_repository_provider=provider,
+    )
+    try:
+        with pytest.raises(ToolError, match="hosted persistence is unavailable"):
+            await call_data(app, "save_deal", {"url_or_id": "deal-1"})
+    finally:
+        uninstall()
+
+    assert app.executions == 0
+    assert len(admission.final_calls) == 1
+    assert admission.final_calls[0]["succeeded"] is False
+    assert admission.final_calls[0]["reason_code"] == "request_setup_failed"
+    assert current_hosted_request_repositories() is None
+
+
+async def test_hosted_document_repository_is_bound_only_during_execution(
+    tmp_path,
+) -> None:
+    context = _context()
+    admission = RecordingAdmission(context)
+    document_repository = RecordingDocumentRepository()
+    app = FastMCP(name="hosted-document-repository")
+
+    @app.tool
+    async def save_deal(url_or_id: str) -> dict:
+        attestation = require_external_document_attestation(
+            "https://documents.example/report.pdf",
+            "srcatt_test",
+            purposes={"retrieve"},
+        )
+        return {"saved": url_or_id, "attestation": attestation}
+
+    uninstall = install_access(
+        app,
+        registry=None,
+        audit_log=AuditLog(tmp_path / "audit.jsonl"),
+        identity_resolver=lambda _context: context,
+        runtime_mode="http",
+        config=CreConfig(_env_file=None, transport="http"),
+        admission_repository=admission,
+        domain_repository_provider=RecordingDomainProvider(
+            document_repository=document_repository,
+        ),
+    )
+    try:
+        result = await call_data(app, "save_deal", {"url_or_id": "deal-1"})
+    finally:
+        uninstall()
+
+    assert result == {
+        "saved": "deal-1",
+        "attestation": {"attested": True},
+    }
+    assert len(document_repository.calls) == 1
+    assert document_repository.calls[0]["context"] is context
+    assert current_hosted_document_attestation_repository() is None
+    with use_context(context), use_runtime_config(
+        CreConfig(_env_file=None, transport="http")
+    ):
+        with pytest.raises(SourceRightsDeniedError, match="durable repository"):
+            require_external_document_attestation(
+                "https://documents.example/report.pdf",
+                "srcatt_test",
+                purposes={"retrieve"},
+            )
+    assert len(document_repository.calls) == 1
 
 
 async def test_hosted_approval_metadata_is_owned_by_atomic_admission(
@@ -295,6 +472,7 @@ async def test_hosted_approval_metadata_is_owned_by_atomic_admission(
         identity_resolver=lambda _context: context,
         runtime_mode="http",
         admission_repository=admission,
+        domain_repository_provider=RecordingDomainProvider(),
     )
     try:
         result = await call_data(app, "generate_loi", {"deal_id": "deal-1"})
@@ -341,6 +519,7 @@ async def test_duplicate_mcp_request_uses_one_stable_admission_binding(
         identity_resolver=lambda _context: context,
         runtime_mode="http",
         admission_repository=admission,
+        domain_repository_provider=RecordingDomainProvider(),
     )
     executions = 0
 
@@ -503,6 +682,7 @@ async def test_hosted_approval_token_is_removed_before_execution(tmp_path) -> No
         identity_resolver=lambda _context: context,
         runtime_mode="http",
         admission_repository=admission,
+        domain_repository_provider=RecordingDomainProvider(),
     )
     token = str(uuid4())
     try:
@@ -570,6 +750,7 @@ async def test_hosted_policy_audit_runs_off_loop(tmp_path) -> None:
         identity_resolver=lambda _context: context,
         runtime_mode="http",
         admission_repository=admission,
+        domain_repository_provider=RecordingDomainProvider(),
     )
     event_loop_thread = threading.get_ident()
     try:
@@ -600,6 +781,7 @@ async def test_hosted_policy_audit_failure_is_safe_and_fails_closed(
         identity_resolver=lambda _context: context,
         runtime_mode="http",
         admission_repository=admission,
+        domain_repository_provider=RecordingDomainProvider(),
     )
     try:
         with pytest.raises(McpError, match="request audit is unavailable") as caught:
@@ -621,6 +803,7 @@ async def test_hosted_cancellation_records_failed_final(tmp_path) -> None:
         identity_resolver=lambda _context: context,
         runtime_mode="http",
         admission_repository=admission,
+        domain_repository_provider=RecordingDomainProvider(),
     )
 
     async def execute(_context):
@@ -662,6 +845,7 @@ async def test_cancellation_during_admission_never_orphans_fresh_allow(
         identity_resolver=lambda _context: context,
         runtime_mode="http",
         admission_repository=admission,
+        domain_repository_provider=RecordingDomainProvider(),
     )
     task = asyncio.create_task(
         middleware._admit_hosted(
@@ -715,6 +899,7 @@ async def test_grouped_argument_wrapper_failure_finalizes_without_execution(
         identity_resolver=lambda _context: context,
         runtime_mode="http",
         admission_repository=admission,
+        domain_repository_provider=RecordingDomainProvider(),
         tool_call_resolver=resolve,
     )
     try:

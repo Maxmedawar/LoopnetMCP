@@ -49,6 +49,15 @@ class DealStore:
         *,
         config: CreConfig | None = None,
     ) -> None:
+        from cre_mcp.postgres.domains import (
+            AdmittedRequestUnavailable,
+            current_hosted_request_repositories,
+        )
+
+        if current_hosted_request_repositories() is not None:
+            raise AdmittedRequestUnavailable(
+                "hosted deal persistence cannot construct a local store"
+            )
         if isinstance(db_path, CreConfig):
             selected_config = db_path
         else:
@@ -2004,8 +2013,13 @@ class DealStore:
             return {"error": message}
 
 
-def get_deal_store(config: CreConfig | None = None) -> DealStore:
+def get_deal_store(config: CreConfig | None = None) -> Any:
     """Build a lightweight store façade over the configured shared database."""
+    from cre_mcp.postgres.domains import current_hosted_request_repositories
+
+    hosted = current_hosted_request_repositories()
+    if hosted is not None:
+        return hosted.require("deal")
     return DealStore(config=config)
 
 

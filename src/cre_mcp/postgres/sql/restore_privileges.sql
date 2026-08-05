@@ -188,6 +188,9 @@ GRANT EXECUTE ON FUNCTION medawarcre.atomic_admit_tool_call(
 GRANT EXECUTE ON FUNCTION medawarcre.record_tool_call_final(
     uuid, uuid, text, uuid, uuid, text, boolean, text, text
 ) TO medawarcre_admission;
+GRANT EXECUTE ON FUNCTION medawarcre.bind_admitted_request(
+    uuid, uuid, text, uuid, uuid, text
+) TO medawarcre_app;
 GRANT EXECUTE ON FUNCTION medawarcre.resolve_oauth_authority(
     bytea, text, text
 ) TO medawarcre_oauth;

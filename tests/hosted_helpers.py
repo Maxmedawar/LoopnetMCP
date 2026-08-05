@@ -11,12 +11,14 @@ from cre_mcp.access.audit import AuditLog
 from cre_mcp.access.engine import args_fingerprint
 from cre_mcp.access.registry import WorkspaceRegistry
 from cre_mcp.config import CreConfig
+from cre_mcp.deals.store import DealStore
 from cre_mcp.platform.api import PlatformApi, starlette_app
 from cre_mcp.postgres.runtime import (
     HostedPersistenceBundle,
     bind_persistence_lifespan,
 )
 from cre_mcp.postgres.admission import AdmissionOutcome
+from cre_mcp.postgres.domains import HostedRequestRepositories
 from cre_mcp.server import create_http_app
 
 
@@ -128,6 +130,31 @@ class TestingAdmissionRepository:
         return str(uuid4())
 
 
+class TestingDomainRepositoryProvider:
+    """Explicit legacy adapters for isolated hosted protocol tests only."""
+
+    __test__ = False
+
+    def __init__(self, config: CreConfig, platform_api: PlatformApi) -> None:
+        self.config = config
+        self.platform_api = platform_api
+
+    def bind(self, admission: AdmissionOutcome) -> HostedRequestRepositories:
+        deal_store = DealStore(config=self.config)
+        marker = object()
+        return HostedRequestRepositories(
+            admission=admission,
+            platform=self.platform_api.repository,
+            provider=marker,
+            search=deal_store,
+            deal=deal_store,
+            privacy=marker,
+            job=marker,
+            document=marker,
+            truth_asset=marker,
+        )
+
+
 def make_testing_persistence_bundle(
     config: CreConfig,
     *,
@@ -150,6 +177,10 @@ def make_testing_persistence_bundle(
     )
     return HostedPersistenceBundle(
         platform_api=platform_api,
+        domain_repository_provider=TestingDomainRepositoryProvider(
+            config,
+            platform_api,
+        ),
         oauth_authority=platform_api.authority,
         admission_repository=TestingAdmissionRepository(registry, audit_log),
         audit_log=audit_log,

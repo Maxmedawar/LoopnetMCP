@@ -95,10 +95,25 @@ class DocumentAttestationRepository(Protocol):
     ) -> DocumentRightsAttestation: ...
 
 
-_hosted_repository: ContextVar[DocumentAttestationRepository | None] = ContextVar(
+@dataclass
+class _DocumentRepositoryLease:
+    repository: DocumentAttestationRepository
+    active: bool = True
+
+
+_hosted_repository: ContextVar[_DocumentRepositoryLease | None] = ContextVar(
     "source_document_attestation_repository",
     default=None,
 )
+
+
+def current_hosted_document_attestation_repository(
+) -> DocumentAttestationRepository | None:
+    """Return the active durable document repository, if its lease is live."""
+    lease = _hosted_repository.get()
+    if lease is None or not lease.active:
+        return None
+    return lease.repository
 
 
 @contextmanager
@@ -106,10 +121,13 @@ def use_hosted_document_attestation_repository(
     repository: DocumentAttestationRepository | None,
 ):
     """Inject the server's durable hosted repository for one request scope."""
-    token = _hosted_repository.set(repository)
+    lease = None if repository is None else _DocumentRepositoryLease(repository)
+    token = _hosted_repository.set(lease)
     try:
         yield repository
     finally:
+        if lease is not None:
+            lease.active = False
         _hosted_repository.reset(token)
 
 
@@ -452,7 +470,7 @@ def require_external_document_attestation(
         raise SourceRightsDeniedError(
             "source-rights denied: document rights attestation is required"
         )
-    repository = _hosted_repository.get()
+    repository = current_hosted_document_attestation_repository()
     if repository is None:
         raise SourceRightsDeniedError(
             "source-rights denied: hosted document attestation requires an "
@@ -471,6 +489,7 @@ __all__ = [
     "DocumentAttestationStore",
     "DocumentAdminAuthority",
     "DocumentAttestationRepository",
+    "current_hosted_document_attestation_repository",
     "DocumentRightsAttestation",
     "document_url_hash",
     "normalized_document_url",

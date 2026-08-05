@@ -942,6 +942,10 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
             "uuid, uuid, text, uuid, uuid, text, boolean, text, text",
         ): {ADMISSION_ROLE},
         (
+            "bind_admitted_request",
+            "uuid, uuid, text, uuid, uuid, text",
+        ): {"medawarcre_app"},
+        (
             "resolve_oauth_authority",
             "bytea, text, text",
         ): {SERVICE_ROLES["oauth"]},
