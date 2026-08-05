@@ -419,12 +419,12 @@ class CompsResult(ClosedResultModel):
 class AlertDeal(Deal):
     model_config = ConfigDict(extra="forbid")
 
-    saved_search_id: int
+    saved_search_id: int | str
     saved_search_name: str
 
 
 class AlertSearchResult(ClosedResultModel):
-    search_id: int
+    search_id: int | str
     name: str
     new_count: int
     scanned: int
@@ -454,7 +454,7 @@ class SavedSearchQuery(ClosedResultModel):
 
 
 class SaveSearchResult(ClosedResultModel):
-    search_id: int
+    search_id: int | str
     name: str
     query: SavedSearchQuery
     min_score: float | None = None
@@ -463,7 +463,7 @@ class SaveSearchResult(ClosedResultModel):
 
 
 class SavedSearchRow(ClosedResultModel):
-    id: int
+    id: int | str
     name: str
     query: SavedSearchQuery
     min_score: float | None = None

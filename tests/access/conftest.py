@@ -8,10 +8,13 @@ middleware's injected resolver reads it. A resolver returning None models an
 unauthenticated cloud connection.
 """
 
+from uuid import uuid4
+
 import pytest
 from fastmcp import FastMCP
 
 from cre_mcp.access.audit import AuditLog
+from cre_mcp.access.context import current_context
 from cre_mcp.access.middleware import install_access
 from cre_mcp.access.profiles import Profile
 from cre_mcp.access.registry import WorkspaceRegistry
@@ -171,13 +174,62 @@ def mini_mcp(registry, audit, identity):
 @pytest.fixture
 def real_server(registry, audit, identity, tmp_path, monkeypatch):
     """The production server instance with access control installed and
-    storage rooted in a temp directory. Legacy/local path: tmp/cache.db;
-    cloud workspaces must land under tmp/workspaces/<id>/cache.db."""
+    local storage rooted in a temp directory. Hosted search calls use an
+    explicit actor-private port and never fall back to workspace SQLite."""
     monkeypatch.setenv("CRE_CACHE_DB_PATH", str(tmp_path / "cache.db"))
     monkeypatch.delenv("LOOPNET_CACHE_DB_PATH", raising=False)
     from cre_mcp.access.middleware import AccessMiddleware
     from cre_mcp.config import CreConfig
+    from cre_mcp.deals.store import get_search_store as production_get_search_store
     from cre_mcp.server import mcp as production_mcp
+    from cre_mcp.tools import pipeline_tools
+
+    class AccessSearchPort:
+        def __init__(self):
+            self.rows: dict[tuple[str, str], list[dict]] = {}
+
+        @staticmethod
+        def _identity() -> tuple[str, str]:
+            context = current_context()
+            assert context is not None and not context.trusted
+            return context.workspace_id, context.actor_id
+
+        async def save_search(self, name, query, min_score=None):
+            search_id = str(uuid4())
+            self.rows.setdefault(self._identity(), []).append(
+                {
+                    "id": search_id,
+                    "name": name,
+                    "query": dict(query),
+                    "min_score": min_score,
+                    "created_at": "2026-08-01T00:00:00+00:00",
+                    "seen_count": 0,
+                }
+            )
+            return search_id
+
+        async def list_searches(self):
+            return [dict(row) for row in self.rows.get(self._identity(), [])]
+
+        async def get_search(self, search_id):
+            return next(
+                (
+                    dict(row)
+                    for row in self.rows.get(self._identity(), [])
+                    if row["id"] == search_id
+                ),
+                None,
+            )
+
+    hosted_search_port = AccessSearchPort()
+
+    def test_search_store():
+        context = current_context()
+        if context is not None and not context.trusted:
+            return hosted_search_port
+        return production_get_search_store()
+
+    monkeypatch.setattr(pipeline_tools, "get_search_store", test_search_store)
 
     saved_middleware = list(production_mcp.middleware)
     production_mcp.middleware[:] = [

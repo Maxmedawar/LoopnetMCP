@@ -65,7 +65,7 @@ async def test_pipeline_tools_add_update_filter_and_dedupe(tmp_path):
 @pytest.mark.asyncio
 async def test_saved_search_tools_validate_persist_and_disclose_pull_mode(tmp_path):
     store = DealStore(tmp_path / "pipeline.db")
-    with patch("cre_mcp.tools.pipeline_tools.get_deal_store", return_value=store):
+    with patch("cre_mcp.tools.pipeline_tools.get_search_store", return_value=store):
         saved = await save_search(
             "Austin buy box",
             "Austin, TX",

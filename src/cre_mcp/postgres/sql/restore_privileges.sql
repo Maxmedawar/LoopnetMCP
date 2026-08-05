@@ -30,6 +30,7 @@ GRANT SELECT ON
     medawarcre.territories,
     medawarcre.workspace_accounts,
     medawarcre.saved_searches,
+    medawarcre.saved_search_seen_matches,
     medawarcre.search_runs,
     medawarcre.search_results,
     medawarcre.deal_outcomes,
@@ -57,12 +58,15 @@ GRANT SELECT (
     id, workspace_id, deal_id, body, created_at, updated_at
 ) ON medawarcre.deal_notes TO medawarcre_app;
 GRANT INSERT, UPDATE, DELETE ON
-    medawarcre.saved_searches,
     medawarcre.deals,
     medawarcre.deal_notes,
     medawarcre.deal_outcomes,
     medawarcre.consents,
     medawarcre.privacy_requests
+TO medawarcre_app;
+GRANT INSERT ON
+    medawarcre.saved_searches,
+    medawarcre.saved_search_seen_matches
 TO medawarcre_app;
 
 GRANT SELECT ON
@@ -80,6 +84,7 @@ GRANT SELECT ON
     medawarcre.connected_clients,
     medawarcre.provider_event_attempts,
     medawarcre.saved_searches,
+    medawarcre.saved_search_seen_matches,
     medawarcre.search_runs,
     medawarcre.search_results,
     medawarcre.deals,
@@ -162,6 +167,7 @@ GRANT INSERT, UPDATE, DELETE ON
     medawarcre.workspace_accounts,
     medawarcre.connected_clients,
     medawarcre.saved_searches,
+    medawarcre.saved_search_seen_matches,
     medawarcre.search_runs,
     medawarcre.search_results,
     medawarcre.deals,

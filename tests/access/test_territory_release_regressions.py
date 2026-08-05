@@ -3988,7 +3988,7 @@ async def test_stale_saved_search_is_denied_before_nested_provider_execution(
         executions[0] += 1
         return {"deals": [], "errors": {}}
 
-    monkeypatch.setattr(pipeline_tools, "get_deal_store", lambda: StoredSearches())
+    monkeypatch.setattr(pipeline_tools, "get_search_store", lambda: StoredSearches())
     monkeypatch.setattr(pipeline_tools, "find_deals", forbidden_find_deals)
     app = FastMCP(name="territory-stale-alert-regression")
     app.tool(name="check_alerts")(pipeline_tools.check_alerts)

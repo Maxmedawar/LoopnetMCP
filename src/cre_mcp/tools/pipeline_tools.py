@@ -8,7 +8,12 @@ from typing import Any
 from cre_mcp.access.context import current_context
 from cre_mcp.access.engine import location_value_within_territories
 from cre_mcp.access.profiles import TERRITORY_LIMITED
-from cre_mcp.deals.store import PIPELINE_STAGES, DealStore, get_deal_store
+from cre_mcp.deals.store import (
+    PIPELINE_STAGES,
+    DealStore,
+    get_deal_store,
+    get_search_store,
+)
 from cre_mcp.models import Listing
 from cre_mcp.scoring.rubrics import RUBRIC_REGISTRY
 from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
@@ -351,7 +356,7 @@ async def save_search(
             "size_max": size_max,
             "sources": selected_sources,
         }
-        search_id = await get_deal_store().save_search(name.strip(), query, min_score)
+        search_id = await get_search_store().save_search(name.strip(), query, min_score)
         if search_id is None:
             raise RuntimeError("saved search could not be persisted")
         return {
@@ -376,7 +381,7 @@ async def list_searches() -> dict:
     """
     logger.info("list_searches called")
     try:
-        searches = await get_deal_store().list_searches()
+        searches = await get_search_store().list_searches()
         return {
             "searches": searches,
             "count": len(searches),
@@ -389,7 +394,7 @@ async def list_searches() -> dict:
         return {"error": message}
 
 
-async def check_alerts(search_id: int | None = None) -> dict:
+async def check_alerts(search_id: int | str | None = None) -> dict:
     """Run saved searches now and emit only never-before-seen qualifying deals.
 
     Args:
@@ -403,7 +408,7 @@ async def check_alerts(search_id: int | None = None) -> dict:
         safe_source_reference(search_id),
     )
     try:
-        store = get_deal_store()
+        store = get_search_store()
         if search_id is not None:
             selected = await store.get_search(search_id)
             if selected is None:
@@ -412,14 +417,36 @@ async def check_alerts(search_id: int | None = None) -> dict:
         else:
             searches = await store.list_searches()
 
-        new_deals: list[dict[str, Any]] = []
-        results: list[dict[str, Any]] = []
-        errors: dict[str, str] = {}
+        prepared: list[
+            tuple[dict[str, Any], int | str, dict[str, Any], float | None, str]
+        ] = []
+        ctx = current_context()
         for search in searches:
-            current_id = int(search["id"])
+            current_id = search["id"]
+            if not isinstance(current_id, (int, str)) or isinstance(current_id, bool):
+                raise ValueError("saved search has an invalid identifier")
+            if isinstance(current_id, str) and not current_id:
+                raise ValueError("saved search has an invalid identifier")
             query = dict(search["query"])
             minimum = _number(search.get("min_score"))
             location = str(query.get("location") or "").strip()
+            if (
+                location
+                and ctx is not None
+                and not ctx.trusted
+                and ctx.profile in TERRITORY_LIMITED
+                and not location_value_within_territories(
+                    location,
+                    ctx.territories,
+                )
+            ):
+                raise ValueError("saved search is outside the current territory")
+            prepared.append((search, current_id, query, minimum, location))
+
+        new_deals: list[dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
+        errors: dict[str, str] = {}
+        for search, current_id, query, minimum, location in prepared:
             if not location:
                 message = "saved search is missing a location"
                 errors[str(current_id)] = message
@@ -433,31 +460,62 @@ async def check_alerts(search_id: int | None = None) -> dict:
                     }
                 )
                 continue
-            ctx = current_context()
-            if (
-                ctx is not None
-                and not ctx.trusted
-                and ctx.profile in TERRITORY_LIMITED
-                and not location_value_within_territories(
-                    location,
-                    ctx.territories,
+            try:
+                found = await find_deals(
+                    location=location,
+                    strategy=query.get("strategy"),
+                    property_type=query.get("property_type"),
+                    price_min=query.get("price_min"),
+                    price_max=query.get("price_max"),
+                    size_min=query.get("size_min"),
+                    size_max=query.get("size_max"),
+                    sources=list(query.get("sources") or ["loopnet"]),
+                    min_score=minimum,
+                    limit=ALERT_CHECK_LIMIT,
                 )
-            ):
-                raise ValueError("saved search is outside the current territory")
-            found = await find_deals(
-                location=location,
-                strategy=query.get("strategy"),
-                property_type=query.get("property_type"),
-                price_min=query.get("price_min"),
-                price_max=query.get("price_max"),
-                size_min=query.get("size_min"),
-                size_max=query.get("size_max"),
-                sources=list(query.get("sources") or ["loopnet"]),
-                min_score=minimum,
-                limit=ALERT_CHECK_LIMIT,
-            )
-            if "error" in found:
-                message = str(found["error"])
+                if "error" in found:
+                    raise RuntimeError(str(found["error"]))
+
+                candidates = found.get("deals")
+                candidates = candidates if isinstance(candidates, list) else []
+                unseen_rows: list[tuple[str, dict[str, Any]]] = []
+                pending_keys: set[str] = set()
+                for deal in candidates:
+                    if not isinstance(deal, dict):
+                        continue
+                    score, _, _ = _score_snapshot(deal)
+                    if minimum is not None and (score is None or score < minimum):
+                        continue
+                    key = _dedupe_key(deal)
+                    if key is None or key in pending_keys:
+                        continue
+                    pending_keys.add(key)
+                    unseen_rows.append((key, deal))
+
+                claimed = await store.claim_unseen(
+                    current_id,
+                    [key for key, _ in unseen_rows],
+                )
+                emitted: list[dict[str, Any]] = []
+                for key, deal in unseen_rows:
+                    if key not in claimed:
+                        continue
+                    row = dict(deal)
+                    row["saved_search_id"] = current_id
+                    row["saved_search_name"] = search["name"]
+                    emitted.append(row)
+                new_deals.extend(emitted)
+                results.append(
+                    {
+                        "search_id": current_id,
+                        "name": search["name"],
+                        "new_count": len(emitted),
+                        "scanned": len(candidates),
+                        "source_errors": found.get("errors", {}),
+                    }
+                )
+            except Exception as search_error:
+                message = safe_error_message(search_error)
                 errors[str(current_id)] = message
                 results.append(
                     {
@@ -468,42 +526,6 @@ async def check_alerts(search_id: int | None = None) -> dict:
                         "error": message,
                     }
                 )
-                continue
-
-            seen = await store.seen_keys(current_id)
-            candidates = found.get("deals")
-            candidates = candidates if isinstance(candidates, list) else []
-            unseen_rows: list[tuple[str, dict[str, Any]]] = []
-            pending_keys: set[str] = set()
-            for deal in candidates:
-                if not isinstance(deal, dict):
-                    continue
-                score, _, _ = _score_snapshot(deal)
-                if minimum is not None and (score is None or score < minimum):
-                    continue
-                key = _dedupe_key(deal)
-                if key is None or key in seen or key in pending_keys:
-                    continue
-                pending_keys.add(key)
-                unseen_rows.append((key, deal))
-
-            await store.record_seen(current_id, [key for key, _ in unseen_rows])
-            emitted: list[dict[str, Any]] = []
-            for _, deal in unseen_rows:
-                row = dict(deal)
-                row["saved_search_id"] = current_id
-                row["saved_search_name"] = search["name"]
-                emitted.append(row)
-            new_deals.extend(emitted)
-            results.append(
-                {
-                    "search_id": current_id,
-                    "name": search["name"],
-                    "new_count": len(emitted),
-                    "scanned": len(candidates),
-                    "source_errors": found.get("errors", {}),
-                }
-            )
 
         return {
             "searches_checked": len(searches),

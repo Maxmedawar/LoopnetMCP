@@ -274,9 +274,9 @@ def _asset(
 
 def test_migration_0006_adds_truth_asset_authority() -> None:
     migrations = load_migrations()
-    assert [migration.version for migration in migrations] == [1, 2, 3, 4, 5, 6]
-    assert migrations[-1].name == "truth asset persistence"
-    assert EXPECTED_MIGRATION_VERSION == 6
+    assert [migration.version for migration in migrations] == [1, 2, 3, 4, 5, 6, 7]
+    assert migrations[5].name == "truth asset persistence"
+    assert EXPECTED_MIGRATION_VERSION == 7
     assert {
         "truth_document_blobs",
         "truth_documents",

@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from cre_mcp.access.context import TenantContext, use_context
+from cre_mcp.access.profiles import Profile
 from cre_mcp.deals.store import DealStore
 from cre_mcp.tools.pipeline_tools import ALERT_HOSTING_NOTE, check_alerts
 
@@ -77,7 +79,7 @@ async def test_check_alerts_returns_new_only_then_none_on_recheck(tmp_path):
     }
     mocked_find = AsyncMock(return_value=response)
     with (
-        patch("cre_mcp.tools.pipeline_tools.get_deal_store", return_value=store),
+        patch("cre_mcp.tools.pipeline_tools.get_search_store", return_value=store),
         patch("cre_mcp.tools.pipeline_tools.find_deals", new=mocked_find),
     ):
         first = await check_alerts(search_id)
@@ -108,7 +110,7 @@ async def test_check_alerts_can_check_all_searches_and_isolates_search_errors(tm
         side_effect=[{"deals": [_deal("a", 80)], "errors": {}}, {"error": "source down"}]
     )
     with (
-        patch("cre_mcp.tools.pipeline_tools.get_deal_store", return_value=store),
+        patch("cre_mcp.tools.pipeline_tools.get_search_store", return_value=store),
         patch("cre_mcp.tools.pipeline_tools.find_deals", new=mocked_find),
     ):
         result = await check_alerts()
@@ -121,5 +123,52 @@ async def test_check_alerts_can_check_all_searches_and_isolates_search_errors(tm
 @pytest.mark.asyncio
 async def test_unknown_search_id_returns_error_dict(tmp_path):
     store = DealStore(tmp_path / "alerts.db")
-    with patch("cre_mcp.tools.pipeline_tools.get_deal_store", return_value=store):
+    with patch("cre_mcp.tools.pipeline_tools.get_search_store", return_value=store):
         assert await check_alerts(999) == {"error": "unknown search_id: 999"}
+
+
+@pytest.mark.asyncio
+async def test_check_alerts_preflights_all_territories_before_claiming() -> None:
+    class SearchStore:
+        def __init__(self) -> None:
+            self.claimed: list[tuple[int, list[str]]] = []
+
+        async def list_searches(self):
+            return [
+                {
+                    "id": 1,
+                    "name": "Texas",
+                    "query": {"location": "Austin, TX", "sources": ["loopnet"]},
+                    "min_score": None,
+                },
+                {
+                    "id": 2,
+                    "name": "Stale Florida",
+                    "query": {"location": "Miami, FL", "sources": ["loopnet"]},
+                    "min_score": None,
+                },
+            ]
+
+        async def claim_unseen(self, search_id, keys):
+            self.claimed.append((search_id, list(keys)))
+            return set(keys)
+
+    store = SearchStore()
+    context = TenantContext(
+        workspace_id="ws_alert_preflight",
+        profile=Profile.LOCAL_SCOUT,
+        territories=("TX",),
+        actor_id="alert-actor",
+        session_id="alert-session",
+    )
+    mocked_find = AsyncMock(return_value={"deals": [_deal("abc", 90)], "errors": {}})
+    with (
+        use_context(context),
+        patch("cre_mcp.tools.pipeline_tools.get_search_store", return_value=store),
+        patch("cre_mcp.tools.pipeline_tools.find_deals", new=mocked_find),
+    ):
+        result = await check_alerts()
+
+    assert result == {"error": "saved search is outside the current territory"}
+    assert mocked_find.await_count == 0
+    assert store.claimed == []

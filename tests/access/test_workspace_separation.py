@@ -1,6 +1,4 @@
-"""Coverage 2: records written in one workspace are invisible to every other,
-and each cloud workspace gets its own physical database under
-<cache root>/workspaces/<workspace_id>/cache.db."""
+"""Coverage 2: hosted records stay isolated without a local SQLite fallback."""
 
 from tests.access.helpers import call_data
 
@@ -23,7 +21,7 @@ async def test_records_do_not_cross_workspaces(
     assert theirs["count"] == 0
 
 
-async def test_cloud_workspace_storage_is_physically_isolated(
+async def test_cloud_search_port_does_not_create_local_sqlite(
     real_server, identity, ctx_op, tmp_path
 ):
     identity["ctx"] = ctx_op
@@ -32,14 +30,8 @@ async def test_cloud_workspace_storage_is_physically_isolated(
         "save_search",
         {"name": "tx buy box", "location": "Houston, TX"},
     )
-    workspace_db = tmp_path / "workspaces" / "ws-op" / "cache.db"
-    assert workspace_db.exists()
-    # The legacy/local database must not have received the cloud record.
-    legacy = tmp_path / "cache.db"
-    if legacy.exists():
-        from cre_mcp.deals.store import DealStore
-
-        assert await DealStore(db_path=legacy).list_searches() == []
+    assert not (tmp_path / "workspaces" / "ws-op" / "cache.db").exists()
+    assert not (tmp_path / "cache.db").exists()
 
 
 def test_startup_config_is_copied_per_workspace_without_mutating_base(

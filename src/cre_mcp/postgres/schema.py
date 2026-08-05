@@ -41,6 +41,7 @@ TENANT_TABLES = frozenset(
         "provider_events",
         "provider_event_attempts",
         "saved_searches",
+        "saved_search_seen_matches",
         "search_runs",
         "search_results",
         "deals",
@@ -82,6 +83,7 @@ APP_TENANT_READ_TABLES = frozenset(
         "territories",
         "workspace_accounts",
         "saved_searches",
+        "saved_search_seen_matches",
         "search_runs",
         "search_results",
         "deal_outcomes",
@@ -157,7 +159,6 @@ APP_COLUMN_READS = {
 }
 APP_WRITE_TABLES = frozenset(
     {
-        "saved_searches",
         "deals",
         "deal_notes",
         "deal_outcomes",
@@ -167,7 +168,9 @@ APP_WRITE_TABLES = frozenset(
         "truth_claims",
     }
 )
-APP_INSERT_ONLY_TABLES = frozenset({"truth_document_blobs"})
+APP_INSERT_ONLY_TABLES = frozenset(
+    {"truth_document_blobs", "saved_searches", "saved_search_seen_matches"}
+)
 APP_READ_TABLES = APP_TENANT_READ_TABLES | frozenset(
     {"schema_migrations", "plans", "oauth_clients", "users", "workspaces"}
 )
@@ -359,13 +362,13 @@ ADMIN_MUTATION_TABLES = (
     - SERVICE_OWNED_TABLES
     - IMMUTABLE_TABLES
 )
-EXPECTED_MIGRATION_VERSION = 6
+EXPECTED_MIGRATION_VERSION = 7
 SCHEMA_NAME = "medawarcre"
 
 # Generated from ``catalog.catalog_fingerprint()`` on the reviewed PostgreSQL
 # 16 launch schema. Any schema migration must update this value deliberately.
 EXPECTED_CATALOG_FINGERPRINT = (
-    "0a0dcb2208e81bea14780d2c386b077f8c35f139a3d1c6d83a69ee2f40ac98ef"
+    "15215ce6ae3eabe2c8799eeef258a7d1cf896aa9e5a6d66d94f5cb4e163b6323"
 )
 
 __all__ = [

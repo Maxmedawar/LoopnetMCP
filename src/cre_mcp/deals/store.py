@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-from cre_mcp.access.context import current_runtime_config
+from cre_mcp.access.context import current_context, current_runtime_config
 from cre_mcp.config import CreConfig
 from cre_mcp.models.execution import DDItem
 from cre_mcp.models.listings import Listing
@@ -1250,17 +1250,17 @@ class DealStore:
             )
             return set()
 
-    def _record_seen(self, search_id: int, keys: Iterable[str]) -> int:
+    def _claim_unseen(self, search_id: int, keys: Iterable[str]) -> set[str]:
         now = self._now()
         unique = sorted({key.strip() for key in keys if key and key.strip()})
-        inserted = 0
+        claimed: set[str] = set()
         with self._connect() as connection:
             exists = connection.execute(
                 "SELECT 1 FROM saved_searches WHERE id = ?",
                 (search_id,),
             ).fetchone()
             if exists is None:
-                return 0
+                return set()
             for key in unique:
                 cursor = connection.execute(
                     """
@@ -1269,21 +1269,34 @@ class DealStore:
                     """,
                     (search_id, key, now),
                 )
-                inserted += max(cursor.rowcount, 0)
-        return inserted
+                if cursor.rowcount > 0:
+                    claimed.add(key)
+        return claimed
 
-    async def record_seen(self, search_id: int, keys: Iterable[str]) -> int:
-        """Record matches idempotently and return how many keys were newly inserted."""
+    async def claim_unseen(
+        self,
+        search_id: int,
+        keys: Iterable[str],
+    ) -> set[str]:
+        """Atomically claim and return only matches first inserted by this call."""
         materialized = list(keys)
         try:
-            return await asyncio.to_thread(self._record_seen, search_id, materialized)
+            return await asyncio.to_thread(
+                self._claim_unseen,
+                search_id,
+                materialized,
+            )
         except Exception as exc:
             logger.error(
-                "seen-match write failed for search %s: %s",
+                "seen-match claim failed for search %s: %s",
                 safe_error_message(search_id, config=self._config),
                 safe_error_message(exc, config=self._config),
             )
-            return 0
+            return set()
+
+    async def record_seen(self, search_id: int, keys: Iterable[str]) -> int:
+        """Record matches idempotently and return how many keys were newly inserted."""
+        return len(await self.claim_unseen(search_id, keys))
 
     @staticmethod
     def _validate_investor(
@@ -2023,10 +2036,27 @@ def get_deal_store(config: CreConfig | None = None) -> Any:
     return DealStore(config=config)
 
 
+def get_search_store(config: CreConfig | None = None) -> Any:
+    """Return the dedicated hosted search port or the local compatibility store."""
+    from cre_mcp.postgres.domains import (
+        AdmittedRequestUnavailable,
+        current_hosted_request_repositories,
+    )
+
+    hosted = current_hosted_request_repositories()
+    if hosted is not None:
+        return hosted.require("search")
+    context = current_context()
+    if context is not None and not context.trusted:
+        raise AdmittedRequestUnavailable("search persistence unavailable")
+    return DealStore(config=config)
+
+
 __all__ = [
     "DD_STATUSES",
     "PIPELINE_STAGES",
     "PIPELINE_STAGE_SET",
     "DealStore",
     "get_deal_store",
+    "get_search_store",
 ]

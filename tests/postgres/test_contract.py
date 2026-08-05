@@ -47,6 +47,7 @@ def test_launch_schema_inventory_covers_every_required_domain() -> None:
         "provider_events",
         "provider_event_attempts",
         "saved_searches",
+        "saved_search_seen_matches",
         "search_runs",
         "search_results",
         "deals",
