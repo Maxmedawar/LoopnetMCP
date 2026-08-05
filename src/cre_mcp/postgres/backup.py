@@ -45,6 +45,7 @@ from cre_mcp.postgres.schema import (
     ADMIN_INSERT_ONLY_TABLES,
     ADMIN_READ_TABLES,
     APP_COLUMN_READS,
+    APP_INSERT_ONLY_TABLES,
     APP_READ_TABLES,
     APP_WRITE_TABLES,
     EXPECTED_CATALOG_FINGERPRINT,
@@ -786,7 +787,7 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
         expected_by_role = {
             "medawarcre_app": (
                 table in APP_READ_TABLES,
-                table in APP_WRITE_TABLES,
+                table in APP_WRITE_TABLES or table in APP_INSERT_ONLY_TABLES,
                 table in APP_WRITE_TABLES,
                 table in APP_WRITE_TABLES,
             ),
@@ -851,7 +852,7 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
                 if role == BACKUP_ROLE:
                     expected_select = True
                 expected_insert = (
-                    table in APP_WRITE_TABLES
+                    table in APP_WRITE_TABLES or table in APP_INSERT_ONLY_TABLES
                     if role == "medawarcre_app"
                     else role == "medawarcre_admin"
                     and (

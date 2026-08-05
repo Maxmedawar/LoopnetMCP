@@ -199,9 +199,9 @@ def _database(app_dsn: str) -> PostgresDatabase:
 
 def test_migration_0005_adds_exact_session_bound_document_authority() -> None:
     migrations = load_migrations()
-    assert [migration.version for migration in migrations] == [1, 2, 3, 4, 5]
-    assert migrations[-1].name == "document attestation authority"
-    assert EXPECTED_MIGRATION_VERSION == 5
+    assert [migration.version for migration in migrations] == [1, 2, 3, 4, 5, 6]
+    assert migrations[4].name == "document attestation authority"
+    assert EXPECTED_MIGRATION_VERSION == 6
     assert "source_document_attestations" in EXPECTED_TABLES
     assert "source_document_attestations" in EXPECTED_RLS_TABLES
 

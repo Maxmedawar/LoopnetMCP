@@ -36,7 +36,9 @@ GRANT SELECT ON
     medawarcre.deal_events,
     medawarcre.consents,
     medawarcre.privacy_requests,
-    medawarcre.source_document_attestations
+    medawarcre.source_document_attestations,
+    medawarcre.truth_documents,
+    medawarcre.truth_claims
 TO medawarcre_app;
 GRANT SELECT (
     id, workspace_id, provider, status, plan_key, current_period_end,
@@ -93,7 +95,10 @@ GRANT SELECT ON
     medawarcre.daily_quota_usage,
     medawarcre.jobs,
     medawarcre.job_attempts,
-    medawarcre.source_document_attestations
+    medawarcre.source_document_attestations,
+    medawarcre.truth_document_blobs,
+    medawarcre.truth_documents,
+    medawarcre.truth_claims
 TO medawarcre_admin;
 GRANT SELECT (
     id, user_id, provider, subject_hint, verified_at, created_at, updated_at
@@ -169,8 +174,17 @@ GRANT INSERT, UPDATE, DELETE ON
     medawarcre.privacy_requests,
     medawarcre.retention_actions,
     medawarcre.jobs,
-    medawarcre.job_attempts
+    medawarcre.job_attempts,
+    medawarcre.truth_document_blobs,
+    medawarcre.truth_documents,
+    medawarcre.truth_claims
 TO medawarcre_admin;
+GRANT SELECT (workspace_id, document_id), INSERT
+ON medawarcre.truth_document_blobs TO medawarcre_app;
+GRANT INSERT, UPDATE, DELETE ON
+    medawarcre.truth_documents,
+    medawarcre.truth_claims
+TO medawarcre_app;
 GRANT INSERT ON medawarcre.staff_audit_log TO medawarcre_admin;
 GRANT SELECT ON ALL TABLES IN SCHEMA medawarcre TO medawarcre_backup;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA medawarcre

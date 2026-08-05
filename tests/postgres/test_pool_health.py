@@ -62,23 +62,25 @@ def test_pool_context_is_transaction_local_and_readiness_is_strict(
         readiness = check_readiness(database, expected=load_migrations())
         assert readiness.ok is False
         assert readiness.unexpected_tables == ("unexpected",)
+        unexpected_version = len(load_migrations()) + 1
         with psycopg.connect(admin_dsn) as connection:
             connection.execute("SET ROLE medawarcre_migration")
             connection.execute("DROP TABLE medawarcre.unexpected")
             connection.execute(
                 "INSERT INTO medawarcre.schema_migrations"
                 "(version,description,checksum,state,dirty) "
-                "VALUES (6,'unexpected',%s,'pending',false)",
-                ("0" * 64,),
+                "VALUES (%s,'unexpected',%s,'pending',false)",
+                (unexpected_version, "0" * 64),
             )
         readiness = check_readiness(database, expected=load_migrations())
         assert readiness.ok is False
-        assert readiness.unexpected_versions == (6,)
-        assert readiness.non_applied_versions == (6,)
+        assert readiness.unexpected_versions == (unexpected_version,)
+        assert readiness.non_applied_versions == (unexpected_version,)
         with psycopg.connect(admin_dsn) as connection:
             connection.execute("SET ROLE medawarcre_migration")
             connection.execute(
-                "DELETE FROM medawarcre.schema_migrations WHERE version=6"
+                "DELETE FROM medawarcre.schema_migrations WHERE version=%s",
+                (unexpected_version,),
             )
             connection.execute(
                 "UPDATE medawarcre.schema_migrations "

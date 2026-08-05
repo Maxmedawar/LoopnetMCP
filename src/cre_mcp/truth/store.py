@@ -13,7 +13,9 @@ import logging
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+from cre_mcp.access.context import current_context
 from cre_mcp.config import CreConfig
 from cre_mcp.source_rights.output import safe_error_message, safe_source_reference
 from cre_mcp.truth.models import DocumentRecord, FieldClaim
@@ -25,6 +27,18 @@ class TruthStore:
     """Async façade over durable truth tables + a content-addressed blob store."""
 
     def __init__(self, config: CreConfig | None = None) -> None:
+        from cre_mcp.postgres.domains import (
+            AdmittedRequestUnavailable,
+            current_hosted_request_repositories,
+        )
+
+        context = current_context()
+        if current_hosted_request_repositories() is not None or (
+            context is not None and not context.trusted
+        ):
+            raise AdmittedRequestUnavailable(
+                "hosted truth-asset persistence cannot construct a local store"
+            )
         self._config = config or CreConfig()
         resolved = self._config.cache_db_path
         self.db_path = Path(resolved).expanduser()
@@ -204,8 +218,20 @@ class TruthStore:
             return []
 
 
-def get_truth_store(config: CreConfig | None = None) -> TruthStore:
+def get_truth_store(config: CreConfig | None = None) -> Any:
     """Build a TruthStore over the configured shared database."""
+    from cre_mcp.postgres.domains import current_hosted_request_repositories
+
+    hosted = current_hosted_request_repositories()
+    if hosted is not None:
+        return hosted.require("truth_asset")
+    context = current_context()
+    if context is not None and not context.trusted:
+        from cre_mcp.postgres.domains import AdmittedRequestUnavailable
+
+        raise AdmittedRequestUnavailable(
+            "hosted truth-asset persistence requires an active repository lease"
+        )
     return TruthStore(config=config or CreConfig())
 
 

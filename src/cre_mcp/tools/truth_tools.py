@@ -112,15 +112,18 @@ def _document_origin(url: str) -> str:
     except (TypeError, ValueError):
         return "external-document"
     netloc = host.casefold().rstrip(".")
+    if ":" in netloc:
+        netloc = f"[{netloc}]"
     if port is not None and not (parsed.scheme == "https" and port == 443):
         netloc = f"{netloc}:{port}"
     return urlunsplit((parsed.scheme.casefold(), netloc, parsed.path, "", ""))
 
 
 def _fetch_bytes(url: str, rights_attestation_id: str | None = None) -> bytes:
-    """Download a scraped document body (Chrome-impersonating), honoring the cap."""
+    """Download a scraped document body with a receipt-time memory cap."""
     from curl_cffi import requests as cffi
     from curl_cffi.const import CurlOpt
+    from curl_cffi.curl import CURL_WRITEFUNC_ERROR
 
     # The worker thread re-checks the exact workspace/actor/session/url binding at
     # the socket boundary. asyncio.to_thread propagates the active ContextVar.
@@ -130,6 +133,17 @@ def _fetch_bytes(url: str, rights_attestation_id: str | None = None) -> bytes:
         purposes=DOCUMENT_PURPOSES,
     )
     target = _resolve_public_document_target(url)
+    body = bytearray()
+
+    def receive(chunk: bytes) -> int:
+        # curl invokes this synchronously from its receive loop. Its explicit error
+        # sentinel aborts before the rejected chunk enters retained body storage,
+        # unlike curl_cffi's stream mode and its unbounded producer queue.
+        if not isinstance(chunk, bytes) or len(body) + len(chunk) > MAX_BYTES:
+            return CURL_WRITEFUNC_ERROR
+        body.extend(chunk)
+        return len(chunk)
+
     try:
         with cffi.Session(
             curl_options={CurlOpt.RESOLVE: [target.curl_resolve_entry]},
@@ -141,13 +155,14 @@ def _fetch_bytes(url: str, rights_attestation_id: str | None = None) -> bytes:
                 impersonate="chrome",
                 timeout=45,
                 allow_redirects=False,
+                content_callback=receive,
             )
             if 300 <= resp.status_code < 400:
                 raise SourceRightsDeniedError(
                     "source-rights denied: external document redirect requires a new attestation"
                 )
             resp.raise_for_status()
-            return resp.content
+            return bytes(body)
     except SourceRightsDeniedError:
         raise
     except Exception:
@@ -217,13 +232,6 @@ async def ingest_document(
                 rights_attestation_id,
                 purposes=DOCUMENT_PURPOSES,
             )
-            from cre_mcp.source_rights.gate import is_hosted_execution
-
-            if is_hosted_execution():
-                raise SourceRightsDeniedError(
-                    "source-rights denied: hosted document ingestion requires an "
-                    "injected durable blob and metadata repository"
-                )
             data = await _to_thread_fetch(url, rights_attestation_id)
             origin = _document_origin(url)  # type: ignore[arg-type]
             channel = "scraped"
@@ -339,7 +347,22 @@ async def _to_thread_fetch(
 
     if not url:
         raise ValueError("url is required")
-    return await asyncio.to_thread(_fetch_bytes, url, rights_attestation_id)
+    worker = asyncio.create_task(
+        asyncio.to_thread(_fetch_bytes, url, rights_attestation_id)
+    )
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        while not worker.done():
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                continue
+        try:
+            worker.result()
+        except Exception:
+            pass
+        raise
 
 
 async def list_deal_documents(deal_id: str) -> dict:

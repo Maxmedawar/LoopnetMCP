@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, PropertyMock, patch
 
 import pytest
 
@@ -28,7 +30,12 @@ from cre_mcp.source_rights.attestations import (
     require_external_document_attestation,
 )
 from cre_mcp.source_rights.gate import SourceRightsDeniedError
-from cre_mcp.tools.truth_tools import _fetch_bytes, ingest_document
+from cre_mcp.tools.truth_tools import (
+    _document_origin,
+    _fetch_bytes,
+    _to_thread_fetch,
+    ingest_document,
+)
 
 
 def _hosted() -> TenantContext:
@@ -354,12 +361,22 @@ def test_document_fetch_without_runtime_context_denies_before_dns():
 
 
 def test_document_fetch_pins_the_validated_dns_answer():
-    response = Mock(status_code=200, content=b"document")
+    response = Mock(status_code=200)
+    type(response).content = PropertyMock(
+        side_effect=AssertionError("bounded fetch must not materialize response.content")
+    )
     response.raise_for_status.return_value = None
     session = Mock()
     session.__enter__ = Mock(return_value=session)
     session.__exit__ = Mock(return_value=False)
-    session.get.return_value = response
+
+    def receive(_url, **kwargs):
+        callback = kwargs["content_callback"]
+        assert callback(b"doc") == 3
+        assert callback(b"ument") == 5
+        return response
+
+    session.get.side_effect = receive
     answers = [
         (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
     ]
@@ -376,7 +393,132 @@ def test_document_fetch_pins_the_validated_dns_answer():
 
     options = session_class.call_args.kwargs["curl_options"]
     assert any("93.184.216.34" in str(value) for value in options.values())
-    session.get.assert_called_once()
+    request = session.get.call_args
+    assert request.args == ("https://documents.example/report.pdf",)
+    assert request.kwargs["impersonate"] == "chrome"
+    assert request.kwargs["timeout"] == 45
+    assert request.kwargs["allow_redirects"] is False
+    assert callable(request.kwargs["content_callback"])
+    assert "stream" not in request.kwargs
+
+
+def test_document_fetch_uses_receipt_callback_without_stream_queue():
+    response = Mock(status_code=200)
+    response.raise_for_status.return_value = None
+    session = Mock()
+    session.__enter__ = Mock(return_value=session)
+    session.__exit__ = Mock(return_value=False)
+
+    def receive(_url, **kwargs):
+        assert kwargs.get("stream") is not True
+        callback = kwargs["content_callback"]
+        assert callback(b"doc") == 3
+        assert callback(b"ument") == 5
+        return response
+
+    session.get.side_effect = receive
+    answers = [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+    ]
+    config = CreConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled={"documents.external_url": True},
+    )
+
+    with (
+        patch("cre_mcp.tools.truth_tools.socket.getaddrinfo", return_value=answers),
+        patch("curl_cffi.requests.Session", return_value=session),
+        use_context(local_context()),
+        use_runtime_config(config),
+    ):
+        assert _fetch_bytes("https://documents.example/report.pdf") == b"document"
+
+    response.close.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_document_fetch_worker_finishes_before_cancellation_escapes():
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def blocking_fetch(_url, _rights_attestation_id):
+        started.set()
+        assert release.wait(timeout=5)
+        finished.set()
+        return b"document"
+
+    try:
+        with patch("cre_mcp.tools.truth_tools._fetch_bytes", side_effect=blocking_fetch):
+            task = asyncio.create_task(
+                _to_thread_fetch(
+                    "https://documents.example/report.pdf",
+                    "srcatt_fixture",
+                )
+            )
+            assert await asyncio.to_thread(started.wait, 2)
+            task.cancel()
+            await asyncio.sleep(0.02)
+            assert task.done() is False
+            assert finished.is_set() is False
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert finished.is_set() is True
+    finally:
+        release.set()
+
+
+def test_document_fetch_aborts_at_receipt_time_byte_limit():
+    from curl_cffi.curl import CURL_WRITEFUNC_ERROR
+
+    consumed_after_limit = False
+
+    response = Mock(status_code=200)
+    type(response).content = PropertyMock(
+        side_effect=AssertionError("oversized bodies must never be materialized")
+    )
+    response.raise_for_status.return_value = None
+    session = Mock()
+    session.__enter__ = Mock(return_value=session)
+    session.__exit__ = Mock(return_value=False)
+
+    def receive(_url, **kwargs):
+        nonlocal consumed_after_limit
+        callback = kwargs["content_callback"]
+        assert callback(b"1234") == 4
+        if callback(b"56789") != CURL_WRITEFUNC_ERROR:
+            consumed_after_limit = True
+        raise RuntimeError("curl aborted on short write")
+
+    session.get.side_effect = receive
+    answers = [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+    ]
+    config = CreConfig(
+        _env_file=None,
+        transport="stdio",
+        source_rights_enabled={"documents.external_url": True},
+    )
+
+    with (
+        patch("cre_mcp.tools.truth_tools.socket.getaddrinfo", return_value=answers),
+        patch("curl_cffi.requests.Session", return_value=session),
+        patch("cre_mcp.tools.truth_tools.MAX_BYTES", 8),
+        use_context(local_context()),
+        use_runtime_config(config),
+        pytest.raises(RuntimeError, match="external document retrieval failed"),
+    ):
+        _fetch_bytes("https://documents.example/report.pdf")
+
+    assert consumed_after_limit is False
+
+
+def test_document_origin_preserves_ipv6_url_syntax_and_strips_secrets():
+    assert _document_origin(
+        "https://[2606:4700:4700::1111]/report.pdf?signature=secret#fragment"
+    ) == "https://[2606:4700:4700::1111]/report.pdf"
 
 
 def test_attestation_revoke_requires_live_server_admin_authority(tmp_path):
