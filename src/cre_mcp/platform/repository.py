@@ -22,7 +22,7 @@ from typing import Any, Callable, Iterable, TypeVar
 
 from pydantic import BaseModel
 
-from cre_mcp.access.context import current_runtime_config
+from cre_mcp.access.context import current_context, current_runtime_config
 from cre_mcp.config import CreConfig
 from cre_mcp.platform.models import (
     CLIENT_STATUSES,
@@ -112,6 +112,18 @@ class PlatformRepository:
         *,
         config: CreConfig | None = None,
     ) -> None:
+        from cre_mcp.postgres.domains import (
+            AdmittedRequestUnavailable,
+            current_hosted_request_repositories,
+        )
+
+        context = current_context()
+        if current_hosted_request_repositories() is not None or (
+            context is not None and not context.trusted
+        ):
+            raise AdmittedRequestUnavailable(
+                "hosted platform persistence cannot construct a local repository"
+            )
         if isinstance(db_path, CreConfig):
             selected_config = db_path
         else:
@@ -1170,8 +1182,21 @@ class PlatformRepository:
         )
 
 
-def get_platform_repository(config: CreConfig | None = None) -> PlatformRepository:
+def get_platform_repository(config: CreConfig | None = None) -> Any:
     """Build a repository façade over the configured shared database."""
+    from cre_mcp.postgres.domains import (
+        AdmittedRequestUnavailable,
+        current_hosted_request_repositories,
+    )
+
+    hosted = current_hosted_request_repositories()
+    if hosted is not None:
+        return hosted.require("platform")
+    context = current_context()
+    if context is not None and not context.trusted:
+        raise AdmittedRequestUnavailable(
+            "hosted platform persistence cannot construct a local repository"
+        )
     return PlatformRepository(config=config)
 
 
