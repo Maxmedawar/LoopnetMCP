@@ -44,6 +44,7 @@ from cre_mcp.platform.models import (
     Territory,
     User,
     Workspace,
+    normalize_platform_email,
 )
 from cre_mcp.platform.schema import create_schema
 from cre_mcp.source_rights.output import safe_error_message, sanitize_payload
@@ -311,7 +312,10 @@ class PlatformRepository:
     async def create_user(self, email: str, name: str) -> User | None:
         """Persist a platform login; a duplicate email reports None."""
         data = {
-            "email": _require(email, "user email"),
+            # Stored in the canonical form the identity lookup matches on.
+            # This previously stored whatever case it was handed, so a row
+            # could be written in a form no verified address would ever equal.
+            "email": normalize_platform_email(_require(email, "user email")),
             "name": _require(name, "user name"),
             **self._timestamps(),
         }
@@ -335,7 +339,7 @@ class PlatformRepository:
         """Change user fields; None leaves a field unchanged."""
         fields: dict[str, Any] = {}
         if email is not None:
-            fields["email"] = _require(email, "user email")
+            fields["email"] = normalize_platform_email(_require(email, "user email"))
         if name is not None:
             fields["name"] = _require(name, "user name")
         return await self._run(

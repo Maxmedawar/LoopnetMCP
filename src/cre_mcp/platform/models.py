@@ -1,8 +1,53 @@
 """Typed immutable records returned by the platform repository."""
 from __future__ import annotations
 
+import unicodedata
 from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
+
+
+def normalize_platform_email(value: str) -> str:
+    """The one canonical form of `platform_users.email`.
+
+    This lives here, next to the other domain constants, because it must be
+    applied at *every* site that writes a platform login and at the single site
+    that looks one up. Two independent reviews found the same defect twice: a
+    read path and a write path that each normalized reasonably but differently,
+    which silently locked the rightful owner out and handed their row to
+    whoever controlled the address the other fold produced.
+
+    `str.lower()` then NFC, so a composed and a decomposed spelling of the same
+    address agree rather than becoming two people.
+
+    `str.casefold()` is deliberately not used: it maps `ß` to `ss`, `ﬁ` to
+    `fi`, and `ſ` to `s`, collapsing addresses that are separate mailboxes onto
+    one row. `str.lower()` does none of that — it leaves all three alone — so
+    it gives full case-insensitivity without merging distinct people.
+
+    An ASCII-only fold was tried first and was wrong in the other direction: it
+    left non-ASCII capitals alone, so an operator who typed `MÜLLER@corp.test`
+    stored a row that the owner of `müller@corp.test` could never bind to. Case
+    insensitivity has to cover the whole alphabet or it is not case
+    insensitivity.
+
+    `ς` is unified onto `σ`, and that single step is what makes the fold safe
+    for Greek. `str.lower()` is not a per-code-point map: it implements
+    Unicode's `Final_Sigma` context rule, so `Σ` becomes `ς` at a word boundary
+    and `σ` elsewhere. Without the unification the key depended on where in the
+    address the letter sat — `ΓΙΩΡΓΟΣ@CORP.TEST` folded to `γιωργος@…` while
+    its owner's `γιωργοσ@…` folded to itself, locking the owner out and handing
+    the row to whoever held the other spelling. `Σ` is the uppercase of both
+    forms, so no fold of it can be correct without unifying them; `casefold()`
+    does the same.
+
+    Folding per code point to sidestep `Final_Sigma` was tried and is not kept:
+    with the unification applied the two are the same function on every input,
+    so the loop was an equivalent mutant whose comment claimed a safety it did
+    not provide.
+    """
+    return unicodedata.normalize("NFC", value.strip().lower().replace("ς", "σ"))
+
 
 MEMBERSHIP_ROLES = ("owner", "admin", "member", "viewer")
 INTERNAL_ADMIN_ROLES = ("platform_admin", "support")

@@ -816,9 +816,18 @@ class PlatformApi:
             )
         try:
             user_id = await asyncio.to_thread(self.human_identities.resolve_or_bind, identity)
-        except ValueError as exc:
+        except ValueError:
+            # A fixed literal, not `str(exc)`. The store already raises one
+            # uniform message, but that invariant lived in another file; this
+            # keeps the browser from ever enumerating provisioned addresses if
+            # a future refusal there becomes more specific.
             return self._with_connection_cors(
-                request, _error(403, "identity_not_provisioned", str(exc))
+                request,
+                _error(
+                    403,
+                    "identity_not_provisioned",
+                    "This identity cannot be connected",
+                ),
             )
         user, workspaces = await self._state_for_user(user_id)
         if user is None:
@@ -1043,10 +1052,15 @@ class PlatformApi:
                 self.human_identities.resolve_or_bind,
                 identity,
             )
-        except ValueError as exc:
+        except ValueError:
+            # Fixed literal for the same reason as the connection route.
             return self._with_operations_cors(
                 request,
-                _error(403, "identity_not_provisioned", str(exc)),
+                _error(
+                    403,
+                    "identity_not_provisioned",
+                    "This identity cannot be connected",
+                ),
             )
         operator = await asyncio.to_thread(self.operations_read.live_operator, user_id)
         if operator is None:

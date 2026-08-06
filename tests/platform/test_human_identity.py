@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from cre_mcp.config import CreConfig
 from cre_mcp.platform.connection import (
+    _IDENTITY_NOT_BINDABLE,
     BrowserSessionStore,
     ClerkHumanIdentityVerifier,
     FakeHumanIdentityVerifier,
@@ -66,7 +67,12 @@ async def test_unprovisioned_identity_and_second_subject_for_user_fail_closed(tm
         try:
             store.resolve_or_bind(identity)
         except ValueError as exc:
-            assert "preprovisioned" in str(exc) or "already linked" in str(exc)
+            # One message for both refusals by design. The API layer now
+            # returns a fixed literal instead of this text, so this pin keeps
+            # the store's own property true rather than being the only thing
+            # preventing an enumeration oracle.
+            assert str(exc).strip()
+            assert str(exc) == _IDENTITY_NOT_BINDABLE
         else:  # pragma: no cover - assertion branch
             raise AssertionError("identity binding must fail closed")
 
@@ -161,13 +167,21 @@ async def test_clerk_adapter_uses_official_verifier_authorized_party_and_user_re
 
         async def get_async(self, *, user_id):
             captured["user_id"] = user_id
+            # Shaped after the installed clerk-backend-api `User` model: it
+            # carries `id` and `deprovisioned`, and each `EmailAddress` carries
+            # a nullable `verification` with a `status`. The earlier fixture
+            # omitted all three, so it could not exercise those boundaries.
             return SimpleNamespace(
+                id="user_clerk_1",
                 banned=False,
                 locked=False,
+                deprovisioned=False,
                 primary_email_address_id="email_primary",
                 email_addresses=[
                     SimpleNamespace(
-                        id="email_primary", email_address="buyer@example.test"
+                        id="email_primary",
+                        email_address="buyer@example.test",
+                        verification=SimpleNamespace(status="verified"),
                     )
                 ],
                 first_name="Ada",

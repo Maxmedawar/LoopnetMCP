@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Protocol
 
 from cre_mcp.config import CreConfig
+from cre_mcp.platform.models import normalize_platform_email
 from cre_mcp.platform.schema import create_schema
 
 
@@ -42,6 +43,13 @@ def _digest(value: str) -> str:
 
 def _secret(prefix: str) -> str:
     return prefix + secrets.token_urlsafe(32)
+
+
+# One message for every binding refusal. `api.py` now returns a fixed literal
+# rather than this text, so this is defence in depth rather than the thing
+# standing between an attacker and an enumeration oracle: it keeps the property
+# true here even if a caller starts forwarding the message again.
+_IDENTITY_NOT_BINDABLE = "verified identity cannot be bound to a platform user"
 
 
 @dataclass(frozen=True)
@@ -81,6 +89,31 @@ class _BearerRequest:
     @property
     def headers(self) -> Mapping[str, str]:
         return self._headers
+
+
+def _clerk_email_is_verified(email: object) -> bool:
+    """Require Clerk to have recorded this address as verified.
+
+    Precisely: this establishes that the Clerk instance considers the address
+    verified, which is not the same as the account holder having personally
+    proved it. A `verification_admin` record is accepted, so anyone holding the
+    instance secret key can mark an address verified through the Backend API.
+    That is the intended trust boundary — Clerk instance admin is MedawarCRE
+    staff — but it is stated rather than implied, because the stronger reading
+    would be wrong.
+
+    The primary address is the sole join key to a preprovisioned MedawarCRE
+    user, so an address the account holder merely claimed is not an identity.
+    The SDK types `verification` as nullable and `status` as a `str` enum, so
+    the member is normalized to its value before an exact comparison. Any other
+    shape — absent, null, unreadable, or an unexpected status — fails closed.
+    """
+    verification = getattr(email, "verification", None)
+    if verification is None:
+        return False
+    status = getattr(verification, "status", None)
+    status = getattr(status, "value", status)
+    return isinstance(status, str) and status == "verified"
 
 
 class ClerkHumanIdentityVerifier:
@@ -123,22 +156,54 @@ class ClerkHumanIdentityVerifier:
                 ):
                     return None
                 user = await clerk.users.get_async(user_id=subject)
+                return self._identity_from_user(user, subject)
         except Exception:
             # Identity provider failures are an authentication failure, never a
-            # reason to accept an unverified browser identity.
+            # reason to accept an unverified browser identity. The user-record
+            # checks live inside this guard too, so an unexpected record shape
+            # is a denial rather than an unhandled 500 at the call site.
             return None
-        if user.banned or user.locked:
+
+    @staticmethod
+    def _identity_from_user(user: object, subject: str) -> VerifiedHumanIdentity | None:
+        # The bound subject and the record supplying the address must be one
+        # account; otherwise this call would bind `subject` using someone
+        # else's email. Plain equality, not `hmac.compare_digest`: these are
+        # non-secret identifiers, and `compare_digest` raises on non-ASCII.
+        # `isinstance` for the same reason it guards `email.id` below: an
+        # object whose `__eq__` answers true to everything must not pass.
+        record_id = getattr(user, "id", None)
+        if not isinstance(record_id, str) or record_id != subject:
             return None
-        primary = next(
+        # `deprovisioned` is the same class of disabled account as `banned` and
+        # `locked`. An SDK without the field is treated as it was before it
+        # existed rather than as a silent allow of a known-disabled user.
+        if user.banned or user.locked or bool(getattr(user, "deprovisioned", False)):
+            return None
+        # Both sides of this match are optional in the SDK, so an unset pair
+        # would match on `None == None` and promote an address Clerk never
+        # designated primary.
+        primary_id = getattr(user, "primary_email_address_id", None)
+        if not isinstance(primary_id, str) or not primary_id:
+            return None
+        primary_email = next(
             (
-                email.email_address
+                email
                 for email in user.email_addresses
-                if email.id == user.primary_email_address_id
+                if isinstance(getattr(email, "id", None), str)
+                and email.id == primary_id
             ),
             None,
         )
-        if not primary:
+        # Only the primary address is consulted. A verified secondary must not
+        # rescue an unverified primary, or the same takeover returns through
+        # another slot.
+        if primary_email is None or not _clerk_email_is_verified(primary_email):
             return None
+        primary = getattr(primary_email, "email_address", None)
+        if not isinstance(primary, str) or not primary.strip():
+            return None
+        primary = primary.strip()
         name = " ".join(
             value.strip()
             for value in (user.first_name, user.last_name)
@@ -230,7 +295,7 @@ class HumanIdentityStore(_SqliteStore):
     def resolve_or_bind(self, identity: VerifiedHumanIdentity) -> int:
         provider = identity.provider.strip().casefold()
         subject_hash = _digest(identity.subject)
-        email = identity.email.strip().casefold()
+        email = normalize_platform_email(identity.email)
         now = _iso(_now())
         with self._connect() as connection:
             _create_connection_tables(connection)
@@ -244,13 +309,20 @@ class HumanIdentityStore(_SqliteStore):
             ).fetchone()
             if existing is not None:
                 return int(existing["user_id"])
-            user = connection.execute(
-                "SELECT id FROM platform_users WHERE lower(email)=?",
+            # Exact equality against the stored canonical form, not `lower()`.
+            # Every writer stores `normalize_platform_email(...)`, so the SQL
+            # engine's own case rules never enter the decision — which matters
+            # because SQLite's `lower()` is ASCII-only while PostgreSQL's is
+            # Unicode-aware, and the hosted cutover must not change who binds
+            # to whom. A row left in some other form is unreachable rather than
+            # matched approximately.
+            matches = connection.execute(
+                "SELECT id FROM platform_users WHERE email=?",
                 (email,),
-            ).fetchone()
-            if user is None:
-                raise ValueError("verified identity is not preprovisioned")
-            user_id = int(user["id"])
+            ).fetchall()
+            if len(matches) != 1:
+                raise ValueError(_IDENTITY_NOT_BINDABLE)
+            user_id = int(matches[0]["id"])
             linked = connection.execute(
                 """
                 SELECT 1 FROM platform_human_identities
@@ -259,7 +331,7 @@ class HumanIdentityStore(_SqliteStore):
                 (provider, user_id),
             ).fetchone()
             if linked is not None:
-                raise ValueError("platform user is already linked to another identity")
+                raise ValueError(_IDENTITY_NOT_BINDABLE)
             connection.execute(
                 """
                 INSERT INTO platform_human_identities

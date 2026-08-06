@@ -28,6 +28,7 @@ from cre_mcp.platform.entitlements import (
 from cre_mcp.platform.models import (
     ADMIN_REASON_CODES,
     MEMBERSHIP_ROLES,
+    normalize_platform_email,
 )
 from cre_mcp.platform.schema import create_schema
 
@@ -438,7 +439,11 @@ class AdminControlStore:
         account_state: Any = "active",
     ) -> dict[str, Any]:
         workspace_name = _required(name, "workspace name")
-        email = _required(owner_email, "owner_email").casefold()
+        # The same canonical form the identity lookup uses. This was
+        # `.casefold()`, which collapsed `ß` to `ss` and `ﬁ` to `fi`, so an
+        # operator provisioning `Straße@corp.test` stored a row that only the
+        # holder of `strasse@corp.test` could ever bind to.
+        email = normalize_platform_email(_required(owner_email, "owner_email"))
         user_name = _required(owner_name, "owner_name")
         workspace_slug = _optional_text(slug, "slug")
         state = _choice(account_state, ACCOUNT_STATES, "account_state")
