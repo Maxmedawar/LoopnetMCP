@@ -22,8 +22,15 @@ local stdio retains the existing SQLite schema, integer identifiers, and result
 behavior.
 
 This slice does not claim parity for separate file-backed modules that do not
-use `DealStore`. Those remain fail closed in hosted execution until their
-assigned domain port is certified.
+use `DealStore`. Correction, recorded after review: those modules do **not**
+all remain fail closed in hosted execution. A module that constructs
+`DealStore` does, because its constructor refuses an untrusted context, but
+`LedgerStore`, `SnapshotStore`, and `DataRoomStore` resolve a workspace-scoped
+path and answer normally. That is why `counterparty_track_record` was a live
+territory oracle for `jv_partner` and had to be withheld separately, and why
+seven capabilities that reach those stores are entitled but dead in hosted
+execution. Both are tracked in the launch ledger and must be resolved before
+hosted launch.
 
 ## Exact request and method authority
 
