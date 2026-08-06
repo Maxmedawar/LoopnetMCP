@@ -2186,6 +2186,35 @@ is clean, no port-8000 listener, no migration or dependency change, and an
 isolated wheel packages the capability matrix, the source-rights registry, the
 surface catalog, and all eight numbered migrations plus `restore_privileges.sql`.
 
+### Lifecycle matrix follow-up 2026-08-06
+
+The Phase 5I contract's lifecycle inventory said the founder's enumerated flows
+were already covered by existing tests. Auditing that claim rather than
+restating it found four enumerated flows with no store-level pin at all:
+a stale consent handle, concurrent approval of one handle, replay after
+consumption, and reconnect after session revocation. Four pins were added
+(`4,958` to `4,962`).
+
+What they pin, stated precisely because measuring it changed the answer:
+
+- **Single-use consent is pinned.** The replay pin fails when the
+  `consumed_at IS NULL` select filter and the single-row UPDATE guard are
+  removed *together*. Each alone is masked by the other — defence in depth,
+  and neither is individually falsifiable.
+- **Concurrency is documented, not pinned.** Eight threads racing one handle
+  produce exactly one authorization, but removing `BEGIN IMMEDIATE`, or the
+  UPDATE guard, or both, leaves the test green: SQLite serializes writers on
+  its own. The test asserts the property; it does not establish that the
+  locking is what provides it. The test comment says so.
+- **Stale rejection is documented, not pinned.** `consume` deletes expired rows
+  before selecting, so the explicit expiry comparison is unreachable — an
+  equivalent mutant.
+- **Reconnect after revocation is pinned** by behaviour: a revoked token stays
+  dead and the next sign-in issues a different token and CSRF pair.
+
+Recorded this way because the alternative — writing four tests and calling four
+guards covered — is precisely the error that rejected five earlier rounds.
+
 ### Open items this phase records but does not close
 
 - No unbind path exists: there is no `DELETE FROM platform_human_identities`

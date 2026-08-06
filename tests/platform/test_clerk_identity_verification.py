@@ -1260,3 +1260,143 @@ async def test_binding_refusals_do_not_distinguish_their_reason(tmp_path):
         )
 
     assert str(absent.value) == str(taken.value)
+
+
+# --- enumerated lifecycle flows that had no store-level pin -----------------
+
+
+def _pending_store(tmp_path):
+    """A pending-authorization store with one registered client to hang off."""
+    from cre_mcp.platform.auth import OAuthSessionStore
+    from cre_mcp.platform.connection import (
+        PendingAuthorization,
+        PendingAuthorizationStore,
+    )
+
+    config = _config(tmp_path)
+    client = OAuthSessionStore(config.cache_db_path).register_client(
+        "Claude",
+        ("https://claude.ai/api/mcp/auth_callback",),
+        ("mcp",),
+    )
+    store = PendingAuthorizationStore(config.cache_db_path)
+    authorization = PendingAuthorization(
+        client_id=client.client_id,
+        redirect_uri="https://claude.ai/api/mcp/auth_callback",
+        state="state-value",
+        scopes=("mcp",),
+        code_challenge="c" * 43,
+        code_challenge_method="S256",
+        audience="https://mcp.example.test",
+        resource="https://mcp.example.test/mcp",
+    )
+    return config, store, authorization
+
+
+async def test_a_stale_authorization_request_cannot_be_consumed(tmp_path):
+    """An expired consent handle is refused, and reported as absent.
+
+    The store writes a ten-minute expiry but nothing asserted it was honoured,
+    so a handle left open in a browser tab overnight was unpinned.
+    """
+    config, store, authorization = _pending_store(tmp_path)
+    handle = store.issue(authorization)
+    assert store.get(handle) is not None
+
+    with sqlite3.connect(config.cache_db_path) as connection:
+        connection.execute(
+            "UPDATE platform_oauth_authorization_requests SET expires_at=?",
+            ("2020-01-01T00:00:00+00:00",),
+        )
+
+    assert store.get(handle) is None
+    assert store.consume(handle) is None
+
+
+async def test_one_consent_handle_yields_exactly_one_authorization(tmp_path):
+    """Concurrent approvals of the same handle must not both succeed.
+
+    Two browser tabs, or a double-submit, race the same single-use handle.
+    `BEGIN IMMEDIATE` plus the single-row UPDATE guard is what makes this safe;
+    nothing exercised it under contention.
+    """
+    import threading
+
+    _config_unused, store, authorization = _pending_store(tmp_path)
+    handle = store.issue(authorization)
+
+    results: list[object] = []
+    barrier = threading.Barrier(8)
+
+    def attempt() -> None:
+        barrier.wait()
+        try:
+            results.append(store.consume(handle))
+        except Exception as exc:  # recorded, not swallowed
+            results.append(exc)
+
+    threads = [threading.Thread(target=attempt) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    consumed = [r for r in results if r is not None and not isinstance(r, Exception)]
+    raised = [r for r in results if isinstance(r, Exception)]
+    assert len(consumed) == 1, f"expected one winner, got {len(consumed)}"
+    assert raised == [], f"unexpected exceptions: {raised}"
+    assert store.consume(handle) is None
+
+    # Measured, so the claim above is not overstated: neither `BEGIN IMMEDIATE`
+    # nor the single-row UPDATE guard is individually falsifiable by this test.
+    # SQLite serializes writers on its own, so removing either leaves this
+    # green. What IS pinned is single-use — see the replay test below, which
+    # fails only when both the `consumed_at IS NULL` select filter and the
+    # UPDATE guard are removed together. This test documents the property
+    # under contention; it does not prove the locking is what provides it.
+
+
+async def test_a_consumed_handle_is_replayable_only_after_an_explicit_restore(
+    tmp_path,
+):
+    """Replay is refused; the failure-recovery path is deliberate, not implicit.
+
+    `restore` exists so a transient code-creation failure can return the
+    customer's consent. It must not double as a way to replay an approval that
+    already produced a code.
+    """
+    _config_unused, store, authorization = _pending_store(tmp_path)
+    handle = store.issue(authorization)
+
+    assert store.consume(handle) is not None
+    assert store.consume(handle) is None
+
+    assert store.restore(handle) is True
+    assert store.consume(handle) is not None
+    assert store.consume(handle) is None
+
+
+async def test_a_customer_can_reconnect_after_their_session_is_revoked(tmp_path):
+    """Revocation is not terminal for the person, only for the session.
+
+    The lifecycle requires reconnect after revocation. Logout revokes; the next
+    sign-in must issue a working session with a different token and CSRF pair.
+    """
+    from cre_mcp.platform.connection import BrowserSessionStore
+
+    config = _config(tmp_path)
+    user = await PlatformRepository(config).create_user("buyer@corp.test", "Buyer")
+    assert user is not None
+    sessions = BrowserSessionStore(config.cache_db_path)
+
+    first = sessions.issue(user.id)
+    assert sessions.validate(first.token) is not None
+    assert sessions.revoke(first.token) is True
+    assert sessions.validate(first.token) is None
+
+    second = sessions.issue(user.id)
+    assert sessions.validate(second.token) is not None
+    assert second.token != first.token
+    assert second.csrf_token != first.csrf_token
+    # The revoked one stays dead.
+    assert sessions.validate(first.token) is None
