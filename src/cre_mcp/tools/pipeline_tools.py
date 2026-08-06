@@ -124,6 +124,15 @@ async def add_to_pipeline(
         listing = Listing.model_validate(analyzed.get("listing"))
         score, grade, strategy = _score_snapshot(analyzed)
         store = get_deal_store()
+        if hasattr(store, "add_to_pipeline_result"):
+            return await store.add_to_pipeline_result(
+                listing,
+                score=score,
+                grade=grade,
+                strategy=strategy,
+                stage=stage,
+                note=note,
+            )
         deal_id = await store.save_deal(
             listing,
             score=score,
@@ -174,6 +183,11 @@ async def update_deal_stage(
     )
     try:
         store = get_deal_store()
+        if hasattr(store, "update_stage_result"):
+            row = await store.update_stage_result(deal_id, stage, note)
+            if row is None:
+                raise ValueError(f"unknown deal_id: {deal_id}")
+            return row
         if not await store.update_stage(deal_id, stage, note):
             raise ValueError(f"unknown deal_id: {deal_id}")
         row = next(

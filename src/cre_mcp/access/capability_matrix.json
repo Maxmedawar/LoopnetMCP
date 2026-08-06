@@ -832,8 +832,7 @@
   },
   "unassigned_deals": {
     "allowed_profiles": [
-      "full_operator",
-      "jv_partner"
+      "full_operator"
     ],
     "sensitive": false,
     "sensitive_params": [],
@@ -1043,8 +1042,7 @@
   },
   "exchange_status": {
     "allowed_profiles": [
-      "full_operator",
-      "jv_partner"
+      "full_operator"
     ],
     "sensitive": false,
     "sensitive_params": [],
@@ -1092,8 +1090,7 @@
   },
   "list_investors": {
     "allowed_profiles": [
-      "full_operator",
-      "jv_partner"
+      "full_operator"
     ],
     "sensitive": false,
     "sensitive_params": [],
@@ -1248,6 +1245,22 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "property_reference_params": [
+      "deal_id"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedDealDocumentsResult",
+        "records": [
+          {
+            "path": "property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -1273,6 +1286,33 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "property_reference_params": [
+      "deal_id"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedNOIBridgeResult",
+        "records": [
+          {
+            "path": "property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "envelope_model": "RestrictedNOIBridgeInsufficientResult",
+        "records": [
+          {
+            "path": "property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -1286,6 +1326,33 @@
     "sensitive": false,
     "sensitive_params": [],
     "territory_params": [],
+    "property_reference_params": [
+      "deal_id"
+    ],
+    "result_territory_contracts": [
+      {
+        "envelope_model": "RestrictedDealTruthReportResult",
+        "records": [
+          {
+            "path": "property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      },
+      {
+        "envelope_model": "RestrictedDealTruthInsufficientResult",
+        "records": [
+          {
+            "path": "property",
+            "model": "SubjectProperty",
+            "location_mode": "structured_property",
+            "location_fields": ["address", "city", "state", "zip_code"]
+          }
+        ]
+      }
+    ],
     "ownership_relevant": true,
     "quota": null,
     "approval": null,
@@ -1526,8 +1593,7 @@
   },
   "ic_scorecard": {
     "allowed_profiles": [
-      "full_operator",
-      "jv_partner"
+      "full_operator"
     ],
     "sensitive": false,
     "sensitive_params": [],
@@ -4532,8 +4598,7 @@
   },
   "trace_input_lineage": {
     "allowed_profiles": [
-      "full_operator",
-      "jv_partner"
+      "full_operator"
     ],
     "sensitive": false,
     "sensitive_params": [],

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -110,6 +111,50 @@ def test_concurrent_runners_serialize_with_one_ledger_write(
             "SELECT count(*) FROM medawarcre.schema_migrations"
         ).fetchone()[0]
     assert count == len(migrations)
+
+
+def test_deal_upgrade_converts_actor_owned_rows_to_collaborative_attribution(
+    postgres_database: tuple[str, str, str],
+) -> None:
+    admin_dsn, migration_dsn, _ = postgres_database
+    migrations = load_migrations()
+    MigrationRunner(migration_dsn, migrations[:-1]).apply()
+    actor_id = str(uuid4())
+    workspace_id = str(uuid4())
+    with psycopg.connect(admin_dsn) as connection:
+        connection.execute("SET ROLE medawarcre_migration")
+        connection.execute(
+            "INSERT INTO medawarcre.users(id,email,name,state) "
+            "VALUES (%s,%s,'Legacy Owner','active')",
+            (actor_id, f"legacy-{uuid4().hex}@example.test"),
+        )
+        connection.execute(
+            "INSERT INTO medawarcre.workspaces(id,public_id,name,state) "
+            "VALUES (%s,%s,'Legacy Deal Workspace','active')",
+            (workspace_id, f"ws_{uuid4().hex}"),
+        )
+        connection.execute(
+            "INSERT INTO medawarcre.memberships(id,workspace_id,user_id,role,state) "
+            "VALUES (%s,%s,%s,'owner','active')",
+            (str(uuid4()), workspace_id, actor_id),
+        )
+        connection.execute(
+            "INSERT INTO medawarcre.deals("
+            "workspace_id,source,source_record_id,title,listing,owner_user_id) "
+            "VALUES (%s,'crexi','legacy-1','Legacy Deal',"
+            "'{\"source\":\"crexi\",\"source_id\":\"legacy-1\","
+            "\"name\":\"Legacy Deal\"}'::jsonb,%s)",
+            (workspace_id, actor_id),
+        )
+
+    assert MigrationRunner(migration_dsn, migrations).apply() == [migrations[-1].version]
+    with psycopg.connect(admin_dsn) as connection:
+        row = connection.execute(
+            "SELECT owner_user_id,created_by_user_id::text,updated_by_user_id::text "
+            "FROM medawarcre.deals WHERE workspace_id=%s",
+            (workspace_id,),
+        ).fetchone()
+    assert row == (None, actor_id, actor_id)
 
 
 def test_migration_apply_and_recovery_reject_superuser_before_mutation(

@@ -30,11 +30,15 @@ async def _ensure_saved_deal(
     store: DealStore,
 ) -> str:
     """Resolve an existing source:id or analyze and persist a URL/raw source id."""
-    if await store.get_deal(value) is not None:
-        return value
     selected_source = source
     identifier = value
-    if "://" not in value and re.fullmatch(r"[a-z0-9_]+:.+", value, re.IGNORECASE):
+    saved_reference = (
+        "://" not in value
+        and re.fullmatch(r"[a-z0-9_]+:.+", value, re.IGNORECASE) is not None
+    )
+    if saved_reference and await store.get_deal(value) is not None:
+        return value
+    if saved_reference:
         selected_source, _, identifier = value.partition(":")
     analyzed = await analyze_deal(identifier, source=selected_source)
     if "error" in analyzed:
@@ -119,7 +123,7 @@ async def start_exchange(
         return {"error": message}
 
 
-async def exchange_status(exchange_id: int) -> dict:
+async def exchange_status(exchange_id: int | str) -> dict:
     """Return the current exchange clock, IDs, governing rule, and next action.
 
     Args:
@@ -140,7 +144,7 @@ async def exchange_status(exchange_id: int) -> dict:
 
 
 async def identify_replacement(
-    exchange_id: int,
+    exchange_id: int | str,
     url_or_id: str,
     source: str = "loopnet",
 ) -> dict:

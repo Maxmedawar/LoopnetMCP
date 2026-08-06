@@ -44,30 +44,35 @@ async def record_deal_outcome(
     )
     try:
         store = get_deal_store()
-        saved = await store.record_outcome(
-            deal_id,
-            {
-                "closed": closed,
-                "purchase_price": purchase_price,
-                "realized_hold_years": realized_hold_years,
-                "realized_irr": realized_irr,
-                "realized_equity_multiple": realized_equity_multiple,
-                "went_bad": went_bad,
-                "notes": notes,
-            },
-        )
-        if not saved:
-            raise ValueError(f"unknown deal_id or outcome persistence unavailable: {deal_id}")
-        outcome = next(
-            (
-                item
-                for item in await store.get_outcomes()
-                if item["deal_id"] == deal_id
-            ),
-            None,
-        )
+        values = {
+            "closed": closed,
+            "purchase_price": purchase_price,
+            "realized_hold_years": realized_hold_years,
+            "realized_irr": realized_irr,
+            "realized_equity_multiple": realized_equity_multiple,
+            "went_bad": went_bad,
+            "notes": notes,
+        }
+        if hasattr(store, "record_outcome_result"):
+            outcome = await store.record_outcome_result(deal_id, values)
+        else:
+            saved = await store.record_outcome(deal_id, values)
+            if not saved:
+                raise ValueError(
+                    f"unknown deal_id or outcome persistence unavailable: {deal_id}"
+                )
+            outcome = next(
+                (
+                    item
+                    for item in await store.get_outcomes()
+                    if item["deal_id"] == deal_id
+                ),
+                None,
+            )
         if outcome is None:
-            raise RuntimeError("persisted outcome could not be read")
+            raise ValueError(
+                f"unknown deal_id or outcome persistence unavailable: {deal_id}"
+            )
         return {
             "status": "recorded",
             "outcome": outcome,

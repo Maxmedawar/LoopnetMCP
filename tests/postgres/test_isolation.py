@@ -38,9 +38,12 @@ def _seed_two_tenants(connection: psycopg.Connection) -> tuple[str, str, str, st
         (user_a,),
     )
     connection.execute(
-        "INSERT INTO medawarcre.deals(id,workspace_id,source,source_record_id,title,stage) "
-        "VALUES (%s,%s,'fixture','a-1','A Deal','lead'),"
-        "(%s,%s,'fixture','b-1','B Deal','lead')",
+        "INSERT INTO medawarcre.deals("
+        "id,workspace_id,source,source_record_id,title,listing,stage) "
+        "VALUES (%s,%s,'fixture','a-1','A Deal',"
+        "jsonb_build_object('source','fixture','source_id','a-1','name','A Deal'),'lead'),"
+        "(%s,%s,'fixture','b-1','B Deal',"
+        "jsonb_build_object('source','fixture','source_id','b-1','name','B Deal'),'lead')",
         (str(uuid4()), workspace_a, str(uuid4()), workspace_b),
     )
     return workspace_a, workspace_b, user_a, user_b
@@ -61,8 +64,8 @@ def test_rls_and_composite_constraints_block_cross_tenant_access(
             (workspace_a, user_a),
         )
         assert connection.execute(
-            "SELECT title FROM medawarcre.deals ORDER BY title"
-        ).fetchall() == [("A Deal",)]
+            "SELECT source_record_id FROM medawarcre.deals ORDER BY source_record_id"
+        ).fetchall() == [("a-1",)]
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute(
                 "INSERT INTO medawarcre.deals"
@@ -628,8 +631,10 @@ def test_app_identity_rows_are_actor_owned_while_deal_content_is_shared(
         )
         shared_deal = connection.execute(
             "INSERT INTO medawarcre.deals("
-            "workspace_id,source,source_record_id,title,stage,owner_user_id) "
-            "VALUES (%s,'fixture','shared','Shared deal','lead',%s) RETURNING id",
+            "workspace_id,source,source_record_id,title,listing,stage,owner_user_id) "
+            "VALUES (%s,'fixture','shared','Shared deal',"
+            "jsonb_build_object('source','fixture','source_id','shared',"
+            "'name','Shared deal'),'lead',%s) RETURNING id",
             (workspace_id, peer_id),
         ).fetchone()[0]
         connection.execute(
@@ -672,8 +677,9 @@ def test_app_identity_rows_are_actor_owned_while_deal_content_is_shared(
             "SELECT user_id::text FROM medawarcre.privacy_requests"
         ).fetchall() == [(actor_id,)]
         assert connection.execute(
-            "SELECT title FROM medawarcre.deals WHERE id=%s", (shared_deal,)
-        ).fetchone() == ("Shared deal",)
+            "SELECT source_record_id FROM medawarcre.deals WHERE id=%s",
+            (shared_deal,),
+        ).fetchone() == ("shared",)
         assert connection.execute(
             "SELECT body FROM medawarcre.deal_notes WHERE deal_id=%s", (shared_deal,)
         ).fetchone() == ("Workspace-visible note",)

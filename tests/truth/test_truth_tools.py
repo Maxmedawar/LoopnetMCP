@@ -4,7 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from cre_mcp.access.context import local_context, use_context
+from cre_mcp.access.context import TenantContext, local_context, use_context
+from cre_mcp.access.profiles import Profile
 from cre_mcp.config import CreConfig
 from cre_mcp.deals.store import DealStore
 from cre_mcp.models.listings import Listing
@@ -149,3 +150,94 @@ async def test_ingest_warns_when_deal_not_in_store(tmp_path):
         result = await ingest_document("crexi:ghost", path=str(doc_path))
     assert result["status"] == "ingested"
     assert any("not yet in the deal store" in w for w in result["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_bridge_and_report_still_serve_unsaved_and_blank_address_deals(tmp_path):
+    """Trusted-local behaviour must not regress for deals with no usable address.
+
+    Phase 5G added a mandatory ``property`` projection so territory-limited
+    profiles can be policed on the returned record.  That projection must not
+    turn two states the product already supports into errors:
+
+    * a deal_id with ingested claims that was never saved, which
+      ``ingest_document`` explicitly permits and warns about; and
+    * a saved listing whose address fields are blank, which the Crexi mapper
+      emits by design.
+    """
+    db = tmp_path / "cache.db"
+    truth_store = TruthStore(CreConfig(cache_db_path=db))
+    deal_store = DealStore(db)
+    blank = Listing(
+        source="crexi", source_id="blank-addr", name="Unknown",
+        address="", city="", state="", url="https://example.com/blank",
+    )
+    blank_id = await deal_store.save_deal(blank)
+    assert blank_id is not None
+
+    doc_path = tmp_path / "t12.csv"
+    doc_path.write_text(T12_CSV)
+    with patch("cre_mcp.tools.truth_tools.get_truth_store", return_value=truth_store), \
+         patch("cre_mcp.tools.truth_tools.get_deal_store", return_value=deal_store):
+        await ingest_document("crexi:never-saved", path=str(doc_path))
+        await ingest_document(blank_id, path=str(doc_path))
+        unsaved_bridge = await build_noi_bridge("crexi:never-saved")
+        unsaved_report = await deal_truth_report("crexi:never-saved")
+        blank_bridge = await build_noi_bridge(blank_id)
+        blank_report = await deal_truth_report(blank_id)
+
+    for result in (unsaved_bridge, unsaved_report, blank_bridge, blank_report):
+        assert "error" not in result, result
+    assert unsaved_bridge["columns"]["verified"]["noi"] == 180000
+    assert blank_bridge["columns"]["verified"]["noi"] == 180000
+    assert unsaved_report["report"]["verdict"]
+    assert blank_report["report"]["verdict"]
+
+
+@pytest.mark.asyncio
+async def test_restricted_profile_still_requires_the_authoritative_location(tmp_path):
+    """Territory-limited callers keep the mandatory, fail-closed projection.
+
+    The tolerant behaviour restored above must apply only where the result
+    territory policy does not run.  For a territory-limited profile the
+    ``property`` record stays mandatory, and a deal the policy cannot locate
+    must fail rather than release.
+    """
+    db = tmp_path / "cache.db"
+    truth_store = TruthStore(CreConfig(cache_db_path=db))
+    deal_store = DealStore(db)
+    good_id = await deal_store.save_deal(_listing())
+    blank_id = await deal_store.save_deal(
+        Listing(
+            source="crexi", source_id="blank-jv", name="Unknown",
+            address="", city="", state="", url="https://example.com/blank-jv",
+        )
+    )
+    doc_path = tmp_path / "t12.csv"
+    doc_path.write_text(T12_CSV)
+
+    with patch("cre_mcp.tools.truth_tools.get_truth_store", return_value=truth_store), \
+         patch("cre_mcp.tools.truth_tools.get_deal_store", return_value=deal_store):
+        await ingest_document(good_id, path=str(doc_path))
+        await ingest_document(blank_id, path=str(doc_path))
+        jv = TenantContext(
+            workspace_id="ws_jv_truth",
+            profile=Profile.JV_PARTNER,
+            territories=("TX",),
+            actor_id="actor-jv",
+            session_id="session-jv",
+        )
+        with use_context(jv):
+            located = await build_noi_bridge(good_id)
+            located_report = await deal_truth_report(good_id)
+            blank = await build_noi_bridge(blank_id)
+            blank_report = await deal_truth_report(blank_id)
+            missing = await build_noi_bridge("crexi:never-saved-jv")
+
+    assert located["property"] == {
+        "address": "1 Main St", "city": "Austin", "state": "TX", "zip_code": None,
+    }
+    assert located_report["property"]["city"] == "Austin"
+    assert blank == {"error": "stored deal location is invalid"}
+    assert blank_report == {"error": "stored deal location is invalid"}
+    assert missing == {"error": "unknown deal_id: crexi:never-saved-jv"}

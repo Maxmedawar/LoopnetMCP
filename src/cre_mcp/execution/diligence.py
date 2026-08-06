@@ -257,16 +257,21 @@ async def due_diligence_plan(
 
     active_store = store or get_deal_store()
     expected_id = DealStore.deal_id_for(ctx.listing)
-    deal_id = await active_store.save_deal(ctx.listing)
-    persisted = deal_id is not None
-    deal_id = deal_id or expected_id
+    replace_diligence = getattr(active_store, "replace_diligence", None)
+    if callable(replace_diligence):
+        stored = await replace_diligence(ctx.listing, items)
+        deal_id = str(stored["deal_id"])
+        persisted = True
+        rows = stored["items"]
+    else:
+        saved_id = await active_store.save_deal(ctx.listing)
+        persisted = saved_id is not None
+        deal_id = saved_id or expected_id
+        if persisted:
+            persisted = await active_store.save_dd_items(deal_id, items)
+        rows = await active_store.get_dd_items(deal_id) if persisted else []
     if persisted:
-        persisted = await active_store.save_dd_items(deal_id, items)
-    if persisted:
-        statuses = {
-            row["key"]: row["status"]
-            for row in await active_store.get_dd_items(deal_id)
-        }
+        statuses = {row["key"]: row["status"] for row in rows}
         items = [
             item.model_copy(update={"status": statuses.get(item.key, item.status)})
             for item in items

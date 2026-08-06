@@ -48,6 +48,13 @@ TENANT_TABLES = frozenset(
         "deal_notes",
         "deal_outcomes",
         "deal_events",
+        "deal_dd_items",
+        "deal_ops_events",
+        "deal_investors",
+        "deal_commitments",
+        "deal_exchanges",
+        "deal_exchange_replacements",
+        "deal_ic_decisions",
         "internal_opportunity_sources",
         "consents",
         "privacy_requests",
@@ -86,8 +93,6 @@ APP_TENANT_READ_TABLES = frozenset(
         "saved_search_seen_matches",
         "search_runs",
         "search_results",
-        "deal_outcomes",
-        "deal_events",
         "consents",
         "privacy_requests",
         "source_document_attestations",
@@ -132,14 +137,12 @@ APP_COLUMN_READS = {
             "workspace_id",
             "source",
             "source_record_id",
-            "title",
             "listing",
-            "asking_price",
             "stage",
             "score",
-            "score_version",
             "grade",
             "strategy",
+            "accountability_owner",
             "next_action",
             "next_action_due",
             "created_at",
@@ -152,16 +155,110 @@ APP_COLUMN_READS = {
             "workspace_id",
             "deal_id",
             "body",
+            "stage",
+            "created_at",
+        }
+    ),
+    "deal_outcomes": frozenset(
+        {
+            "workspace_id",
+            "deal_id",
+            "closed",
+            "purchase_price",
+            "realized_hold_years",
+            "realized_irr",
+            "realized_equity_multiple",
+            "went_bad",
+            "notes",
+            "predicted_score",
+            "predicted_grade",
+            "predicted_strategy",
             "created_at",
             "updated_at",
+        }
+    ),
+    "deal_events": frozenset(
+        {
+            "id",
+            "workspace_id",
+            "deal_id",
+            "event_type",
+            "event_data",
+            "occurred_at",
+            "created_at",
+            "request_invocation_id",
+        }
+    ),
+    "deal_dd_items": frozenset(
+        {"workspace_id", "deal_id", "item_key", "item_data", "status", "deadline"}
+    ),
+    "deal_ops_events": frozenset(
+        {
+            "workspace_id",
+            "deal_id",
+            "event_key",
+            "event_data",
+            "category",
+            "event_date",
+            "status",
+        }
+    ),
+    "deal_investors": frozenset(
+        {
+            "id",
+            "workspace_id",
+            "name",
+            "accredited",
+            "accreditation_verified",
+            "relationship",
+            "contact",
+            "created_at",
+            "updated_at",
+        }
+    ),
+    "deal_commitments": frozenset(
+        {
+            "id",
+            "workspace_id",
+            "deal_id",
+            "investor_id",
+            "amount",
+            "created_at",
+            "updated_at",
+        }
+    ),
+    "deal_exchanges": frozenset(
+        {
+            "id",
+            "workspace_id",
+            "relinquished_deal_id",
+            "relinquished_close_date",
+            "identification_deadline",
+            "exchange_deadline",
+            "created_at",
+            "updated_at",
+        }
+    ),
+    "deal_exchange_replacements": frozenset(
+        {"workspace_id", "exchange_id", "deal_id", "value", "identified_at"}
+    ),
+    "deal_ic_decisions": frozenset(
+        {
+            "id",
+            "workspace_id",
+            "deal_id",
+            "system_verdict",
+            "system_data",
+            "expert_verdict",
+            "expert_data",
+            "agreed",
+            "created_at",
+            "request_invocation_id",
         }
     ),
 }
 APP_WRITE_TABLES = frozenset(
     {
-        "deals",
-        "deal_notes",
-        "deal_outcomes",
         "consents",
         "privacy_requests",
         "truth_documents",
@@ -171,6 +268,104 @@ APP_WRITE_TABLES = frozenset(
 APP_INSERT_ONLY_TABLES = frozenset(
     {"truth_document_blobs", "saved_searches", "saved_search_seen_matches"}
 )
+APP_COLUMN_INSERTS = {
+    "deals": frozenset(
+        {
+            "workspace_id", "source", "source_record_id", "title", "listing",
+            "asking_price", "stage", "score", "grade", "strategy", "source_rights_id",
+            "source_rights_verified_on", "created_by_user_id", "updated_by_user_id",
+        }
+    ),
+    "deal_notes": frozenset(
+        {"workspace_id", "deal_id", "author_user_id", "body", "stage"}
+    ),
+    "deal_outcomes": frozenset(
+        {
+            "workspace_id", "deal_id", "closed", "purchase_price",
+            "realized_hold_years", "realized_irr", "realized_equity_multiple",
+            "went_bad", "notes", "predicted_score", "predicted_grade",
+            "predicted_strategy", "created_by_user_id", "updated_by_user_id",
+        }
+    ),
+    "deal_events": frozenset(
+        {
+            "workspace_id", "deal_id", "event_type", "event_data", "occurred_at",
+            "author_user_id", "request_invocation_id",
+        }
+    ),
+    "deal_dd_items": frozenset(
+        {
+            "workspace_id", "deal_id", "item_key", "item_data", "status",
+            "deadline", "created_by_user_id", "updated_by_user_id",
+        }
+    ),
+    "deal_ops_events": frozenset(
+        {
+            "workspace_id", "deal_id", "event_key", "event_data", "category",
+            "event_date", "status", "created_by_user_id", "updated_by_user_id",
+        }
+    ),
+    "deal_investors": frozenset(
+        {
+            "workspace_id", "name", "accredited", "accreditation_verified",
+            "relationship", "contact", "created_by_user_id", "updated_by_user_id",
+        }
+    ),
+    "deal_commitments": frozenset(
+        {
+            "workspace_id", "deal_id", "investor_id", "amount",
+            "created_by_user_id", "updated_by_user_id",
+        }
+    ),
+    "deal_exchanges": frozenset(
+        {
+            "workspace_id", "relinquished_deal_id", "relinquished_close_date",
+            "identification_deadline", "exchange_deadline", "created_by_user_id",
+            "updated_by_user_id",
+        }
+    ),
+    "deal_exchange_replacements": frozenset(
+        {
+            "workspace_id", "exchange_id", "deal_id", "value", "identified_at",
+            "created_by_user_id",
+        }
+    ),
+    "deal_ic_decisions": frozenset(
+        {
+            "workspace_id", "deal_id", "system_verdict", "system_data",
+            "expert_verdict", "expert_data", "agreed", "created_by_user_id",
+            "request_invocation_id",
+        }
+    ),
+}
+APP_COLUMN_UPDATES = {
+    "deals": frozenset(
+        {
+            "title", "listing", "asking_price", "stage", "score", "grade",
+            "strategy", "accountability_owner", "next_action", "next_action_due",
+            "source_rights_id", "source_rights_verified_on", "updated_by_user_id",
+            "updated_at",
+        }
+    ),
+    "deal_outcomes": frozenset(
+        {
+            "closed", "purchase_price", "realized_hold_years", "realized_irr",
+            "realized_equity_multiple", "went_bad", "notes", "updated_by_user_id",
+            "updated_at",
+        }
+    ),
+    "deal_dd_items": frozenset(
+        {"item_data", "deadline", "updated_by_user_id", "updated_at"}
+    ),
+    "deal_ops_events": frozenset(
+        {"event_data", "category", "event_date", "updated_by_user_id", "updated_at"}
+    ),
+    "deal_commitments": frozenset({"amount", "updated_by_user_id", "updated_at"}),
+    "deal_exchanges": frozenset(
+        {"identification_deadline", "exchange_deadline", "updated_by_user_id", "updated_at"}
+    ),
+}
+APP_DELETE_TABLES = frozenset({"deal_dd_items", "deal_ops_events"})
 APP_READ_TABLES = APP_TENANT_READ_TABLES | frozenset(
     {"schema_migrations", "plans", "oauth_clients", "users", "workspaces"}
 )
@@ -362,13 +557,13 @@ ADMIN_MUTATION_TABLES = (
     - SERVICE_OWNED_TABLES
     - IMMUTABLE_TABLES
 )
-EXPECTED_MIGRATION_VERSION = 7
+EXPECTED_MIGRATION_VERSION = 8
 SCHEMA_NAME = "medawarcre"
 
 # Generated from ``catalog.catalog_fingerprint()`` on the reviewed PostgreSQL
 # 16 launch schema. Any schema migration must update this value deliberately.
 EXPECTED_CATALOG_FINGERPRINT = (
-    "15215ce6ae3eabe2c8799eeef258a7d1cf896aa9e5a6d66d94f5cb4e163b6323"
+    "bf1bc746d6269d976d4b687b8ccef685a1088bb23d580fa629dd3c856da05e70"
 )
 
 __all__ = [
@@ -383,6 +578,9 @@ __all__ = [
     "ADMIN_READ_TABLES",
     "APP_READ_TABLES",
     "APP_COLUMN_READS",
+    "APP_COLUMN_INSERTS",
+    "APP_COLUMN_UPDATES",
+    "APP_DELETE_TABLES",
     "APP_TENANT_READ_TABLES",
     "APP_WRITE_TABLES",
     "APP_INSERT_ONLY_TABLES",

@@ -1,6 +1,9 @@
 """1031 clock, identification-rule, persistence, and boot tests."""
 
 from datetime import date, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
@@ -48,6 +51,52 @@ async def test_start_exchange_calculates_45_180_clocks_and_persists(tmp_path):
     assert "BEFORE the relinquished property closes" in reopened.qi_gate
     assert CPA_FORM_8824_GATE == reopened.cpa_gate
     assert "Form 8824" in reopened.cpa_gate
+
+
+@pytest.mark.asyncio
+async def test_composite_exchange_results_need_no_postcommit_deal_lookup():
+    exchange_id = str(uuid4())
+    base_record = {
+        "exchange_id": exchange_id,
+        "relinquished_deal_id": "crexi:primary",
+        "relinquished_close_date": "2026-01-01",
+        "identification_deadline": "2026-02-15",
+        "exchange_deadline": "2026-06-30",
+        "relinquished_value": 1_000_000,
+        "replacements": [],
+    }
+    identified_record = {
+        **base_record,
+        "replacements": [
+            {
+                "deal_id": "crexi:replacement",
+                "value": 1_100_000,
+                "identified_at": "2026-01-10",
+            }
+        ],
+    }
+    store = SimpleNamespace(
+        create_exchange_result=AsyncMock(return_value=base_record),
+        identify_exchange_replacement_result=AsyncMock(return_value=identified_record),
+        get_deal=AsyncMock(side_effect=AssertionError("postcommit deal lookup")),
+    )
+
+    started = await start_exchange(
+        "crexi:primary",
+        "2026-01-01",
+        store=store,
+        as_of="2026-01-01",
+    )
+    identified = await identify_replacement(
+        exchange_id,
+        "crexi:replacement",
+        store=store,
+        as_of="2026-01-10",
+    )
+
+    assert started.relinquished_deal_id == "crexi:primary"
+    assert identified.replacements[0].deal_id == "crexi:replacement"
+    store.get_deal.assert_not_awaited()
 
 
 @pytest.mark.asyncio

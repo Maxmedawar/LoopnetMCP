@@ -10,19 +10,26 @@ return-value unit test.
 from __future__ import annotations
 
 import json
+import inspect
 import sqlite3
 from collections.abc import Callable
+from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
+from functools import wraps
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 
 from cre_mcp.access.engine import RESULT_TERRITORY_DENIAL
+from cre_mcp.access.context import workspace_runtime_config
 from cre_mcp.access.middleware import install_access
 from cre_mcp.command import tools as command_tools
+from cre_mcp.config import CreConfig
 from cre_mcp.deals.store import DealStore
 from cre_mcp.disposition import tools as disposition_tools
 from cre_mcp.disposition.buyers import record_buyer as record_buyer_profile
@@ -32,6 +39,11 @@ from cre_mcp.ledger.models import ClaimOutcomeRecord
 from cre_mcp.ledger.store import LedgerStore
 from cre_mcp.models.listings import Listing
 from cre_mcp.negotiation.commitments import CommitmentStore
+from cre_mcp.postgres.admission import AdmissionOutcome
+from cre_mcp.postgres.domains import (
+    HostedRequestRepositories,
+    use_hosted_request_repositories,
+)
 from cre_mcp.relations import tools as relations_tools
 from cre_mcp.tools import memory_tools
 
@@ -304,8 +316,51 @@ async def _call_production_tool(
     tool: Callable[..., Any],
     arguments: dict[str, Any],
 ):
+    request_context = identity["ctx"]
+    scoped_config = workspace_runtime_config(CreConfig(), request_context)
+    assert scoped_config is not None
+    deal_store = DealStore(config=scoped_config)
+    admission = AdmissionOutcome(
+        invocation_id=str(uuid4()),
+        request_correlation_id=str(uuid4()),
+        workspace_public_id=request_context.workspace_id,
+        actor_user_id=request_context.actor_id or "round-seven-actor",
+        session_id=request_context.session_id or "round-seven-session",
+        tool_name=tool_name,
+        decision="allowed",
+        reason_code="isolated_test_adapter",
+        safe_reason="isolated test adapter admitted request",
+    )
+    marker = object()
+    repositories = HostedRequestRepositories(
+        admission=admission,
+        platform=marker,
+        provider=marker,
+        search=deal_store,
+        deal=deal_store,
+        privacy=marker,
+        job=marker,
+        document=marker,
+        truth_asset=marker,
+    )
+
+    @wraps(tool)
+    async def tool_with_legacy_persistence(*args: Any, **kwargs: Any) -> Any:
+        """Bind explicit isolated SQLite adapters around one legacy policy test."""
+
+        with use_hosted_request_repositories(repositories), ExitStack() as stack:
+            for target in (
+                "cre_mcp.command._db.DealStore",
+                "cre_mcp.command.tools.DealStore",
+                "cre_mcp.relations.dossier.DealStore",
+                "cre_mcp.relations.tools.DealStore",
+            ):
+                stack.enter_context(patch(target, return_value=deal_store))
+            result = tool(*args, **kwargs)
+            return await result if inspect.isawaitable(result) else result
+
     app = FastMCP(name=f"round-seven-{tool_name}")
-    app.tool(name=tool_name)(tool)
+    app.tool(name=tool_name)(tool_with_legacy_persistence)
     uninstall = install_access(
         app,
         registry=registry,

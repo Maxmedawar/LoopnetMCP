@@ -738,3 +738,63 @@ def test_restore_rejects_pre16_target_before_native_restore(
     monkeypatch.setattr(backup_module, "_native_program", native_restore_must_not_run)
     with pytest.raises(BackupVerificationError, match="PostgreSQL 16"):
         restore_backup("dbname=pre16", archive, tmp_path / "ignored.json")
+
+
+def test_restore_proves_smoke_identities_before_native_restore(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing smoke identities stop a supported target before pg_restore runs.
+
+    The version, bootstrap-role, and clean-target proofs still report their own
+    failures first, so an unsupported target is never mislabelled as a smoke
+    identity problem.
+    """
+    archive = tmp_path / "supported.dump"
+    archive.write_bytes(b"archive")
+    manifest = BackupManifest(
+        format_version=1,
+        created_at="2026-08-01T00:00:00Z",
+        dump_sha256=hashlib.sha256(b"archive").hexdigest(),
+        dump_size=len(b"archive"),
+        pg_dump_version="pg_dump (PostgreSQL) 16.14",
+        server_version="16.14",
+        schema_fingerprint="0" * 64,
+        migration_checksums={},
+        migration_descriptions={},
+        tables=(),
+        row_counts={},
+    )
+
+    class FakeConnection:
+        info = SimpleNamespace(server_version=160014)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    monkeypatch.setattr(backup_module, "load_manifest", lambda _: manifest)
+    monkeypatch.setattr(backup_module, "_verify_manifest_contract", lambda _: None)
+    monkeypatch.setattr(backup_module.psycopg, "connect", lambda *_, **__: FakeConnection())
+    monkeypatch.setattr(backup_module, "_assert_restore_session", lambda _: None)
+    monkeypatch.setattr(backup_module, "_assert_bootstrap_roles", lambda _: None)
+    monkeypatch.setattr(backup_module, "_assert_clean_target", lambda _: None)
+
+    def native_restore_must_not_run(_: str) -> str:
+        raise AssertionError("native restore ran without proven smoke identities")
+
+    monkeypatch.setattr(backup_module, "_native_program", native_restore_must_not_run)
+    with pytest.raises(BackupVerificationError, match="smoke identities are required"):
+        restore_backup("dbname=supported", archive, tmp_path / "ignored.json")
+    with pytest.raises(BackupVerificationError, match="smoke identities are invalid"):
+        restore_backup(
+            "dbname=supported",
+            archive,
+            tmp_path / "ignored.json",
+            smoke_workspace_id=str(uuid4()),
+            smoke_actor_user_id=str(uuid4()),
+            smoke_other_workspace_id=str(uuid4()),
+            smoke_app_dsn="dbname='unterminated",
+            smoke_backup_dsn="dbname=smoke_backup",
+        )

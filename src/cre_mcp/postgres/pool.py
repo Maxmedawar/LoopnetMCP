@@ -304,8 +304,22 @@ class PostgresDatabase:
                 yield connection
 
     @contextmanager
-    def admitted_connection(self, admission) -> Iterator[psycopg.Connection]:
-        """Bind one app transaction to an exact fresh PostgreSQL admission."""
+    def admitted_connection(
+        self,
+        admission,
+        *,
+        snapshot: bool = False,
+    ) -> Iterator[psycopg.Connection]:
+        """Bind one app transaction to an exact fresh PostgreSQL admission.
+
+        ``snapshot`` promotes the transaction to REPEATABLE READ so a
+        multi-statement read returns one coherent view instead of a fresh
+        snapshot per statement. It is opt-in because the lock-and-mutate write
+        paths depend on READ COMMITTED semantics: they take ``FOR UPDATE``,
+        wait for the current writer, then evaluate their rules against the
+        committed result. Under REPEATABLE READ that wait ends in a
+        serialization failure instead, so those paths must not use it.
+        """
         if self.settings.runtime_mode != "app":
             raise AdmittedRequestUnavailable(
                 "admitted domain connections require the app runtime"
@@ -315,6 +329,11 @@ class PostgresDatabase:
             timeout=self.settings.acquire_timeout
         ) as connection:
             with connection.transaction():
+                if snapshot:
+                    # Must precede every other statement in the transaction.
+                    connection.execute(
+                        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                    )
                 try:
                     row = connection.execute(
                         "SELECT * FROM medawarcre.bind_admitted_request("

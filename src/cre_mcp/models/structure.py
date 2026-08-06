@@ -40,7 +40,7 @@ class ExchangeReplacement(BaseModel):
 class Exchange(BaseModel):
     """Persistent 1031 clock and identification status."""
 
-    exchange_id: int
+    exchange_id: int | str
     relinquished_deal_id: str
     relinquished_close_date: date
     identification_deadline: date

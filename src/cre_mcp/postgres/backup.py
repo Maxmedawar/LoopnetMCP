@@ -44,7 +44,10 @@ from cre_mcp.postgres.schema import (
     ADMIN_MUTATION_TABLES,
     ADMIN_INSERT_ONLY_TABLES,
     ADMIN_READ_TABLES,
+    APP_COLUMN_INSERTS,
     APP_COLUMN_READS,
+    APP_COLUMN_UPDATES,
+    APP_DELETE_TABLES,
     APP_INSERT_ONLY_TABLES,
     APP_READ_TABLES,
     APP_WRITE_TABLES,
@@ -789,7 +792,7 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
                 table in APP_READ_TABLES,
                 table in APP_WRITE_TABLES or table in APP_INSERT_ONLY_TABLES,
                 table in APP_WRITE_TABLES,
-                table in APP_WRITE_TABLES,
+                table in APP_WRITE_TABLES or table in APP_DELETE_TABLES,
             ),
             "medawarcre_admin": (
                 table in ADMIN_READ_TABLES,
@@ -852,7 +855,10 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
                 if role == BACKUP_ROLE:
                     expected_select = True
                 expected_insert = (
-                    table in APP_WRITE_TABLES or table in APP_INSERT_ONLY_TABLES
+                    table in APP_WRITE_TABLES
+                    or table in APP_INSERT_ONLY_TABLES
+                    or str(column_name)
+                    in APP_COLUMN_INSERTS.get(table, frozenset())
                     if role == "medawarcre_app"
                     else role == "medawarcre_admin"
                     and (
@@ -862,6 +868,8 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
                 )
                 expected_update = (
                     table in APP_WRITE_TABLES
+                    or str(column_name)
+                    in APP_COLUMN_UPDATES.get(table, frozenset())
                     if role == "medawarcre_app"
                     else role == "medawarcre_admin"
                     and table in ADMIN_MUTATION_TABLES
@@ -1173,10 +1181,15 @@ def _app_service_smoke(
                 )
                 inserted = connection.execute(
                     "INSERT INTO medawarcre.deals"
-                    "(workspace_id,source,source_record_id,title,stage) "
-                    "VALUES (%s,'restore_smoke','own','Smoke Deal','lead') "
+                    "(workspace_id,source,source_record_id,title,listing,stage,"
+                    "source_rights_id,source_rights_verified_on,created_by_user_id,"
+                    "updated_by_user_id) VALUES "
+                    "(%s,'restore_smoke','own','Smoke Deal',"
+                    "jsonb_build_object('source','restore_smoke','source_id','own',"
+                    "'name','Smoke Deal'),'lead',"
+                    "'restore.smoke',CURRENT_DATE,%s,%s) "
                     "RETURNING id",
-                    (workspace_id,),
+                    (workspace_id, actor_user_id, actor_user_id),
                 ).fetchone()
                 if own != 1 or other != 0 or inserted is None:
                     raise BackupVerificationError(
@@ -1187,9 +1200,14 @@ def _app_service_smoke(
                     with connection.transaction():
                         connection.execute(
                             "INSERT INTO medawarcre.deals"
-                            "(workspace_id,source,source_record_id,title,stage) "
-                            "VALUES (%s,'restore_smoke','cross','Bad Deal','lead')",
-                            (other_workspace_id,),
+                            "(workspace_id,source,source_record_id,title,listing,stage,"
+                            "source_rights_id,source_rights_verified_on,"
+                            "created_by_user_id,updated_by_user_id) VALUES "
+                            "(%s,'restore_smoke','cross','Bad Deal',"
+                            "jsonb_build_object('source','restore_smoke','source_id','cross',"
+                            "'name','Bad Deal'),'lead',"
+                            "'restore.smoke',CURRENT_DATE,%s,%s)",
+                            (other_workspace_id, actor_user_id, actor_user_id),
                         )
                 except psycopg.errors.InsufficientPrivilege:
                     blocked = True
@@ -1271,6 +1289,37 @@ def restore_backup(
         _assert_connection_postgres16(connection, "restore target")
         _assert_bootstrap_roles(connection)
         _assert_clean_target(connection)
+    # Smoke identities are proven here: after the target is known to be a clean,
+    # supported PostgreSQL 16 database so an unsupported target still reports its
+    # own version failure, and before any destructive native restore runs.
+    smoke_values = (
+        smoke_workspace_id,
+        smoke_actor_user_id,
+        smoke_other_workspace_id,
+        smoke_app_dsn,
+        smoke_backup_dsn,
+    )
+    if any(
+        type(value) is not str or not value.strip()
+        for value in smoke_values
+    ):
+        raise BackupVerificationError(
+            "dedicated app and backup service smoke identities are required"
+        )
+    workspace_id = _uuid_text(str(smoke_workspace_id), "smoke_workspace_id")
+    actor_user_id = _uuid_text(
+        str(smoke_actor_user_id), "smoke_actor_user_id"
+    )
+    other_workspace_id = _uuid_text(
+        str(smoke_other_workspace_id), "smoke_other_workspace_id"
+    )
+    try:
+        _command_connection(str(smoke_app_dsn))
+        _command_connection(str(smoke_backup_dsn))
+    except BackupError as error:
+        raise BackupVerificationError(
+            "dedicated app and backup service smoke identities are invalid"
+        ) from error
     pg_restore = _native_program("pg_restore")
     _assert_native_postgres16(_native_version(pg_restore), "pg_restore")
     safe_connection, environment = _command_connection(dsn)
@@ -1291,24 +1340,6 @@ def restore_backup(
     )
     _apply_restore_privileges(dsn)
     row_counts = _verify_restored_database(dsn, manifest)
-    smoke_values = (
-        smoke_workspace_id,
-        smoke_actor_user_id,
-        smoke_other_workspace_id,
-        smoke_app_dsn,
-        smoke_backup_dsn,
-    )
-    if any(value is None for value in smoke_values):
-        raise BackupVerificationError(
-            "dedicated app and backup service smoke identities are required"
-        )
-    workspace_id = _uuid_text(str(smoke_workspace_id), "smoke_workspace_id")
-    actor_user_id = _uuid_text(
-        str(smoke_actor_user_id), "smoke_actor_user_id"
-    )
-    other_workspace_id = _uuid_text(
-        str(smoke_other_workspace_id), "smoke_other_workspace_id"
-    )
     nonce = secrets.token_hex(32)
     _install_smoke_binding(dsn, nonce)
     try:

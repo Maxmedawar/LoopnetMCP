@@ -138,9 +138,10 @@ class TestingDomainRepositoryProvider:
     def __init__(self, config: CreConfig, platform_api: PlatformApi) -> None:
         self.config = config
         self.platform_api = platform_api
+        self.deal_store = DealStore(config=self.config)
 
     def bind(self, admission: AdmissionOutcome) -> HostedRequestRepositories:
-        deal_store = DealStore(config=self.config)
+        deal_store = self.deal_store
         marker = object()
         return HostedRequestRepositories(
             admission=admission,

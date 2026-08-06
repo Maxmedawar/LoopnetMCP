@@ -33,8 +33,6 @@ GRANT SELECT ON
     medawarcre.saved_search_seen_matches,
     medawarcre.search_runs,
     medawarcre.search_results,
-    medawarcre.deal_outcomes,
-    medawarcre.deal_events,
     medawarcre.consents,
     medawarcre.privacy_requests,
     medawarcre.source_document_attestations,
@@ -50,17 +48,109 @@ GRANT SELECT (
     status, starts_at, ends_at, created_at, updated_at
 ) ON medawarcre.access_grants TO medawarcre_app;
 GRANT SELECT (
-    id, workspace_id, source, source_record_id, title, listing, asking_price,
-    stage, score, score_version, grade, strategy, next_action, next_action_due,
+    id, workspace_id, source, source_record_id, listing, stage, score, grade,
+    strategy, accountability_owner, next_action, next_action_due,
     created_at, updated_at
 ) ON medawarcre.deals TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, source, source_record_id, title, listing, asking_price,
+    stage, score, grade, strategy, source_rights_id, source_rights_verified_on,
+    created_by_user_id, updated_by_user_id
+) ON medawarcre.deals TO medawarcre_app;
+GRANT UPDATE (
+    title, listing, asking_price, stage, score, grade, strategy,
+    accountability_owner, next_action, next_action_due, source_rights_id,
+    source_rights_verified_on, updated_by_user_id, updated_at
+) ON medawarcre.deals TO medawarcre_app;
 GRANT SELECT (
-    id, workspace_id, deal_id, body, created_at, updated_at
+    id, workspace_id, deal_id, body, stage, created_at
 ) ON medawarcre.deal_notes TO medawarcre_app;
+GRANT INSERT (workspace_id, deal_id, author_user_id, body, stage)
+ON medawarcre.deal_notes TO medawarcre_app;
+GRANT SELECT (
+    workspace_id, deal_id, closed, purchase_price, realized_hold_years,
+    realized_irr, realized_equity_multiple, went_bad, notes, predicted_score,
+    predicted_grade, predicted_strategy, created_at, updated_at
+) ON medawarcre.deal_outcomes TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, deal_id, closed, purchase_price, realized_hold_years,
+    realized_irr, realized_equity_multiple, went_bad, notes, predicted_score,
+    predicted_grade, predicted_strategy, created_by_user_id, updated_by_user_id
+) ON medawarcre.deal_outcomes TO medawarcre_app;
+GRANT UPDATE (
+    closed, purchase_price, realized_hold_years, realized_irr,
+    realized_equity_multiple, went_bad, notes, updated_by_user_id, updated_at
+) ON medawarcre.deal_outcomes TO medawarcre_app;
+GRANT SELECT (
+    id, workspace_id, deal_id, event_type, event_data, occurred_at, created_at,
+    request_invocation_id
+) ON medawarcre.deal_events TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, deal_id, event_type, event_data, occurred_at,
+    author_user_id, request_invocation_id
+) ON medawarcre.deal_events TO medawarcre_app;
+GRANT SELECT (workspace_id, deal_id, item_key, item_data, status, deadline)
+ON medawarcre.deal_dd_items TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, deal_id, item_key, item_data, status, deadline,
+    created_by_user_id, updated_by_user_id
+) ON medawarcre.deal_dd_items TO medawarcre_app;
+GRANT UPDATE (item_data, deadline, updated_by_user_id, updated_at)
+ON medawarcre.deal_dd_items TO medawarcre_app;
+GRANT DELETE ON medawarcre.deal_dd_items TO medawarcre_app;
+GRANT SELECT (
+    workspace_id, deal_id, event_key, event_data, category, event_date, status
+) ON medawarcre.deal_ops_events TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, deal_id, event_key, event_data, category, event_date, status,
+    created_by_user_id, updated_by_user_id
+) ON medawarcre.deal_ops_events TO medawarcre_app;
+GRANT UPDATE (event_data, category, event_date, updated_by_user_id, updated_at)
+ON medawarcre.deal_ops_events TO medawarcre_app;
+GRANT DELETE ON medawarcre.deal_ops_events TO medawarcre_app;
+GRANT SELECT (
+    id, workspace_id, name, accredited, accreditation_verified, relationship,
+    contact, created_at, updated_at
+) ON medawarcre.deal_investors TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, name, accredited, accreditation_verified, relationship,
+    contact, created_by_user_id, updated_by_user_id
+) ON medawarcre.deal_investors TO medawarcre_app;
+GRANT SELECT (
+    id, workspace_id, deal_id, investor_id, amount, created_at, updated_at
+) ON medawarcre.deal_commitments TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, deal_id, investor_id, amount, created_by_user_id,
+    updated_by_user_id
+) ON medawarcre.deal_commitments TO medawarcre_app;
+GRANT UPDATE (amount, updated_by_user_id, updated_at)
+ON medawarcre.deal_commitments TO medawarcre_app;
+GRANT SELECT (
+    id, workspace_id, relinquished_deal_id, relinquished_close_date,
+    identification_deadline, exchange_deadline, created_at, updated_at
+) ON medawarcre.deal_exchanges TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, relinquished_deal_id, relinquished_close_date,
+    identification_deadline, exchange_deadline, created_by_user_id,
+    updated_by_user_id
+) ON medawarcre.deal_exchanges TO medawarcre_app;
+GRANT UPDATE (
+    identification_deadline, exchange_deadline, updated_by_user_id, updated_at
+) ON medawarcre.deal_exchanges TO medawarcre_app;
+GRANT SELECT (workspace_id, exchange_id, deal_id, value, identified_at)
+ON medawarcre.deal_exchange_replacements TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, exchange_id, deal_id, value, identified_at, created_by_user_id
+) ON medawarcre.deal_exchange_replacements TO medawarcre_app;
+GRANT SELECT (
+    id, workspace_id, deal_id, system_verdict, system_data, expert_verdict,
+    expert_data, agreed, created_at, request_invocation_id
+) ON medawarcre.deal_ic_decisions TO medawarcre_app;
+GRANT INSERT (
+    workspace_id, deal_id, system_verdict, system_data, expert_verdict,
+    expert_data, agreed, created_by_user_id, request_invocation_id
+) ON medawarcre.deal_ic_decisions TO medawarcre_app;
 GRANT INSERT, UPDATE, DELETE ON
-    medawarcre.deals,
-    medawarcre.deal_notes,
-    medawarcre.deal_outcomes,
     medawarcre.consents,
     medawarcre.privacy_requests
 TO medawarcre_app;
@@ -91,6 +181,13 @@ GRANT SELECT ON
     medawarcre.deal_notes,
     medawarcre.deal_outcomes,
     medawarcre.deal_events,
+    medawarcre.deal_dd_items,
+    medawarcre.deal_ops_events,
+    medawarcre.deal_investors,
+    medawarcre.deal_commitments,
+    medawarcre.deal_exchanges,
+    medawarcre.deal_exchange_replacements,
+    medawarcre.deal_ic_decisions,
     medawarcre.internal_opportunity_sources,
     medawarcre.consents,
     medawarcre.privacy_requests,
@@ -174,6 +271,13 @@ GRANT INSERT, UPDATE, DELETE ON
     medawarcre.deal_notes,
     medawarcre.deal_outcomes,
     medawarcre.deal_events,
+    medawarcre.deal_dd_items,
+    medawarcre.deal_ops_events,
+    medawarcre.deal_investors,
+    medawarcre.deal_commitments,
+    medawarcre.deal_exchanges,
+    medawarcre.deal_exchange_replacements,
+    medawarcre.deal_ic_decisions,
     medawarcre.internal_opportunities,
     medawarcre.internal_opportunity_sources,
     medawarcre.consents,

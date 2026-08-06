@@ -12,12 +12,15 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import logging
+import math
 import socket
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+from cre_mcp.access.context import current_context
+from cre_mcp.access.profiles import TERRITORY_LIMITED
 from cre_mcp.deals.store import get_deal_store
 from cre_mcp.ledger.capture import capture_reconciliation
 from cre_mcp.source_rights.attestations import (
@@ -36,6 +39,15 @@ from cre_mcp.truth.sanitize import sanitize_text
 from cre_mcp.truth.store import get_truth_store
 
 logger = logging.getLogger(__name__)
+
+
+def _restricted_projection_required() -> bool:
+    context = current_context()
+    return bool(
+        context is not None
+        and not context.trusted
+        and context.profile in TERRITORY_LIMITED
+    )
 
 MAX_BYTES = 50 * 1024 * 1024  # 50 MB hard cap on a single document
 ALLOWED_EXT = {"pdf", "xlsx", "csv"}
@@ -381,15 +393,24 @@ async def list_deal_documents(deal_id: str) -> dict:
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
+        # Resolve and territory-gate the deal before any document is read, so a
+        # request outside the caller's territory never materializes document
+        # metadata — `origin` routinely names the market the document covers.
+        property_record: dict[str, str | None] | None = None
+        if _restricted_projection_required():
+            _, property_record = await _deal_context(deal_id.strip())
         store = get_truth_store()
         documents = await store.list_documents(deal_id.strip())
         total_claims = sum(doc["claim_count"] for doc in documents)
-        return {
+        result = {
             "deal_id": deal_id.strip(),
             "document_count": len(documents),
             "total_claims": total_claims,
             "documents": documents,
         }
+        if property_record is not None:
+            result["property"] = property_record
+        return result
     except Exception as exc:
         message = safe_error_message(exc)
         logger.error("list_deal_documents error: %s", message)
@@ -411,13 +432,53 @@ async def _load_claims(deal_id: str) -> list[FieldClaim]:
     return claims
 
 
-async def _deal_price(deal_id: str) -> float | None:
+async def _deal_context(
+    deal_id: str,
+) -> tuple[float | None, dict[str, str | None] | None]:
+    """Resolve the stored price and, for restricted profiles, the location.
+
+    The authoritative ``property`` record exists so a territory-limited profile
+    can be policed on the record this tool returns, so it is required — and
+    fails closed — only when that policy actually runs.  Trusted local and
+    full-operator callers keep the historic tolerant behaviour: an unsaved
+    deal_id or a listing with no usable address still yields a bridge, exactly
+    as it did before this projection existed.
+    """
+    restricted = _restricted_projection_required()
     deal = await get_deal_store().get_deal(deal_id)
     if not deal:
-        return None
+        if restricted:
+            raise ValueError(f"unknown deal_id: {deal_id}")
+        return None, None
     listing = deal.get("listing") or {}
+    if not isinstance(listing, dict):
+        if restricted:
+            raise ValueError("stored deal listing is invalid")
+        return None, None
+    property_record: dict[str, str | None] | None = None
+    if restricted:
+        property_record = {}
+        for key in ("address", "city", "state"):
+            value = listing.get(key)
+            if not isinstance(value, str) or not value.strip() or value != value.strip():
+                raise ValueError("stored deal location is invalid")
+            property_record[key] = value
+        zip_code = listing.get("zip_code")
+        if zip_code is not None and (
+            not isinstance(zip_code, str)
+            or not zip_code.strip()
+            or zip_code != zip_code.strip()
+        ):
+            raise ValueError("stored deal location is invalid")
+        property_record["zip_code"] = zip_code
     price = listing.get("price_usd")
-    return float(price) if isinstance(price, (int, float)) else None
+    if isinstance(price, bool) or not isinstance(price, (int, float)):
+        return None, property_record
+    selected_price = float(price)
+    return (
+        selected_price if math.isfinite(selected_price) and selected_price > 0 else None,
+        property_record,
+    )
 
 
 async def reconcile_deal_docs(deal_id: str, counterparty: str | None = None) -> dict:
@@ -488,13 +549,23 @@ async def build_noi_bridge(deal_id: str, price: float | None = None) -> dict:
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
+        stored_price, property_record = await _deal_context(deal_id.strip())
         claims = await _load_claims(deal_id.strip())
         if not claims:
-            return {"deal_id": deal_id.strip(), "note": "no ingested claims — run ingest_document first"}
+            insufficient = {
+                "deal_id": deal_id.strip(),
+                "note": "no ingested claims — run ingest_document first",
+            }
+            if property_record is not None:
+                insufficient["property"] = property_record
+            return insufficient
         recon = resolve(deal_id.strip(), claims)
-        resolved_price = price if price is not None else await _deal_price(deal_id.strip())
+        resolved_price = price if price is not None else stored_price
         bridge = build_bridge(recon, price=resolved_price)
-        return bridge.model_dump(mode="json")
+        result = bridge.model_dump(mode="json")
+        if property_record is not None:
+            result["property"] = property_record
+        return result
     except Exception as exc:
         message = safe_error_message(exc)
         logger.error("build_noi_bridge error: %s", message)
@@ -522,15 +593,28 @@ async def deal_truth_report(deal_id: str, price: float | None = None) -> dict:
     try:
         if not deal_id or not deal_id.strip():
             raise ValueError("deal_id is required")
+        stored_price, property_record = await _deal_context(deal_id.strip())
         claims = await _load_claims(deal_id.strip())
         if not claims:
-            return {"deal_id": deal_id.strip(), "verdict": "insufficient_data",
-                    "note": "no ingested claims — run ingest_document first"}
+            insufficient = {
+                "deal_id": deal_id.strip(),
+                "verdict": "insufficient_data",
+                "note": "no ingested claims — run ingest_document first",
+            }
+            if property_record is not None:
+                insufficient["property"] = property_record
+            return insufficient
         recon = resolve(deal_id.strip(), claims)
-        resolved_price = price if price is not None else await _deal_price(deal_id.strip())
+        resolved_price = price if price is not None else stored_price
         bridge = build_bridge(recon, price=resolved_price)
         report = build_report(recon, bridge)
-        return {"report": report.model_dump(mode="json"), "noi_bridge": bridge.model_dump(mode="json")}
+        result = {
+            "report": report.model_dump(mode="json"),
+            "noi_bridge": bridge.model_dump(mode="json"),
+        }
+        if property_record is not None:
+            result["property"] = property_record
+        return result
     except Exception as exc:
         message = safe_error_message(exc)
         logger.error("deal_truth_report error: %s", message)

@@ -62,18 +62,21 @@ async def add_investor(
     )
     try:
         store = get_deal_store()
-        investor_id = await store.add_investor(
-            name,
-            accredited=accredited,
-            accreditation_verified=accreditation_verified,
-            relationship=relationship,
-            contact=contact,
-        )
-        if investor_id is None:
-            raise RuntimeError("investor could not be persisted")
-        record = await store.get_investor(investor_id)
-        if record is None:
-            raise RuntimeError("persisted investor could not be read")
+        values = {
+            "accredited": accredited,
+            "accreditation_verified": accreditation_verified,
+            "relationship": relationship,
+            "contact": contact,
+        }
+        if hasattr(store, "add_investor_result"):
+            record = await store.add_investor_result(name, **values)
+        else:
+            investor_id = await store.add_investor(name, **values)
+            if investor_id is None:
+                raise RuntimeError("investor could not be persisted")
+            record = await store.get_investor(investor_id)
+            if record is None:
+                raise RuntimeError("persisted investor could not be read")
         result = InvestorRecord.model_validate(record).model_dump(mode="json")
         result["guardrail"] = capital_guardrail(
             "Adding a CRM record is not permission to offer securities; counsel must approve "
@@ -115,14 +118,14 @@ async def list_investors() -> dict:
 
 async def record_commitment(
     deal_id: str,
-    investor_id: int,
+    investor_id: int | str,
     amount: float,
 ) -> dict:
     """Record a non-binding investor indication against an already-saved deal.
 
     Args:
         deal_id: Stable source-qualified DealStore identifier.
-        investor_id: Numeric investor identifier.
+        investor_id: Persistent investor identifier.
         amount: Positive non-binding indicated amount.
 
     Returns:
@@ -135,16 +138,27 @@ async def record_commitment(
     )
     try:
         store = get_deal_store()
-        if await store.get_deal(deal_id) is None:
-            raise ValueError(f"unknown deal_id: {deal_id}")
-        if await store.get_investor(investor_id) is None:
-            raise ValueError(f"unknown investor_id: {investor_id}")
-        commitment_id = await store.record_commitment(deal_id, investor_id, amount)
-        if commitment_id is None:
-            raise RuntimeError("commitment could not be persisted")
-        record = await store.get_commitment(commitment_id)
+        if hasattr(store, "record_commitment_result"):
+            record = await store.record_commitment_result(
+                deal_id,
+                investor_id,
+                amount,
+            )
+        else:
+            if await store.get_deal(deal_id) is None:
+                raise ValueError(f"unknown deal_id: {deal_id}")
+            if await store.get_investor(investor_id) is None:
+                raise ValueError(f"unknown investor_id: {investor_id}")
+            commitment_id = await store.record_commitment(
+                deal_id,
+                investor_id,
+                amount,
+            )
+            if commitment_id is None:
+                raise RuntimeError("commitment could not be persisted")
+            record = await store.get_commitment(commitment_id)
         if record is None:
-            raise RuntimeError("persisted commitment could not be read")
+            raise ValueError("unknown deal_id or investor_id")
         return {
             **record,
             "status": "NON-BINDING INDICATION ONLY — NO FUNDS ACCEPTED",

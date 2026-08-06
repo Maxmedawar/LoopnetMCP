@@ -1207,7 +1207,7 @@ def test_profile_capability_counts_are_release_locked():
         "local_scout": 103,
         "national_scout": 115,
         "full_operator": 274,
-        "jv_partner": 170,
+        "jv_partner": 165,
     }
     observed = {
         profile: sum(
@@ -1219,6 +1219,75 @@ def test_profile_capability_counts_are_release_locked():
 
     assert len(CAPABILITIES) == 274
     assert observed == expected
+
+
+def test_territory_limited_deal_reads_through_certified_ports_are_bound():
+    """Every territory-limited deal read via a certified port must be policed.
+
+    A capability that takes a ``deal_id`` and reaches a certified hosted
+    persistence port can confirm the existence of, and leak content about, a
+    deal outside the caller's territory unless it declares a result territory
+    contract.  Capabilities that construct a local store directly are already
+    fail closed for untrusted contexts, so only the certified-port readers are
+    in scope here.  This lock is what prevents a new capability from quietly
+    joining that set unpoliced.
+    """
+
+    import importlib
+    import inspect
+    import re
+
+    port_accessors = ("get_truth_store", "get_deal_store", "get_search_store")
+
+    def reaches_certified_port(module, function, depth=2):
+        try:
+            source = inspect.getsource(function)
+        except (OSError, TypeError):
+            return False
+        if any(f"{accessor}(" in source for accessor in port_accessors):
+            return True
+        if depth <= 0:
+            return False
+        for helper in set(re.findall(r"\b(_[A-Za-z0-9_]+)\s*\(", source)):
+            target = getattr(module, helper, None)
+            if callable(target) and reaches_certified_port(module, target, depth - 1):
+                return True
+        return False
+
+    bound, unbound = set(), set()
+    for name, capability in CAPABILITIES.items():
+        if not set(capability.allowed_profiles) & {"local_scout", "jv_partner"}:
+            continue
+        try:
+            module = importlib.import_module(capability.module)
+        except Exception:  # pragma: no cover - import surface is covered elsewhere
+            continue
+        function = getattr(module, name, None)
+        if function is None:
+            continue
+        try:
+            parameters = inspect.signature(function).parameters
+        except (TypeError, ValueError):
+            continue
+        if "deal_id" not in parameters:
+            continue
+        if not reaches_certified_port(module, function):
+            continue
+        if capability.result_territory_contracts:
+            bound.add(name)
+        else:
+            unbound.add(name)
+
+    assert unbound == set(), (
+        "territory-limited profiles can read these deals through a certified "
+        f"hosted port with no result territory contract: {sorted(unbound)}"
+    )
+    assert bound == {
+        "build_noi_bridge",
+        "deal_timeline",
+        "deal_truth_report",
+        "list_deal_documents",
+    }
 
 
 @pytest.mark.parametrize("context_fixture", _LIMITED_CONTEXT_FIXTURES)

@@ -53,33 +53,60 @@ async def test_exchange_tools_start_identify_and_report_status(tmp_path):
     assert status["replacements"] == identified["replacements"]
 
 
+@pytest.mark.parametrize(
+    ("relinquished_input", "replacement_input"),
+    (
+        ("raw-rel", "raw-rep"),
+        (
+            "https://www.crexi.com/properties/raw-rel",
+            "https://www.crexi.com/properties/raw-rep",
+        ),
+    ),
+)
 @pytest.mark.asyncio
-async def test_start_and_identify_can_analyze_unsaved_source_ids(tmp_path):
+async def test_start_and_identify_can_analyze_unsaved_inputs_without_saved_lookup(
+    tmp_path,
+    relinquished_input,
+    replacement_input,
+):
     store = DealStore(tmp_path / "exchange.db")
     listings = {
-        "raw-rel": deal_context(source_id="raw-rel", price=1_000_000).listing,
-        "raw-rep": deal_context(source_id="raw-rep", price=1_200_000).listing,
+        relinquished_input: deal_context(source_id="raw-rel", price=1_000_000).listing,
+        replacement_input: deal_context(source_id="raw-rep", price=1_200_000).listing,
     }
 
     async def analyze(value, source="loopnet"):
         return {"listing": listings[value].model_dump(mode="json"), "scores": []}
 
+    saved_lookup = AsyncMock(wraps=store.get_deal)
     with (
         patch("cre_mcp.tools.structure_tools.get_deal_store", return_value=store),
+        patch.object(
+            store,
+            "get_deal",
+            new=saved_lookup,
+        ),
         patch(
             "cre_mcp.tools.structure_tools.analyze_deal",
             new=AsyncMock(side_effect=analyze),
         ) as mocked,
     ):
-        started = await start_exchange("raw-rel", date.today().isoformat(), source="fixture")
+        started = await start_exchange(
+            relinquished_input,
+            date.today().isoformat(),
+            source="fixture",
+        )
         result = await identify_replacement(
             started["exchange_id"],
-            "raw-rep",
+            replacement_input,
             source="fixture",
         )
 
     assert len(result["replacements"]) == 1
     assert mocked.await_count == 2
+    looked_up = [call.args[0] for call in saved_lookup.await_args_list]
+    assert relinquished_input not in looked_up
+    assert replacement_input not in looked_up
 
 
 @pytest.mark.asyncio

@@ -385,21 +385,25 @@ async def operating_playbook(
 ) -> OperatingPlaybook:
     """Generate and persist the post-close calendar for one analyzed property."""
     active_store = store or get_deal_store()
-    deal_id = DealStore.deal_id_for(ctx.listing)
-    if await active_store.get_deal(deal_id) is None:
-        saved_id = await active_store.save_deal(ctx.listing)
-        if saved_id is not None:
-            deal_id = saved_id
     start, start_source = _ownership_start(ctx, as_of)
     month_one = _month_one(start, start_source)
     recurring = _recurring(ctx, start, start_source)
     critical_dates = _critical_dates(ctx, start, start_source)
     nudges = _nudges(ctx, start, start_source)
     all_events = [*month_one, *recurring, *critical_dates, *nudges]
-    persisted = await active_store.save_ops_events(
-        deal_id,
-        [item.model_dump(mode="json") for item in all_events],
-    )
+    event_payloads = [item.model_dump(mode="json") for item in all_events]
+    replace_operating = getattr(active_store, "replace_operating", None)
+    if callable(replace_operating):
+        stored = await replace_operating(ctx.listing, event_payloads)
+        deal_id = str(stored["deal_id"])
+        persisted = True
+    else:
+        deal_id = DealStore.deal_id_for(ctx.listing)
+        if await active_store.get_deal(deal_id) is None:
+            saved_id = await active_store.save_deal(ctx.listing)
+            if saved_id is not None:
+                deal_id = saved_id
+        persisted = await active_store.save_ops_events(deal_id, event_payloads)
     return OperatingPlaybook(
         deal_id=deal_id,
         deal_ref=f"{ctx.listing.source}:{ctx.listing.source_id}",

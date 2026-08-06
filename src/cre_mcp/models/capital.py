@@ -11,7 +11,7 @@ InvestorRelationship = Literal["preexisting", "new"]
 class InvestorRecord(BaseModel):
     """One prospective investor and the facts needed for preliminary Reg D gates."""
 
-    investor_id: int
+    investor_id: int | str
     name: str
     accredited: bool | None = None
     accreditation_verified: bool = False
@@ -26,9 +26,9 @@ class InvestorRecord(BaseModel):
 class CommitmentRecord(BaseModel):
     """A non-binding capital indication associated with one persisted deal."""
 
-    commitment_id: int
+    commitment_id: int | str
     deal_id: str
-    investor_id: int
+    investor_id: int | str
     amount: float = Field(gt=0)
     created_at: str
     updated_at: str

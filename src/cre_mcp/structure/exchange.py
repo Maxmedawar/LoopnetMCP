@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from datetime import date, timedelta
 from typing import Any
 
-from cre_mcp.deals.store import DealStore, get_deal_store
+from cre_mcp.deals.store import get_deal_store
 from cre_mcp.execution.guardrails import structure_guardrail
 from cre_mcp.models.structure import BootBasisResult, Exchange, ExchangeReplacement
 
@@ -96,7 +96,7 @@ def _rule_status(
 async def _exchange_from_record(
     record: dict[str, Any],
     *,
-    store: DealStore,
+    store: Any,
     as_of: date,
 ) -> Exchange:
     close_date = _date(record["relinquished_close_date"], "relinquished_close_date")
@@ -131,9 +131,13 @@ async def _exchange_from_record(
             "The statutory exchange date has passed. Do not assume deferral; have the QI and CPA "
             "determine what qualified and report the transaction."
         )
-    relinquished = await store.get_deal(str(record["relinquished_deal_id"]))
+    if "relinquished_value" in record:
+        relinquished_value = _number(record.get("relinquished_value"))
+    else:
+        relinquished = await store.get_deal(str(record["relinquished_deal_id"]))
+        relinquished_value = _deal_value(relinquished)
     return Exchange(
-        exchange_id=int(record["exchange_id"]),
+        exchange_id=record["exchange_id"],
         relinquished_deal_id=str(record["relinquished_deal_id"]),
         relinquished_close_date=close_date,
         identification_deadline=identification_deadline,
@@ -143,7 +147,7 @@ async def _exchange_from_record(
         identification_locked=identification_locked,
         status=status,
         replacements=replacements,
-        identification_rule_status=_rule_status(replacements, _deal_value(relinquished)),
+        identification_rule_status=_rule_status(replacements, relinquished_value),
         next_action=next_action,
         deadline_caveat=DEADLINE_CAVEAT,
         qi_gate=QI_BEFORE_CLOSING_GATE,
@@ -156,34 +160,45 @@ async def start_exchange(
     relinquished_deal_id: str,
     relinquished_close_date: date | str,
     *,
-    store: DealStore | None = None,
+    store: Any | None = None,
     as_of: date | str | None = None,
 ) -> Exchange:
     """Persist a 45/180-day exchange clock for an already-saved relinquished deal."""
     active_store = store or get_deal_store()
-    if await active_store.get_deal(relinquished_deal_id) is None:
-        raise ValueError(f"unknown relinquished deal_id: {relinquished_deal_id}")
     close_date = _date(relinquished_close_date, "relinquished_close_date")
     identification_deadline = close_date + timedelta(days=IDENTIFICATION_DAYS)
     exchange_deadline = close_date + timedelta(days=EXCHANGE_DAYS)
-    exchange_id = await active_store.create_exchange(
-        relinquished_deal_id,
-        close_date.isoformat(),
-        identification_deadline.isoformat(),
-        exchange_deadline.isoformat(),
-    )
-    if exchange_id is None:
-        raise RuntimeError("exchange could not be persisted")
-    record = await active_store.get_exchange_record(exchange_id)
-    if record is None:
-        raise RuntimeError("persisted exchange could not be read")
+    create_result = getattr(active_store, "create_exchange_result", None)
+    if callable(create_result):
+        record = await create_result(
+            relinquished_deal_id,
+            close_date.isoformat(),
+            identification_deadline.isoformat(),
+            exchange_deadline.isoformat(),
+        )
+        if record is None:
+            raise ValueError(f"unknown relinquished deal_id: {relinquished_deal_id}")
+    else:
+        if await active_store.get_deal(relinquished_deal_id) is None:
+            raise ValueError(f"unknown relinquished deal_id: {relinquished_deal_id}")
+        exchange_id = await active_store.create_exchange(
+            relinquished_deal_id,
+            close_date.isoformat(),
+            identification_deadline.isoformat(),
+            exchange_deadline.isoformat(),
+        )
+        if exchange_id is None:
+            raise RuntimeError("exchange could not be persisted")
+        record = await active_store.get_exchange_record(exchange_id)
+        if record is None:
+            raise RuntimeError("persisted exchange could not be read")
     return await _exchange_from_record(record, store=active_store, as_of=_today(as_of))
 
 
 async def exchange_status(
-    exchange_id: int,
+    exchange_id: int | str,
     *,
-    store: DealStore | None = None,
+    store: Any | None = None,
     as_of: date | str | None = None,
 ) -> Exchange:
     """Return current countdown, locked/open state, IDs, gates, and next action."""
@@ -195,18 +210,34 @@ async def exchange_status(
 
 
 async def identify_replacement(
-    exchange_id: int,
+    exchange_id: int | str,
     deal_id: str,
     *,
-    store: DealStore | None = None,
+    store: Any | None = None,
     as_of: date | str | None = None,
 ) -> Exchange:
     """Add a candidate only while the ID window/rule set can be verified."""
     active_store = store or get_deal_store()
+    current_date = _today(as_of)
+    identify_result = getattr(
+        active_store,
+        "identify_exchange_replacement_result",
+        None,
+    )
+    if callable(identify_result):
+        record = await identify_result(
+            exchange_id,
+            deal_id,
+            current_date.isoformat(),
+        )
+        return await _exchange_from_record(
+            record,
+            store=active_store,
+            as_of=current_date,
+        )
     record = await active_store.get_exchange_record(exchange_id)
     if record is None:
         raise ValueError(f"unknown exchange_id: {exchange_id}")
-    current_date = _today(as_of)
     identification_deadline = _date(record["identification_deadline"], "identification_deadline")
     if current_date > identification_deadline:
         raise ValueError(

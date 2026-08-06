@@ -64,7 +64,7 @@ def test_profile_surface_counts_are_release_locked() -> None:
         Profile.LOCAL_SCOUT.value: 8,
         Profile.NATIONAL_SCOUT.value: 10,
         Profile.FULL_OPERATOR.value: 20,
-        Profile.JV_PARTNER.value: 14,
+        Profile.JV_PARTNER.value: 12,
     }
 
 
@@ -72,7 +72,7 @@ def test_internal_classes_and_inventory_fingerprint_are_release_locked() -> None
     report = CUSTOMER_SURFACE.reconciliation_report()
 
     assert CAPABILITY_INVENTORY_SHA256 == (
-        "3ef968d84b76ad8092cf6dd4ca2629924214ac6b1ae54a6d080afd17ad837d1f"
+        "eae1d0da2d249c97b3007539d7935ec58e06bef45c00afa4b93f4f597f9c857d"
     )
     assert report["non_mcp_internal_classes"] == (
         "admin",

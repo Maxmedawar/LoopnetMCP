@@ -104,7 +104,7 @@ def _installed_surface(
         (Profile.LOCAL_SCOUT, 8),
         (Profile.NATIONAL_SCOUT, 10),
         (Profile.FULL_OPERATOR, 20),
-        (Profile.JV_PARTNER, 14),
+        (Profile.JV_PARTNER, 12),
     ),
 )
 async def test_live_tool_listing_is_profile_specific(

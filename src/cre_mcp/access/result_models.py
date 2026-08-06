@@ -22,6 +22,7 @@ from cre_mcp.models.enrichment import OwnerRecord, ParcelRecord
 from cre_mcp.models.listings import Listing
 from cre_mcp.models.market import MarketPack, RentComparable
 from cre_mcp.models.tax import AfterTaxResult
+from cre_mcp.truth.noi_bridge import FatalFlawReport, NOIBridge
 
 
 class ClosedResultModel(BaseModel):
@@ -711,6 +712,31 @@ class SubjectProperty(ClosedResultModel):
     zip_code: str | None = None
 
 
+class RestrictedNOIBridgeResult(NOIBridge):
+    model_config = ConfigDict(extra="forbid")
+
+    property: SubjectProperty
+
+
+class RestrictedNOIBridgeInsufficientResult(ClosedResultModel):
+    deal_id: str
+    note: str
+    property: SubjectProperty
+
+
+class RestrictedDealTruthReportResult(ClosedResultModel):
+    report: FatalFlawReport
+    noi_bridge: NOIBridge
+    property: SubjectProperty
+
+
+class RestrictedDealTruthInsufficientResult(ClosedResultModel):
+    deal_id: str
+    verdict: Literal["insufficient_data"]
+    note: str
+    property: SubjectProperty
+
+
 NonBlankText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1),
@@ -1067,6 +1093,34 @@ class RestrictedDealTimelineResult(ClosedResultModel):
             raise ValueError("timeline event count does not reconcile")
         if self.ic_decision_count != len(self.ic_decisions):
             raise ValueError("timeline decision count does not reconcile")
+        return self
+
+
+class RestrictedDealDocument(ClosedResultModel):
+    document_id: NonBlankText
+    doc_kind: NonBlankText
+    source_channel: NonBlankText
+    origin: str | None = None
+    n_pages: int | None = None
+    parse_status: NonBlankText
+    redactions: int = Field(ge=0)
+    ingested_at: str | None = None
+    claim_count: int = Field(ge=0)
+
+
+class RestrictedDealDocumentsResult(ClosedResultModel):
+    deal_id: NonBlankText
+    property: SubjectProperty
+    document_count: int = Field(ge=0)
+    total_claims: int = Field(ge=0)
+    documents: list[RestrictedDealDocument] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _document_counts_reconcile(self) -> "RestrictedDealDocumentsResult":
+        if self.document_count != len(self.documents):
+            raise ValueError("document count does not reconcile")
+        if self.total_claims != sum(row.claim_count for row in self.documents):
+            raise ValueError("claim total does not reconcile")
         return self
 
 
@@ -1886,10 +1940,15 @@ RESULT_MODEL_EXPORTS: tuple[type[BaseModel], ...] = (
     RankedMarketIntelResult,
     RestrictedAfterTaxResult,
     RestrictedBuyerMatchResult,
+    RestrictedDealDocumentsResult,
+    RestrictedDealTruthInsufficientResult,
+    RestrictedDealTruthReportResult,
     RestrictedOvernightChangesResult,
     RestrictedListing,
     RestrictedLenderMatchResult,
     RestrictedMeetingBriefingResult,
+    RestrictedNOIBridgeInsufficientResult,
+    RestrictedNOIBridgeResult,
     RestrictedOwnerRecord,
     RestrictedParcelRecord,
     RestrictedRentComparable,

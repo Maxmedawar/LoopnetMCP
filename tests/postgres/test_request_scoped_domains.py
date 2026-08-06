@@ -178,7 +178,12 @@ def _seed_bound_request(
             "workspace_id,source,source_record_id,title,listing,stage) VALUES "
             "(%s,'test','a','Visible',%s::jsonb,'lead'),"
             "(%s,'test','b','Hidden',%s::jsonb,'lead')",
-            (workspace_id, '{"name":"Visible"}', other_workspace_id, '{"name":"Hidden"}'),
+            (
+                workspace_id,
+                '{"source":"test","source_id":"a","name":"Visible"}',
+                other_workspace_id,
+                '{"source":"test","source_id":"b","name":"Hidden"}',
+            ),
         )
         connection.execute(
             "INSERT INTO medawarcre.access_decision_audit("
@@ -219,7 +224,8 @@ def test_admitted_connection_derives_rls_only_from_exact_unfinalized_admission(
                 "current_setting('app.actor_user_id')"
             ).fetchone() == (workspace_id, admission.actor_user_id)
             assert connection.execute(
-                "SELECT title FROM medawarcre.deals ORDER BY title"
+                "SELECT listing->>'name' FROM medawarcre.deals "
+                "ORDER BY listing->>'name'"
             ).fetchall() == [("Visible",)]
 
         for invalid in (
