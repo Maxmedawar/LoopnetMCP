@@ -13,6 +13,10 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
 
+from cre_mcp.platform.secrets import (
+    ProductionSecretsUnavailable,
+    verify_production_secrets,
+)
 from cre_mcp.postgres.config import PostgresSettings
 from cre_mcp.postgres.health import check_readiness
 from cre_mcp.postgres.migrations import load_migrations
@@ -70,7 +74,19 @@ def build_postgres_hosted_persistence() -> HostedPersistenceBundle:
     repository wiring is intentionally fail-closed until its parity phase is
     complete, so a healthy database alone cannot accidentally revive SQLite or
     file-backed hosted authority.
+
+    The production secret preflight runs first, before any connection attempt,
+    so a deployment whose managed secret store has not injected a required
+    credential stops with the missing variable *names* rather than with a
+    connection error whose real cause is a missing credential.
     """
+
+    try:
+        verify_production_secrets()
+    except ProductionSecretsUnavailable as error:
+        # Chaining is safe here precisely because the raised message and the
+        # chained cause both carry variable names and no credential value.
+        raise HostedPersistenceUnavailable(str(error)) from error
 
     try:
         settings = PostgresSettings.from_env()

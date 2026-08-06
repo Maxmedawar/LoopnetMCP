@@ -47,6 +47,60 @@ server-import smoke check, but its HTTP command is expected to fail closed until
 the domain bundle checkpoint is complete. A successful image build is not
 staging proof and is not deployment approval.
 
+## Production secret handling
+
+Founder decision, 2026-08-06: **a local `.env` file is never the production
+source of truth for a real credential.** It is a development artifact holding
+disposable development or test values, it is gitignored, and nothing in the
+production architecture requires it to exist.
+
+Production credentials live in the deployment platform's managed secret store
+and reach the process through least-privilege service identity, environment
+injection, or a secret mount. No provider is chosen yet — the repository locks
+none, and choosing one is a separate approval — so this section states the
+requirements the eventual provider must satisfy rather than naming it.
+
+### How the application consumes them
+
+`CreConfig` is a `pydantic-settings` model with `env_prefix="CRE_"`. Environment
+variables outrank the optional `.env` file, so an injected secret cannot be
+shadowed by a stale developer file, and the file may be absent entirely. Every
+credential field is `SecretStr`, whose value is excluded from `repr`, `str`, and
+serialization. `tests/platform/test_secret_boundary.py` pins all of this,
+including that no registered route emits secret material.
+
+Rotation therefore requires no code change and no rebuild: replace the value in
+the managed store and restart the process. Nothing is captured at import time.
+
+### Required secret names and their least-privilege consumers
+
+| Variable | Consumer | Scope it needs |
+| --- | --- | --- |
+| `CRE_CLERK_SECRET_KEY` | `ClerkHumanIdentityVerifier`, hosted HTTP only | Clerk Backend API: verify a session token and read one user record. Nothing else. |
+| `CRE_CLERK_PUBLISHABLE_KEY` | connection browser bundle | Public by design; not a secret. |
+| `CRE_STRIPE_API_KEY` | `StripeReconciliationService` | Read-only on subscriptions. Test-mode key only until live billing is separately approved. |
+| `CRE_STRIPE_WEBHOOK_SECRET` / `_SECRETS` | webhook signature verification | Verification only; rotating set supported. |
+| `CRE_SKOOL_WEBHOOK_SECRET` / `_SECRETS` | Skool relay verification | Verification only; rotating set supported. |
+| PostgreSQL role credentials | hosted request lifecycle | The exact per-service roles in `deploy/postgres/bootstrap_roles.sql`, not a superuser. |
+
+Provider data-source keys (`CRE_CENSUS_API_KEY`, `CRE_BLS_API_KEY`,
+`CRE_FRED_API_KEY`, `CRE_HUD_API_TOKEN`, `CRE_BEA_API_KEY`,
+`CRE_RENTCAST_API_KEY`, `CRE_SKIPTRACE_API_KEY`, `CRE_ATTOM_API_KEY`,
+`CRE_REGRID_API_KEY`, `CRE_SOCRATA_APP_TOKEN`) follow the same rules and remain
+subject to the source-rights registry regardless of whether a key is present.
+
+### Rules the deployment must satisfy
+
+- Separate credentials per environment: development, test, staging, production.
+  A development Clerk instance key must never appear in staging or production.
+- No secret in Git, a container image, a build argument, a log line, an error
+  message, a URL, a fixture, the launch ledger, SecondBrain, or chat.
+- No API endpoint returns a secret, and none may be added.
+- The process may spawn no untrusted subprocess from a request path: a child
+  inherits the environment, which is the injection channel.
+- A secret that has ever been transmitted outside the managed store is rotated,
+  not reused.
+
 ## Allowed work before approval
 
 - run trusted local stdio workflows;

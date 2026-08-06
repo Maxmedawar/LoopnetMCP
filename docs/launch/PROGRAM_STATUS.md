@@ -14,6 +14,10 @@ and an independent audit are recorded here.
 - Human identity: provider abstraction with Clerk as the preferred production
   adapter
 - Authorization authority: MedawarCRE live server state
+- Production secrets: managed secret store of the deployment platform, injected
+  at runtime through least-privilege service identity. A local `.env` is a
+  development artifact holding disposable values only, never the production
+  source of truth. Recorded 2026-08-06.
 
 ## Repository baseline
 
@@ -63,6 +67,7 @@ and an independent audit are recorded here.
 | 🟡 | Skool reconciliation | Local gates complete: operator-only supported join tasks, exact member binding without implicit grant, rotating signed relay secrets, payload-free timestamped review receipts, stale and partial uncertainty, restrictive mismatch handling, manual revoke, OAuth invalidation, and internal Console controls. Private staging must prove the configured relay and operator runbook |
 | 🔴 | Privacy and retention | Notice, export, correction, deletion, retention, processor propagation, audit |
 | 🟢 | Source-rights controls | First replacement `e58c721...` was rejected and repaired. Exact replacement `4c33265...` fails closed on contradictory local/hosted policy and cleanly imports; 164 focused and 1,950 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `3185ccb` |
+| 🟡 | Production secret boundary | Phase 5J: every credential field is `SecretStr`, environment injection outranks the optional `.env`, rotation needs no rebuild, a missing secret fails closed, no serialization or route discloses a value, and `deploy/DEPLOY.md` records exact names and least-privilege consumers. No provider chosen; a live Clerk network smoke test is an external staging gate |
 | 🔴 | Private staging | Reproducible package, TLS, migrations, workers, monitoring, backup and restore exercise, rollback |
 | 🔴 | Integrated security audit | OAuth consent, public-client, route exposure, request-bound, browser-session, logout, and identity-wide JV findings repaired in `d82e600`; all public HTTP entrypoints fail closed through `5bcd5c0`; exact service roles, migration `0002`, and the one-snapshot OAuth authority repository are committed through `830c914`; PostgreSQL domain repositories, durable atomic admission/audit, jobs/privacy, and deployment correctness remain open blockers |
 | 🔴 | Production-readiness packet | Exact hashes, artifacts, evidence, limitations, credentials, rollback, first-user plan |
@@ -2242,6 +2247,89 @@ customer-data action occurred. No real Clerk credential was used or requested;
 the adapter is proven against the official SDK's types through a substituted
 client, and a live Clerk test instance remains the next external blocker for
 this thread.
+
+## Phase 5J production secret boundary 2026-08-06
+
+Contract: `docs/launch/PHASE_5J_SECRET_BOUNDARY_CONTRACT.md`. Base `e78d390`.
+
+Founder decision, recorded above: a local `.env` is never the production source
+of truth for a real Clerk, Stripe, Skool, or database credential.
+
+### What this phase found
+
+The mechanism the decision requires already existed and was never stated or
+proven. `CreConfig` is a `pydantic-settings` model with `env_prefix="CRE_"`, so
+environment variables already outrank the optional `.env` file — which is
+exactly the managed-secret injection path — and every credential field was
+already `SecretStr`. This phase did not build machinery. It made the guarantees
+explicit, pinned them, and wrote the operational contract.
+
+Fifteen pins were added, thirteen of which passed on arrival. That is the
+honest shape of it: the properties held, nothing established that they held,
+and nothing would have caught a regression.
+
+The two that failed were both in the pins themselves. The type sweep flagged
+`oauth_token_rate_limit_per_minute` — an `int` matching the `token` marker, a
+rate limit rather than a credential, now an audited exemption with its reason.
+And the exemption-rot check caught that two of the four exemption names I had
+written did not exist on the model at all, which is the failure mode that check
+exists for: a stale exemption silently excuses whatever later reuses the name.
+
+### Evidence
+
+Secret-boundary module 15 passed. Repository gate 4,977 passed, 4 skipped, up
+from 4,962 by exactly these fifteen. Both mutations kill: typing
+`clerk_secret_key` as `str` errors the whole module, and typing
+`stripe_api_key` as `str` fails five pins.
+
+Every credential field is `SecretStr`; the only non-secret name match is the
+rate limit. `.env` is untracked, gitignored, and not required — configuration
+loads from the process environment alone, and an injected value beats a stale
+file. No `repr`, `str`, or JSON dump discloses a value; no raised error carries
+one; a missing Clerk secret answers `503 human_identity_unconfigured` rather
+than degrading; and a sweep of every registered route found none emitting
+secret material.
+
+### An unprovenanced module, read and deleted
+
+An untracked `src/cre_mcp/platform/secrets.py` appeared in the worktree during
+this session. I did not write it; the likeliest origin is a review agent
+writing into the repository despite read-only instructions. It is recorded
+because an unexplained source file in a security phase is exactly the thing
+that should never be quietly absorbed.
+
+It was read in full rather than deleted on sight, because it implemented the
+requested boundary competently: provider-neutral, no new dependency, names-only
+so no value could be logged or raised, and resolved at call time so rotation
+needs no rebuild. Its PostgreSQL variable names check out against the code.
+
+It was deleted anyway, for a specific reason: `CRE_STRIPE_ENABLED` and
+`CRE_SKOOL_ENABLED`, the flags its conditional logic gates the Stripe and Skool
+credentials behind, **do not exist in this codebase**. Nothing reads them. So
+those secrets would never have been treated as required, silently, while the
+module read as though it checked them. It was also entirely unused — no import,
+no test.
+
+Plausible and wrong is worse than absent. The boundary the founder decision
+asks for already exists in `pydantic-settings` environment precedence, is now
+proven by fifteen pins, and its inventory lives in `deploy/DEPLOY.md` as a
+table a reader can check against the model. Every name in that table was
+verified present on `CreConfig`; none is invented.
+
+### External staging integration gate
+
+A real Clerk network smoke test is the only unverified item in the identity
+thread and is recorded as an external gate rather than a blocker. The secret
+Max supplied was rejected by Clerk's own API as invalid — verified not to be a
+transcription fault: 50 characters, correct prefix, no whitespace, no non-ASCII,
+and the publishable key decodes to exactly the configured issuer host. A
+development-instance key is needed to close it. Local engineering does not wait
+on it.
+
+### Boundary
+
+No provider chosen, no infrastructure provisioned, no deployment, no DNS, no
+billing, no spend. Tests and documentation only; no source change.
 
 ## Phase evidence template
 
