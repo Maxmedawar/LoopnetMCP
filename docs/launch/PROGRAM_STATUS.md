@@ -1985,12 +1985,15 @@ gone along with the loop, and the unification carries the 3.
 There is no round-five table. Round five added one pin and changed
 documentation; it introduced no guard to mutate.
 
-Rounds one through eight were measured against candidates that were superseded
+Rounds one through nine were measured against candidates that were superseded
 and never committed, with controls of 23, 33, 41, 45, 46, 56, 57, 69 and 82
-against the present tree's 97. Only rounds one to four and eight have tables at all; five,
-six and seven are narrated without one. Their tables record what was found and when. They are not
-reproducible against the committed tree, and no round below this line should be
-read as re-runnable evidence.
+against the committed tree's 97. Rounds one to four, eight and nine have tables;
+five, six and seven are narrated without one. Those tables record what was found
+and when, and none of them is re-runnable against the committed tree — the round
+nine table sits above this line and is no more reproducible than the ones below
+it. Its "canonical form uses NFD" row, for instance, measures 16 rather than 1
+against the committed tree, because round ten added pins that mutation also
+kills.
 
 Round one, control 23 passed:
 
