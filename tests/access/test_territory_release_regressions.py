@@ -1207,7 +1207,7 @@ def test_profile_capability_counts_are_release_locked():
         "local_scout": 103,
         "national_scout": 115,
         "full_operator": 274,
-        "jv_partner": 165,
+        "jv_partner": 164,
     }
     observed = {
         profile: sum(
@@ -1237,7 +1237,15 @@ def test_territory_limited_deal_reads_through_certified_ports_are_bound():
     import inspect
     import re
 
-    port_accessors = ("get_truth_store", "get_deal_store", "get_search_store")
+    # `get_ledger_store` is included because the ledger is workspace-scoped but
+    # not fail closed in hosted execution, so a capability reading it can
+    # confirm a specific out-of-territory deal just as a certified port can.
+    port_accessors = (
+        "get_truth_store",
+        "get_deal_store",
+        "get_search_store",
+        "get_ledger_store",
+    )
 
     def reaches_certified_port(module, function, depth=2):
         try:

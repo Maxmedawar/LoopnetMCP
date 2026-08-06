@@ -1789,8 +1789,7 @@
   },
   "counterparty_track_record": {
     "allowed_profiles": [
-      "full_operator",
-      "jv_partner"
+      "full_operator"
     ],
     "sensitive": false,
     "sensitive_params": [],

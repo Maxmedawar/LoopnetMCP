@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 CAPABILITY_INVENTORY_SHA256 = (
-    "eae1d0da2d249c97b3007539d7935ec58e06bef45c00afa4b93f4f597f9c857d"
+    "84578ae71567ed1862ff931564f97fbc54985afe0b850ca962cb0e61ea8c7dc5"
 )
 
 # The older broad CRE-engine server exposed these 45 names directly. Every one

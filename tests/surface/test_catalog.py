@@ -72,7 +72,7 @@ def test_internal_classes_and_inventory_fingerprint_are_release_locked() -> None
     report = CUSTOMER_SURFACE.reconciliation_report()
 
     assert CAPABILITY_INVENTORY_SHA256 == (
-        "eae1d0da2d249c97b3007539d7935ec58e06bef45c00afa4b93f4f597f9c857d"
+        "84578ae71567ed1862ff931564f97fbc54985afe0b850ca962cb0e61ea8c7dc5"
     )
     assert report["non_mcp_internal_classes"] == (
         "admin",
