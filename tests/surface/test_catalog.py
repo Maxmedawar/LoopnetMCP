@@ -64,7 +64,7 @@ def test_profile_surface_counts_are_release_locked() -> None:
         Profile.LOCAL_SCOUT.value: 8,
         Profile.NATIONAL_SCOUT.value: 10,
         Profile.FULL_OPERATOR.value: 20,
-        Profile.JV_PARTNER.value: 12,
+        Profile.JV_PARTNER.value: 11,
     }
 
 

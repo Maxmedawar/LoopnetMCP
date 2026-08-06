@@ -86,7 +86,12 @@ class SurfaceToolSpec:
     name: str
     description: str
     profiles: tuple[Profile, ...]
+    # Every grouped action, including the ones withheld from hosted. This is
+    # the CLASSIFICATION set and no hosted path may read it: doing so
+    # re-advertises the withheld capabilities. Hosted dispatch, visibility, and
+    # the advertised description all read ``hosted_capability_ids``.
     capability_ids: tuple[str, ...]
+    hosted_capability_ids: tuple[str, ...]
 
 
 _ALL_PROFILES = tuple(Profile)
@@ -286,6 +291,83 @@ _INTERNAL_MODULE_REASONS = MappingProxyType(
 )
 
 
+# Capabilities that remain entitled, grouped, and reachable over trusted local
+# stdio, but whose hosted execution cannot succeed because they construct a
+# store with no certified hosted port. The hosted facade must not advertise or
+# resolve them. Entitlement is deliberately untouched: emptying
+# ``allowed_profiles`` would break the matrix well-formedness invariant and the
+# local capability. Reclassifying them as internal-only is keyed by module: for
+# two of the four affected modules that would also hide working siblings, and
+# for the other two (whose capabilities are all withheld) it would move the
+# locked grouped-action and internal-only counts. Removing an entry here is a
+# reviewed surface change that requires the capability to route through a
+# certified hosted port first.
+# The reason names the construction path, not a store class, because the
+# reversal condition is about routing rather than about any one store: a
+# capability becomes hosted-reachable when it goes through a certified hosted
+# port (``get_deal_store``/``get_search_store`` return
+# ``hosted.require(...)``), never merely because some named class was ported.
+_DIRECT_CONSTRUCTION_REASON = (
+    "hosted execution always fails: reaches a direct DealStore construction "
+    "via {path}, and DealStore refuses every hosted or untrusted context; "
+    "withheld until this capability routes through a certified hosted port"
+)
+
+HOSTED_WITHHELD_CAPABILITIES = MappingProxyType(
+    {
+        # cre_mcp.relations.tools -> DealStore() directly (with LedgerStore)
+        "counterparty_dossier": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.relations"
+        ),
+        "meeting_briefing": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.relations"
+        ),
+        "who_to_call": _DIRECT_CONSTRUCTION_REASON.format(path="cre_mcp.relations"),
+        # cre_mcp.command.tools -> cre_mcp.command._db.resolve_db_path -> DealStore()
+        "flag_unattended": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.command._db"
+        ),
+        "morning_queue": _DIRECT_CONSTRUCTION_REASON.format(path="cre_mcp.command._db"),
+        "overnight_changes": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.command._db"
+        ),
+        "record_listing_snapshot": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.command._db"
+        ),
+        "stale_listing_signals": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.command._db"
+        ),
+        # cre_mcp.dataroom.index.DataRoomStore.__init__ -> DealStore()
+        "data_room_index": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.dataroom.index.DataRoomStore"
+        ),
+        "init_data_room": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.dataroom.index.DataRoomStore"
+        ),
+        "update_data_room_item": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.dataroom.index.DataRoomStore"
+        ),
+        # cre_mcp.dataroom.dependencies.DependencyStore.__init__ -> DealStore()
+        "closing_runway": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.dataroom.dependencies.DependencyStore"
+        ),
+        # Reaches the same DependencyStore through a package re-export:
+        # closing.tools -> closing.command_center -> cre_mcp.dataroom
+        # (re-exporting dependencies.closing_runway) -> DependencyStore.
+        "closing_day_runbook": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.closing.command_center to "
+            "cre_mcp.dataroom.dependencies.DependencyStore"
+        ),
+        "init_transaction_plan": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.dataroom.dependencies.DependencyStore"
+        ),
+        "transaction_critical_path": _DIRECT_CONSTRUCTION_REASON.format(
+            path="cre_mcp.dataroom.dependencies.DependencyStore"
+        ),
+    }
+)
+
+
 def _inventory_digest() -> str:
     payload = json.dumps(
         export_matrix(),
@@ -332,19 +414,41 @@ class CustomerSurfaceCatalog:
         if not set(LEGACY_TOOL_IDS) <= set(capability_to_tool):
             raise RuntimeError("every legacy tool must map to a grouped customer action")
 
+        withheld = set(HOSTED_WITHHELD_CAPABILITIES)
+        if not withheld <= set(capability_to_tool):
+            raise RuntimeError(
+                "every withheld capability must remain a grouped customer action"
+            )
+        if withheld & set(LEGACY_TOOL_IDS):
+            raise RuntimeError(
+                "a legacy tool id may not be withheld; the legacy reconciliation "
+                "would report it as reachable"
+            )
+
         tools: dict[str, SurfaceToolSpec] = {}
         for name, (description, profiles) in definitions.items():
             capability_ids = tuple(assignments[name])
             if not capability_ids:
                 raise RuntimeError(f"surface tool {name!r} has no actions")
+            hosted_capability_ids = tuple(
+                capability_id
+                for capability_id in capability_ids
+                if capability_id not in withheld
+            )
+            if not hosted_capability_ids:
+                raise RuntimeError(
+                    f"withholding would empty surface tool {name!r}; review the surface"
+                )
             tools[name] = SurfaceToolSpec(
                 name=name,
                 description=description,
                 profiles=profiles,
                 capability_ids=capability_ids,
+                hosted_capability_ids=hosted_capability_ids,
             )
 
         self.tools = MappingProxyType(tools)
+        self.hosted_withheld = MappingProxyType(dict(HOSTED_WITHHELD_CAPABILITIES))
         self.internal_capabilities = MappingProxyType(internal)
         self.capability_to_tool = MappingProxyType(capability_to_tool)
 
@@ -359,7 +463,7 @@ class CustomerSurfaceCatalog:
             return None
         action = arguments.get("action")
         action_arguments = arguments.get("arguments", {})
-        if type(action) is not str or action not in spec.capability_ids:
+        if type(action) is not str or action not in spec.hosted_capability_ids:
             return None
         if action_arguments is None:
             action_arguments = {}
@@ -380,7 +484,7 @@ class CustomerSurfaceCatalog:
             return False
         return any(
             engine.check_tool(ctx, capability_id).outcome == "allowed"
-            for capability_id in spec.capability_ids
+            for capability_id in spec.hosted_capability_ids
         )
 
     def visible_names(self, profile: Profile) -> tuple[str, ...]:
@@ -390,7 +494,7 @@ class CustomerSurfaceCatalog:
             if profile in spec.profiles
             and any(
                 profile.value in CAPABILITIES[capability_id].allowed_profiles
-                for capability_id in spec.capability_ids
+                for capability_id in spec.hosted_capability_ids
             )
         )
 
@@ -402,6 +506,10 @@ class CustomerSurfaceCatalog:
             "legacy_tool_count": len(LEGACY_TOOL_IDS),
             "grouped_action_count": len(self.capability_to_tool),
             "internal_only_capability_count": len(self.internal_capabilities),
+            "hosted_withheld_capability_count": len(self.hosted_withheld),
+            "hosted_reachable_action_count": len(self.capability_to_tool)
+            - len(self.hosted_withheld),
+            "hosted_withheld_reasons": dict(self.hosted_withheld),
             "profile_tool_counts": {
                 profile.value: len(self.visible_names(profile)) for profile in Profile
             },
@@ -430,6 +538,7 @@ CUSTOMER_SURFACE = CustomerSurfaceCatalog()
 __all__ = [
     "CAPABILITY_INVENTORY_SHA256",
     "CUSTOMER_SURFACE",
+    "HOSTED_WITHHELD_CAPABILITIES",
     "LEGACY_TOOL_IDS",
     "CustomerSurfaceCatalog",
     "SurfaceToolSpec",

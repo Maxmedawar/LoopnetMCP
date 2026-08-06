@@ -200,7 +200,11 @@ Before commit, this phase requires:
   port declares a result territory contract;
 - customer grouped-tool counts Local 8, National 10, Full Operator 20, and JV
   Partner 12, with all 274 internal capabilities retained and 165 of them
-  entitled to `jv_partner`;
+  entitled to `jv_partner`. **Superseded after this phase:** `039cacf` withheld
+  `counterparty_track_record` from `jv_partner`, taking the entitled count to
+  164, and the hosted withholding correction of 2026-08-06 took the JV
+  grouped-tool count to 11 because all four `cre_close` JV actions are dead. The
+  requirement as written was correct at Phase 5G and is retained for the record;
 - PostgreSQL, full repository, compile, dependency, diff, changed-content
   credential, package, listener, and deterministic candidate gates;
 - two fresh read-only reviews of one unchanged candidate hash.

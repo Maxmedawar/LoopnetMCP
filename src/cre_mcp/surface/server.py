@@ -21,7 +21,8 @@ _CUSTOMER_INSTRUCTIONS = (
 
 
 def _tool_description(spec: SurfaceToolSpec) -> str:
-    actions = ", ".join(spec.capability_ids)
+    """Advertise only actions the hosted surface will actually execute."""
+    actions = ", ".join(spec.hosted_capability_ids)
     return f"{spec.description} Exact actions: {actions}."
 
 

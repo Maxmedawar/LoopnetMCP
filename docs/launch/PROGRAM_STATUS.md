@@ -30,7 +30,7 @@ and an independent audit are recorded here.
 | PostgreSQL certified phase | Exact replacement candidate `f68a9a489602ef0b22614e899e5800820c0579e12002afce83c7aaa613f0e9e6` passed both fresh read-only reviews unchanged and was committed as `5089748aaa6f9f726db5801f866a130974d1eb89` |
 | Source-rights certified phase | Exact replacement candidate `4c33265f12dec0927fb34a6c344158174ef5bb89f8bda2a2c3363fd873986f04` passed both fresh read-only reviews unchanged and was committed as `3185ccb595cf305f9c69f15ae2730f2d6fa75ee7` |
 | Cloud integration phase | `integration/cloud-platform-launch` at `830c914`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; OAuth/JV repair, fail-closed hosted persistence, exact service roles, migration `0002`, and the one-snapshot OAuth authority repository committed; 4,568 repository tests passed |
-| Customer MCP surface | Commit `802b16cec823f74fc41cab10cb4de9602d56fea7`; 274 internal capabilities retained, 253 exact actions grouped, 21 MCP capabilities internal-only, all 45 historical IDs reconciled; visible counts Local 8, National 10, Full 20, JV 14 |
+| Customer MCP surface | Commit `802b16cec823f74fc41cab10cb4de9602d56fea7`; 274 internal capabilities retained, 253 exact actions grouped, 21 MCP capabilities internal-only, all 45 historical IDs reconciled; visible counts Local 8, National 10, Full 20, JV 14 as recorded then. Superseded: JV became 12 at Phase 5G (`49adb9e`) and 11 at the hosted withholding correction 2026-08-06 |
 | SQLite dbops salvage | 4,513 uncommitted lines in the protected dbops worktree; not production DR |
 | Protected backup | SHA-256 `8361a9db47bb4ea5276f009309cdc8b0401c0272dc4ae6b8711d9f4b0e489095`, read-only integrity `ok` |
 
@@ -52,7 +52,7 @@ and an independent audit are recorded here.
 | 🟢 | OAuth launch certification | Exact candidate `e96da4b...` passed access, opposite-order, repository, packaging, lifecycle, capability-count, compile, and diff gates; two fresh read-only reviewers independently approved the unchanged hash; committed as `88e3082` |
 | 🟢 | Production PostgreSQL and recovery | Candidate `2af2a907...` was rejected and repaired. Exact replacement `f68a9a4...` separates direct from inherited ownership; 69 PostgreSQL and 1,839 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `5089748` |
 | 🟢 | Launch integration branch | Certified OAuth `88e3082`, PostgreSQL `5089748`, and source rights `3185ccb` integrated as `0b5a87b`; shared enforcement-order regressions repaired; 4,444 repository tests passed |
-| 🟢 | Consolidated customer MCP surface | Hosted HTTP uses 20 coherent grouped facades with profile listings Local 8, National 10, Full 20, JV 14; all grouped actions resolve to exact server-owned capability IDs; internal services and 21 internal MCP capabilities remain unexposed; commit `802b16c`; 4,459 repository tests passed |
+| 🟢 | Consolidated customer MCP surface | Hosted HTTP uses 20 coherent grouped facades with profile listings Local 8, National 10, Full 20, JV 14 as recorded then, JV now 11 after the hosted withholding correction 2026-08-06; all grouped actions resolve to exact server-owned capability IDs; internal services and 21 internal MCP capabilities remain unexposed; commit `802b16c`; 4,459 repository tests passed |
 | 🟢 | Hosted OAuth PostgreSQL authority checkpoint | Exact 1,024-file candidate `2bf5a43d...`, migration checksum `3058382c...`, catalog fingerprint `40f025fc...`, 102 PostgreSQL tests, 4,568 repository tests, local image build and truth-import smoke, final wheel `324f777c...`, and two hash-stable independent approvals; committed as `830c914` |
 | 🟡 | Clerk identity and connection flow | Implementation and local gates complete: official Clerk adapter, connection-only React screen, OAuth discovery/DCR/PKCE/revocation, live authority rechecks, and a real hosted MCP call. Integrated audit remains scheduled after Stripe and Skool per the founder-approved sequence |
 | 🟡 | Internal Operations Console | Implementation and local gates complete: separate React control ledger, pinned Reicon provenance, opaque Clerk operator sessions, live staff and JV separation, exact Origin and Host, CSRF, reasoned mutations, provider quarantine, source rights, health, and append-only audit. Integrated security and real-browser staging gates remain scheduled |
@@ -863,6 +863,216 @@ request-scoped domain repositories plus atomic approval, quota, and durable
 decision audit. Jobs, privacy, provider service paths, container rollout,
 migration operations, recovery, private staging, the final integrated audit,
 readiness packet, and founder-approved cutover remain red.
+
+## Hosted withholding correction checkpoint 2026-08-05 to 2026-08-06
+
+Fifteen capabilities were entitled, counted, and advertised by the hosted
+grouped tools while every hosted call failed. They are now withheld from the
+hosted surface and denied on a direct call. The contract is
+`docs/launch/HOSTED_WITHHOLDING_CONTRACT.md`.
+
+**Two successive inventories were incomplete.** The recorded seven were
+`counterparty_dossier`, `meeting_briefing`, `who_to_call`, `overnight_changes`,
+`data_room_index`, `transaction_critical_path`, and `closing_runway`. Review
+round one rejected that candidate: seven more are dead for the same reason and
+were still advertised — `init_data_room`, `update_data_room_item`,
+`init_transaction_plan`, `morning_queue`, `flag_unattended`,
+`record_listing_snapshot`, and `stale_listing_signals`. Review round two
+rejected the resulting fourteen: the derivation behind it did not resolve
+package `__init__.py` re-exports and so missed a fifteenth,
+`closing_day_runbook`, which reaches the same `DependencyStore` through
+`closing.command_center` and the `cre_mcp.dataroom` re-export.
+
+How the set was established and what the suite guards are two different things,
+and earlier drafts conflated them. **Established:** independent reviewers in
+successive rounds bound a real `HostedRequestRepositories` — under which a
+direct `DealStore(...)` raises while `get_deal_store()` returns the port — and
+executed every grouped action. Each such repositories-bound run reproduced
+exactly these fifteen, with no sixteenth and none of the fifteen alive; one also
+re-seeded on `TruthStore`, `PlatformRepository`, and `EntitlementStore` and
+found no additional dead grouped action. Which rounds those were is not restated
+here: the review-history table below is the record, and earlier drafts of this
+paragraph twice attributed the work to the wrong rounds. **Guarded:** a static AST derivation asserts
+set equality with `HOSTED_WITHHELD_CAPABILITIES`, turning red in either
+direction on any source change that moves it. It is a tripwire, not a proof.
+The earlier claim that the set had been "derived two independent ways"
+overstated the evidence and was withdrawn; the claim that the static pin
+establishes completeness is likewise withdrawn.
+
+The criterion is routing, not a store class. `DealStore.__init__` refuses every
+hosted or untrusted context, so a capability is alive on hosted when it goes
+through `get_deal_store`/`get_search_store` (which return the certified hosted
+port) and dead when it constructs the store directly. An earlier draft
+attributed `transaction_critical_path` and `closing_runway` to `DataRoomStore`;
+they use `DependencyStore`, and because the reversal condition had been keyed to
+the store name, that error could have re-advertised two still-dead actions. The
+reversal condition is now keyed to the capability routing through a certified
+port.
+
+The original attempt was reverted because it withheld by emptying
+`allowed_profiles`, which breaks the matrix well-formedness invariant and the
+trusted local capability. This correction withholds at the hosted surface
+instead, so entitlement, grouped classification, the locked counts, and trusted
+local stdio are all untouched, and no per-capability internal-only mechanism was
+needed.
+
+Evidence:
+
+- Worktree `/Users/maxmedawar/LoopnetMCP-cloud-integration`, branch
+  `integration/cloud-platform-launch`, base `cd0f335`.
+- Initial red: `ImportError: cannot import name 'HOSTED_WITHHELD_CAPABILITIES'
+  from 'cre_mcp.surface.catalog'` before implementation.
+- Files changed, ten in total: `src/cre_mcp/surface/catalog.py` and
+  `src/cre_mcp/surface/server.py`; the JV count in
+  `tests/surface/test_catalog.py` and `tests/surface/test_server.py`; new
+  `tests/surface/test_hosted_withholding.py` and new
+  `docs/launch/HOSTED_WITHHOLDING_CONTRACT.md`; and dated corrections to this
+  ledger, `docs/launch/PHASE_5G_DEAL_PERSISTENCE_CONTRACT.md`,
+  `.claude/specs/consolidated-customer-mcp-surface.md`, and
+  `.claude/specs/oauth-launch-certification-phase-1.md`.
+- Focused gate: 98 surface tests passed with 4 skips, the skips being the
+  withheld capabilities not entitled to `jv_partner`. Local behaviour is
+  unchanged: 169 passed from `pytest tests/relations tests/command tests/dataroom
+  tests/closing tests/leaseops
+  tests/access/test_territory_round7_store_workflows.py` — 83 from the five
+  directories and 86 from that one territory file.
+- Complete repository gate: 4,868 passed and 4 skipped, up from the 4,785
+  baseline by exactly the new pins, with one categorized third-party Authlib
+  deprecation and no regression. Wall time varies by run and machine load
+  (187-236 seconds observed) and is not an evidential figure. The four skips
+  are the withheld capabilities not entitled to `jv_partner`.
+- Mutation evidence: emptying `HOSTED_WITHHELD_CAPABILITIES` entirely fails 62
+  of the 83 pins in the withholding suite, including every parametrization of
+  the end-to-end denial pin. Targeted mutations each fail their own pin —
+  advertising withheld actions, resolving withheld actions, dropping each of
+  the three import-time guards, and ignoring withholding in `visible_names`.
+  The set-equality drift pin fails in BOTH directions: removing
+  `closing_day_runbook` from the withheld map fails it, and adding the live,
+  accessor-routed `unassigned_deals` to the map also fails it. That two-way failure is what guards against withholding a
+  working capability; the runtime probe cannot, and is no longer claimed to.
+- Surface gates: 274 internal capabilities, 253 grouped actions, 21
+  internal-only, 15 hosted-withheld, 238 hosted-reachable, customer grouped-tool
+  counts Local 8, National 10, Full Operator 20, and JV Partner 11, JV entitled
+  capabilities 164, catalog fingerprint `84578ae71567ed18...` unchanged, and no
+  withheld action reachable through any hosted path.
+- **The JV grouped-tool count moves from 12 to 11 by founder decision on
+  2026-08-06.** All four of `cre_close`'s JV-entitled actions are dead, so
+  `cre_close` has never worked for `jv_partner` and the locked 12 was already
+  overstating the working JV surface. Offered the choice between publishing 11
+  working tools and holding 12 by continuing to advertise a capability that
+  fails on every call, the founder chose 11. Local, National, and Full Operator
+  counts are unchanged. The release-locked assertions in
+  `tests/surface/test_catalog.py`, `tests/surface/test_server.py`, and the
+  withholding suite were updated to 11 to match this decision.
+- Static and packaging gates: source and tests compile, `git diff --check` is
+  clean, the changed-content credential scan is clean, no port-8000 listener,
+  and an isolated wheel builds and packages the capability matrix,
+  the source-rights registry, the surface catalog, and all eight numbered
+  migrations plus `restore_privileges.sql`. No wheel digest is recorded: the
+  build is not byte-reproducible — the digest moved across three review rounds
+  with no packaged source byte changed — so a digest here would assert a
+  content property it does not have.
+- Connection UI recheck: 5 Vitest cases passed, unchanged by this correction.
+- Three fail-closed guards were added so a careless future edit fails at import:
+  withholding a non-grouped capability is rejected, withholding a legacy tool id
+  is rejected because the legacy reconciliation would still report it reachable,
+  and withholding that would empty a grouped tool is rejected. A set-equality
+  DRIFT pin against the statically derived set replaced a weaker per-module
+  guard that review showed was evaded by aliased imports, attribute calls, and
+  any module named `store.py`. That pin does NOT establish completeness — see
+  the framing above; it turns red in either direction when a source change
+  moves the derived set, which is a prompt to look, not a proof.
+- No deployment, DNS, billing, provider mutation, or customer-data action
+  occurred.
+
+Review history. Every round in the table below was rejected on correctness, and
+each found a real defect the previous round missed. No round after round two
+found a defect in shipped `src/` behaviour: from round three onward the findings
+were in this ledger, in the contract, or in the claims made for the tests —
+though rounds four and five also drove repairs to the test-side derivation
+itself. Counts are deliberately not restated in this sentence; the table is the
+record, and restating them is what failed review in rounds seven and eight:
+
+| Round | Correctness | Security | Rejected for |
+| --- | --- | --- | --- |
+| 1 | REJECTED | APPROVED | Wrong store named for two capabilities while the reversal condition keyed on that name; the seven-capability set was incomplete; the end-to-end denial pin was vacuous because the fixture internal server was empty |
+| 2 | REJECTED | APPROVED | A fifteenth capability, `closing_day_runbook`, missed because the derivation did not resolve package `__init__` re-exports; the ledger asserted a completeness the evidence did not support; the "genuinely dead" pin could not distinguish dead from alive |
+| 3 | REJECTED | APPROVED | The normative scope line of this contract and the pin file's module docstring still said "fourteen" while fifteen were withheld |
+| 4 | REJECTED | APPROVED | The authoritative surface spec still release-locked JV Partner at 14; the internal-only rationale ("the affected modules also hold working capabilities") is false for `cre_mcp.command.tools` and `cre_mcp.dataroom.tools`, where every capability is withheld; the blind-spot disclosure was incomplete and mis-located, missing attribute-qualified calls at every propagation step |
+| 5 | REJECTED | REJECTED (process) | The completeness pin's own docstring said a class is dead only via `__init__`, the opposite of the round-5 code, and the contract and ledger repeated it; the residual-limitation disclosure was again incomplete, missing subclassing, module-level name binding, module-scope construction, and the over-marking direction entirely |
+| 6 | REJECTED | APPROVED | The evidence list reinstated the completeness claim the same section had withdrawn 72 lines earlier; the OAuth-certification JV amendment could not close arithmetically (170 − 1 ≠ 164) and erased five Phase 5G withholdings |
+| 7 | REJECTED | APPROVED | The review-history summary line said "three rejected rounds … two of the three in the verification" while the table beneath it recorded six rejections, four of them verification or ledger defects |
+| 8 | REJECTED | REJECTED | The summary sentence restated a count that drifted from the table again, one round after being fixed for exactly that; and the round-attribution self-correction contradicted the contract and this file, leaving three passages disagreeing on the runtime evidence |
+| 9 | pending | pending | — |
+
+Round five's security reviewer rejected on process, not on the code: the working
+tree was edited while that review was in flight, so its start and end hashes
+differed and no verdict could attach to a candidate. That was an operator error
+— the correctness blockers were repaired without first waiting for the security
+review to return. Its findings against the bytes it did read were folded in
+anyway: it confirmed `src/` was comment-only versus the prior approved state,
+that the reworded internal-only rationale is arithmetically right, that the
+derivation terminates in three passes with bounded recursion and no side
+effects, and that 16,275 hostile input shapes produced zero resolutions of a
+withheld capability. It also demonstrated three further static evasions and a
+silent alias-depth truncation, both now addressed: the truncation raises instead
+of returning a partial resolution.
+
+Round six was rejected for a claim that had been withdrawn elsewhere in the
+same document and for an amendment whose arithmetic did not close. The JV
+entitlement history was then verified directly from the capability matrix at
+each commit: `88e3082` 170, `49adb9e` 165 (five withheld — `exchange_status`,
+`ic_scorecard`, `list_investors`, `trace_input_lineage`, `unassigned_deals`),
+`039cacf` 164 (one withheld — `counterparty_track_record`).
+
+Round five stopped patching the disclosure and changed what is claimed: the
+static derivation is now described as a drift tripwire that is unsound in both
+directions, with completeness attributed to the runtime evidence instead. Three
+rounds of incomplete blind-spot enumerations preceded that reframing.
+
+Round four also drove a code repair rather than a disclosure: the completeness
+derivation now resolves attribute calls qualified by a module alias and walks
+every method of a class, closing three evasions demonstrated by mutation — an
+attribute construction making a live capability dead, a module-alias call to a
+dead function, and a store constructed lazily outside `__init__`. The derived
+set is unchanged at fifteen.
+
+Round-three security additionally verified the change is purely restrictive by
+rebuilding the catalog at zero, fourteen, and fifteen withheld and diffing every
+observable surface: no profile gains a tool, an action, or a resolvable pair,
+and roughly 26,800 hostile input shapes produced zero resolutions of a withheld
+capability. Reviewers in that round also reproduced the set of fifteen by
+methods stronger than the shipped derivation and confirmed no sixteenth and no
+wrongly-withheld live capability; the repositories-bound method is described
+once above rather than re-attributed per round.
+
+Known limitations, disclosed rather than implied away and recorded as
+known-so-far rather than exhaustive. The static drift detector resolves import
+aliases, package `__init__` re-exports, attribute calls qualified by a module
+alias, and every method of a class — so a class is marked dead when any method
+reaches a dead callee, not only `__init__`. It can MISS a `DealStore` subclass,
+the class bound to a module-level name and called through it, a construction at
+module scope, a call whose qualifier is not a known module alias when the
+attribute name is not bound in that module, and any callee that is itself a
+`Call` or `Subscript` node (`getattr(...)()`, dict dispatch). A fully-dotted
+`cre_mcp.deals.store.DealStore()` after a plain dotted import is missed too,
+but by the module-scope fallback rather than that family: its callee is an
+`Attribute` whose value is itself an `Attribute`. It can OVER-MARK through the same
+fallback, which matches by attribute name, and through whole-class walking.
+None is exercised by shipping code: nine construction sites, all bare-name,
+seven in module-level functions and two in `__init__`, and no subclass.
+Promoting the repositories-bound runtime derivation to a second pin removes all
+of these and is the recommended follow-up. Note for anyone repeating a
+reference-taint (bytecode) derivation: it over-reports `add_to_pipeline`,
+`due_diligence_plan`, and `operating_playbook`. All three are alive — they route
+store access through `get_deal_store()` and touch `DealStore` only via the
+staticmethods `_validate_stage`/`deal_id_for` and a type annotation, none of
+which is a construction.
+
+This corrects a surface defect only. It certifies no store and re-routes no
+capability. Removing an entry from `HOSTED_WITHHELD_CAPABILITIES` requires that
+the capability actually route through a certified hosted port, under the same
+review ceremony; certifying a store class is not by itself sufficient.
 
 ## Phase evidence template
 

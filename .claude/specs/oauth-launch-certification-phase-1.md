@@ -332,7 +332,14 @@ Python 3.11.15 interpreter:
   `4 passed` with ResourceWarning, RuntimeWarning, and pytest unraisable
   warnings promoted to errors.
 - The release lock still reports 274 classified capabilities with profile
-  counts Local 103, National 115, Full 274, and JV 170.
+  counts Local 103, National 115, Full 274, and JV 170. **Superseded for JV,
+  in two steps.** Phase 5G (`49adb9e`) withheld five capabilities from
+  `jv_partner` — `exchange_status`, `ic_scorecard`, `list_investors`,
+  `trace_input_lineage`, and `unassigned_deals` — taking 170 to 165. The
+  ledger-backed oracle repair (`039cacf`) then withheld
+  `counterparty_track_record`, taking 165 to 164. Local, National, and Full
+  remain exact. This line records the evidence as captured at the time; the
+  live authority is `CAPABILITIES`.
 - Source and test compilation, builder invocation, artifact SHA-256
   values `8a0d94a3743873cf2b9761c3aa79fa7884703903611f6f9163b758ddb0822476`
   and `ec28297f8f5bd29328c1cd696a7d007c3d80f083def465de3e6b017393e6b6e8`,
