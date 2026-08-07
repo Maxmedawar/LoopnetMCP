@@ -33,7 +33,8 @@ and an independent audit are recorded here.
 | Customer portal commits | `8a44d4c`, `13abbf5`, local-only, superseded for product routing |
 | PostgreSQL certified phase | Exact replacement candidate `f68a9a489602ef0b22614e899e5800820c0579e12002afce83c7aaa613f0e9e6` passed both fresh read-only reviews unchanged and was committed as `5089748aaa6f9f726db5801f866a130974d1eb89` |
 | Source-rights certified phase | Exact replacement candidate `4c33265f12dec0927fb34a6c344158174ef5bb89f8bda2a2c3363fd873986f04` passed both fresh read-only reviews unchanged and was committed as `3185ccb595cf305f9c69f15ae2730f2d6fa75ee7` |
-| Cloud integration phase | `integration/cloud-platform-launch` at `830c914`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; OAuth/JV repair, fail-closed hosted persistence, exact service roles, migration `0002`, and the one-snapshot OAuth authority repository committed; 4,568 repository tests passed |
+| Cloud integration phase | `integration/cloud-platform-launch` at `830c914`; certified OAuth, PostgreSQL, source rights, connection-only Clerk, internal Operations, Stripe test, and Skool lifecycle histories integrated; OAuth/JV repair, fail-closed hosted persistence, exact service roles, migration `0002`, and the one-snapshot OAuth authority repository committed; 4,568 repository tests passed. Superseded 2026-08-06: the branch tip is `5452be3` after eighteen further commits through Phase 5J; see the reconciliation below |
+| Cloud integration tip | `integration/cloud-platform-launch`. This row was written while the tip was `5452be3`; the commit carrying this row moves it, so read the tip from `git log`, not from here. Migrations `0001`–`0008` and Phases 5–5J are on it |
 | Customer MCP surface | Commit `802b16cec823f74fc41cab10cb4de9602d56fea7`; 274 internal capabilities retained, 253 exact actions grouped, 21 MCP capabilities internal-only, all 45 historical IDs reconciled; visible counts Local 8, National 10, Full 20, JV 14 as recorded then. Superseded: JV became 12 at Phase 5G (`49adb9e`) and 11 at the hosted withholding correction 2026-08-06 |
 | SQLite dbops salvage | 4,513 uncommitted lines in the protected dbops worktree; not production DR |
 | Protected backup | SHA-256 `8361a9db47bb4ea5276f009309cdc8b0401c0272dc4ae6b8711d9f4b0e489095`, read-only integrity `ok` |
@@ -46,7 +47,7 @@ and an independent audit are recorded here.
 | 🟢 | Internal combined opportunity list approved | Founder goal and this contract |
 | 🟢 | Global learning deferred | Founder goal and this contract |
 | 🟢 | Secure multi-tenant foundation reported and recovered | Commit archaeology; independent integrated verification still tracked below |
-| 🟢 | Exact profile counts re-derived | Local 103, national 115, full 274, JV 170 from the live matrix |
+| 🟢 | Exact profile counts re-derived | Local 103, national 115, full 274, JV 170 from the live matrix **as recorded then**. Superseded: JV entitlement became 165 at `49adb9e` and 164 at `039cacf`. Local, national, and full are unchanged and still re-derive exactly. Found by a reviewer 2026-08-06, in the same round whose subject was that number |
 | 🟢 | OAuth live authority implementation recovered | Commit `49cab68`; 1,521-test verification and focused strict lifecycle verification |
 | 🟢 | OAuth SSE warning ownership explained | Upstream-only reproduction plus JSON-response application path with owned-task teardown test |
 | 🟢 | Provider replay-authority repair recovered | Pushed commit `f36ef46` |
@@ -58,22 +59,912 @@ and an independent audit are recorded here.
 | 🟢 | Launch integration branch | Certified OAuth `88e3082`, PostgreSQL `5089748`, and source rights `3185ccb` integrated as `0b5a87b`; shared enforcement-order regressions repaired; 4,444 repository tests passed |
 | 🟢 | Consolidated customer MCP surface | Hosted HTTP uses 20 coherent grouped facades with profile listings Local 8, National 10, Full 20, JV 14 as recorded then, JV now 11 after the hosted withholding correction 2026-08-06; all grouped actions resolve to exact server-owned capability IDs; internal services and 21 internal MCP capabilities remain unexposed; commit `802b16c`; 4,459 repository tests passed |
 | 🟢 | Hosted OAuth PostgreSQL authority checkpoint | Exact 1,024-file candidate `2bf5a43d...`, migration checksum `3058382c...`, catalog fingerprint `40f025fc...`, 102 PostgreSQL tests, 4,568 repository tests, local image build and truth-import smoke, final wheel `324f777c...`, and two hash-stable independent approvals; committed as `830c914` |
-| 🟡 | Clerk identity and connection flow | Implementation and local gates complete: official Clerk adapter, connection-only React screen, OAuth discovery/DCR/PKCE/revocation, live authority rechecks, and a real hosted MCP call. Phase 5I then closed a first-sign-in takeover: the adapter accepted an unverified Clerk primary email as the join key to a preprovisioned user. Integrated audit remains scheduled after Stripe and Skool per the founder-approved sequence, and a live Clerk test instance is still an unmet staging gate |
+| 🟡 | Clerk identity and connection flow | Implementation and local gates complete: official Clerk adapter, connection-only React screen, OAuth discovery/DCR/PKCE/revocation, live authority rechecks, and a real hosted MCP call. Phase 5I then closed a first-sign-in takeover: the adapter accepted an unverified Clerk primary email as the join key to a preprovisioned user. Committed as `d68028f` with four enumerated lifecycle flows pinned in `e78d390`. Integrated audit remains scheduled after Stripe and Skool per the founder-approved sequence, and a live Clerk test instance is still an unmet staging gate. This row is yellow for the external gate only; local Clerk engineering is complete and committed and must not be read as red |
 | 🟡 | Internal Operations Console | Implementation and local gates complete: separate React control ledger, pinned Reicon provenance, opaque Clerk operator sessions, live staff and JV separation, exact Origin and Host, CSRF, reasoned mutations, provider quarantine, source rights, health, and append-only audit. Integrated security and real-browser staging gates remain scheduled |
-| 🔴 | Search and deal persistence | Tenant records, evidence, score versions, object-ID isolation, privacy behavior |
-| 🔴 | Combined opportunity index | Server-side deduplication, provenance, staff-only access, pagination and conflict tests |
+| 🟢 | Search and deal persistence | Superseded red. Phase 5F committed `b0947d7` (migration `0007`) and Phase 5G committed `49adb9e` (migration `0008`); both passed their gates and two fresh read-only reviews each. The carried Phase 5G finding — a ledger-backed JV deal-existence oracle — was closed separately in `039cacf`. Residual: privacy and job are the two unported domains, tracked in their own rows |
+| 🔴 | Combined opportunity index | Server-side deduplication, provenance, staff-only access, pagination and conflict tests. Next active phase as of 2026-08-06; no contract or implementation exists on this tip |
 | 🔴 | Scheduled saved searches | Idempotent queue, current entitlement and territory checks, audit, internal status |
 | 🟡 | Stripe test integration | Implementation and local gates complete: test-only credentials and mode enforcement, rotating signed webhooks, durable lifecycle journal, fixed-host GET-only complete-list reconciliation, atomic projection repair, active-session effects, and reasoned operator audit. Representative fixtures still require a real Stripe test-account staging proof; integrated audit remains scheduled after Skool |
 | 🟡 | Skool reconciliation | Local gates complete: operator-only supported join tasks, exact member binding without implicit grant, rotating signed relay secrets, payload-free timestamped review receipts, stale and partial uncertainty, restrictive mismatch handling, manual revoke, OAuth invalidation, and internal Console controls. Private staging must prove the configured relay and operator runbook |
 | 🔴 | Privacy and retention | Notice, export, correction, deletion, retention, processor propagation, audit |
 | 🟢 | Source-rights controls | First replacement `e58c721...` was rejected and repaired. Exact replacement `4c33265...` fails closed on contradictory local/hosted policy and cleanly imports; 164 focused and 1,950 repository tests passed; two fresh reviewers approved the unchanged hash; committed as `3185ccb` |
-| 🟡 | Production secret boundary | Phase 5J: every credential field is `SecretStr`, environment injection outranks the optional `.env`, rotation needs no rebuild, a missing secret fails closed, no serialization or route discloses a value, and `deploy/DEPLOY.md` records exact names and least-privilege consumers. No provider chosen; a live Clerk network smoke test is an external staging gate |
+| 🟡 | Production secret boundary | Phase 5J: every credential field is `SecretStr`, environment injection outranks the optional `.env`, rotation needs no rebuild, a missing secret fails closed, no route discloses a value and no *rendered* message or traceback does (the serialization claim is qualified below: a `ValidationError` still carries the rejected input on `errors()[0]["input"]` and in `.json()`, which nothing in `src/` calls), and `deploy/DEPLOY.md` records exact names and least-privilege consumers. Committed as `5452be3`, which was **red at the tip and mis-recorded**: it shipped 415 lines of production source while claiming none, described a module it actually committed as deleted, broke two fail-closed hosting tests, and left six database credentials out of the runbook. Corrected in the Phase 5J correction below. No provider chosen; a live Clerk network smoke test is an external staging gate |
+| 🟢 | Hosted dead-capability withholding | Fifteen capabilities that were entitled, counted, and advertised while every hosted call failed are withheld from the hosted surface and fail closed on a direct call; committed as `a828717` with the contract at `docs/launch/HOSTED_WITHHOLDING_CONTRACT.md`. JV Partner is 11 visible grouped tools and 164 **entitled** capabilities, 11 of which are hosted-withheld and fail closed on a direct call, leaving **102** reachable through those 11 tools. Two earlier versions of this row were wrong: "164 capabilities" without a qualifier, then "160 reachable", which is impossible — it exceeds the 153 ceiling (164 entitled minus 11 entitled-and-withheld) because it counts every capability grouped onto tools JV can see, including ones JV is not entitled to. This row is green; any earlier reading of the withholding work as red is stale |
+| 🔴 | Proxy credential reaches a log in trusted-local stdio | `http/browser.py:146` passes `CRE_PROXY_URL` into Chromium argv; `nodriver` logs its launch arguments at INFO into the root sink `server.py:38` installs, so a configured proxy's password prints to the process's own stderr. Found by an independent reviewer 2026-08-06 and traced end to end. Not hosted-reachable — hosted browser navigation fails closed at the source-rights gate — but live in the shipped stdio product. Fixing it means supplying proxy credentials over CDP rather than argv, which is a product change and not part of this correction |
 | 🔴 | Private staging | Reproducible package, TLS, migrations, workers, monitoring, backup and restore exercise, rollback |
 | 🔴 | Integrated security audit | OAuth consent, public-client, route exposure, request-bound, browser-session, logout, and identity-wide JV findings repaired in `d82e600`; all public HTTP entrypoints fail closed through `5bcd5c0`; exact service roles, migration `0002`, and the one-snapshot OAuth authority repository are committed through `830c914`; PostgreSQL domain repositories, durable atomic admission/audit, jobs/privacy, and deployment correctness remain open blockers |
 | 🔴 | Production-readiness packet | Exact hashes, artifacts, evidence, limitations, credentials, rollback, first-user plan |
 | 🔴 | Public production cutover | Explicit founder approval after the readiness packet only |
 
 No row may be deleted. Superseded work stays visible with its disposition.
+
+## Ledger reconciliation 2026-08-06
+
+The ledger above was audited against `git log` on `integration/cloud-platform-launch`
+rather than against its own prose. Recorded because four rows disagreed with the
+committed tree, and a stale row is indistinguishable from an open blocker to a
+reader who does not re-derive it.
+
+| Row | Was | Is | Why it moved |
+| --- | --- | --- | --- |
+| Search and deal persistence | 🔴 | 🟢 | `b0947d7` and `49adb9e` are on the tip with migrations `0007`/`0008`; the row predates both |
+| Hosted dead-capability withholding | absent | 🟢 | `a828717` is on the tip; the work was recorded only in a narrative section, so the ledger never showed it |
+| Cloud integration phase | `830c914` | tip `5452be3` | eighteen further commits, including all of Phases 5–5J |
+| Exact profile counts re-derived | JV 170 | JV 164 | Stale rather than wrong when written; 165 at `49adb9e`, 164 at `039cacf`. Missed by the first pass of this very reconciliation, which looked for rows marked red that were done and not for green rows whose numbers had moved. Found by a reviewer |
+
+All **five** yellow rows, enumerated rather than summarised, because an earlier
+version of this paragraph accounted for four and read as complete: Clerk
+identity and the production secret boundary are locally complete and committed,
+each waiting on one external staging gate; Stripe and Skool wait on
+real-provider staging proofs; the **Internal Operations Console** waits on the
+integrated security audit and a real-browser staging pass. None is blocked on
+local engineering.
+
+All **eight** red rows: combined opportunity index, scheduled saved searches,
+privacy and retention, the proxy credential reaching a log in trusted-local
+stdio, private staging, integrated security audit, readiness packet, and public
+cutover.
+
+Seven of the eight credit no implementation commit. The **integrated security
+audit** row is the exception: it credits `d82e600`, `5bcd5c0`, and `830c914`,
+all ancestors of this tip and all real implementation commits, and is red
+because the audit has not been *run* against the current tree rather than
+because nothing has been built. An earlier version said "six of the eight …
+two do not fit", counting the proxy-credential row as the second exception; that
+row credits no commit either — what is implemented on this tip is the browser
+proxy support the defect lives in, which is not the same predicate. It is red
+for a third reason again: the defect is real, found by an independent reviewer,
+and deliberately not fixed here.
+
+### A locale-dependent gate, found while measuring the baseline
+
+The first baseline run of the complete suite on this tip reported `2 failed,
+4746 passed, 4 skipped, 229 errors`. Every error was a PostgreSQL fixture
+failure, and the cause was environmental rather than a defect in the tree: with
+`LC_ALL` unset, macOS makes the postmaster multithreaded during startup and
+`pg_ctl` refuses to start the disposable cluster —
+`FATAL: postmaster became multithreaded during startup`. With `LC_ALL=C` the
+same command reproduces the recorded result.
+
+This is recorded rather than quietly worked around because the numbers are the
+same shape as a real regression: `4746 + 229 + 2 = 4977`, exactly the recorded
+Phase 5J total, so a reader who saw only the failing run would have concluded
+the PostgreSQL work had broken. A suite whose result depends on ambient shell
+locale cannot serve as release evidence, so the fixture now pins the child
+server's locale itself; see the correction below.
+
+The residual `2 failed` in that run is not locale-dependent and is not the same
+story. It is a real regression at the tip, recorded next.
+
+## Phase 5J correction 2026-08-06: the tip was red and the record was false
+
+Re-running the complete suite on a clean environment at `5452be3` reports
+**`2 failed, 4975 passed, 4 skipped`**, not the recorded `4,977 passed`. The two
+failures are `tests/test_hosting.py::test_http_app_fails_closed_before_local_state_without_postgres`
+and its `test_standalone_...` sibling. Both pass at the parent `e78d390`,
+verified in a separate read-only worktree at that commit, so `5452be3`
+introduced them.
+
+Three claims in the Phase 5J record and in that commit's own message do not
+match the committed tree:
+
+| Claim | Tree |
+| --- | --- |
+| "Tests and documentation only; no source change" | `src/cre_mcp/platform/secrets.py` is 415 new lines of production source and `src/cre_mcp/postgres/runtime.py` gained 16 |
+| The unprovenanced module was "read and deleted" | A module of that name and purpose is committed and imported by `runtime.py` |
+| "Repository gate 4,977 passed" | `2 failed, 4975 passed, 4 skipped` on a clean environment |
+
+The behaviour the commit added is right and is kept: `build_postgres_hosted_persistence`
+now verifies that the managed store injected every required credential *before*
+it opens a connection or binds a socket, and reports the absent variable
+**names**. A deployment missing a credential stops at the boundary instead of
+surfacing a connection error whose real cause is a missing secret.
+
+What was wrong is that inserting a new first gate silently changed what two
+existing fail-closed tests were testing. They assert `match="PostgreSQL"`; the
+preflight's message does not contain that word, so they failed. Worse was the
+near miss: had the preflight's message happened to contain it, both tests would
+have gone on passing while no longer reaching the PostgreSQL gate at all.
+
+### Repair
+
+Both tests now inject the three required connection strings as non-blank,
+unparseable values, so the preflight is satisfied, psycopg rejects the string
+before opening a socket, and the database gate is genuinely exercised. They also
+assert the exact refusal `hosted PostgreSQL is unavailable` rather than the bare
+word, because every terminal message on that path contains "PostgreSQL" —
+including the unconditional "domain repositories are not yet certified" raise at
+the end of the function. Under the loose match, deleting the database gate
+entirely left both tests green; under the exact one it fails them. That
+survival is what drove the change, and it is disclosed because a substring
+assertion that cannot distinguish two doors is not a gate.
+
+A third test pins the new door: with the secrets absent, start-up refuses,
+names all three variables, creates no cache database, no `registry.json`, and no
+`audit.jsonl`, and carries no value.
+
+`tests/platform/test_production_secret_inventory.py` pins the module that
+shipped with none. The sharpest is
+`test_every_activation_condition_names_a_real_setting`. The module Phase 5J
+*did* delete was rejected for gating credentials behind `CRE_STRIPE_ENABLED` and
+`CRE_SKOOL_ENABLED` — flags nothing in this codebase reads — so those secrets
+would silently never have been required. Nothing prevented the surviving module
+from acquiring the identical defect; the pin resolves every `activated_by`
+variable against `CreConfig`'s accepted names and its value against the field's
+permitted literals.
+
+`test_the_runbook_names_every_secret_a_deployer_must_provide` failed on arrival
+and found a second real gap: **none** of the six `MEDAWARCRE_*` database
+credentials appeared anywhere in `deploy/DEPLOY.md`, including the three whose
+absence now refuses start-up. Phase 5J recorded that the runbook "records exact
+names and least-privilege consumers" and that "every name in that table was
+verified present on `CreConfig`" — true of the `CRE_*` rows, and the reason the
+gap survived is that the three required ones are not `CreConfig` fields at all,
+so a check written against the model could not see them. `deploy/DEPLOY.md` now
+carries them with their exact per-service roles and marks the three operator
+credentials as absent from the serving process.
+
+### Mutation evidence
+
+Control 45 passed, against the working copy on each run.
+
+| Mutation | Result |
+| --- | --- |
+| Drop the start-up secret preflight | 1 failed |
+| Delete the whole database open and readiness gate | 2 failed |
+| Blank injection counts as present | 6 failed |
+| Environment-variable-name guard dropped | 2 failed |
+| Self-gating secrets become start-up-required | 12 failed |
+| Conditional activation always true | 12 failed |
+| Canonical ordering of missing names dropped | 2 failed |
+
+Two further mutations, added after review against a control of 47 passed, kill
+the two gaps a reviewer demonstrated were open:
+
+| Mutation | Result |
+| --- | --- |
+| An inventory entry names a consumer module that does not exist | 1 failed |
+| The `MEDAWARCRE_MIGRATION_DATABASE_URL` entry — the only DDL credential — is deleted outright | 1 failed |
+
+Five more after round two, against a control of 54 passed. Each kills a mutant a
+reviewer had demonstrated surviving:
+
+| Mutation | Result |
+| --- | --- |
+| The psycopg cause is chained back into the database-gate refusal | 1 failed |
+| `CRE_STRIPE_API_KEY` deleted from the inventory | 1 failed |
+| `CRE_SKOOL_WEBHOOK_SECRET` deleted from the inventory | 1 failed |
+| `CRE_PROXY_URL` deleted from the inventory | 1 failed |
+| Every `least_privilege` replaced with "unrestricted superuser on every database" | 1 failed |
+
+One change is listed rather than counted, on the standard this program already
+set for equivalent mutants: removing the `.strip()` from
+`PostgresSettings.from_env` leaves the hosting suite green, because the
+`from None` above it already closes the disclosure. It is pinned directly
+instead, by asserting the presence check and the consumer agree on what counts
+as injected.
+
+Six more after round three, against a control of 59 passed:
+
+| Mutation | Result |
+| --- | --- |
+| `oauth_authority` chains the DSN-echoing cause back in | 1 failed |
+| `admission` chains it back in | 1 failed |
+| `backup._command_connection` chains it back in | 1 failed |
+| The request-path `least_privilege` claims superuser and full DDL | 1 failed |
+| `runtime` drops the readiness re-raise | 1 failed |
+| `runtime` drops `finally: database.close()` | 1 failed |
+
+Six more after round four, against a control of 67 passed. Every one closes a
+gap a reviewer demonstrated. (An earlier caption said "eight", which was that
+round's pin delta, not its mutation count; every other caption in this series
+equals its table's row count.)
+
+| Mutation | Result |
+| --- | --- |
+| `CreConfig` drops `hide_input_in_errors` | 3 failed |
+| `_command_connection` keeps the password in argv (`pop` → `get`) | 1 failed |
+| `_command_connection` keeps `sslpassword` in argv | 1 failed |
+| `PostgresSettings.__repr__` interpolates the DSN | 1 failed |
+| The terminal fail-closed refusal becomes a `return` | 1 failed |
+| `0008` grants `CREATE ON SCHEMA` to the app role | 1 failed |
+
+Round five, against a control of 68 passed. The two bypasses of the round-four
+fail-closed pin are **not** in this table; they are recorded in the current-tree
+table further down, because they could not be stated honestly here. Round five
+first recorded them as `9 failed` / `8 failed` measured against
+`tests/test_hosting.py` alone while printing a control for both modules; round
+six "corrected" that to `12` / `11`, which were measurements on the *later*
+tree placed under the earlier control; and a round-seven reviewer reconstructed
+the round-five tree and measured `9` / `9`. Rather than carry a third version of
+a number this document has now got wrong twice, the mutations are re-measured
+against the current tree and control, where any reviewer can reproduce them.
+
+| Mutation | Result |
+| --- | --- |
+| `MigrationRunner` drops the DSN strip | 1 failed |
+| The inventory claims the pool *accepts* a session resolving to any other role | 1 failed |
+| `pool.py` no longer asserts an exact group session | 1 failed |
+| A lower-case DDL grant is appended to `0001` | 1 failed |
+| The same appended to `0005` | 1 failed |
+| The same appended to `0008` | 1 failed |
+| The same appended to `restore_privileges.sql` | 1 failed |
+
+Two harness errors in this round are disclosed, since each first produced a
+number that meant nothing. A mutation anchor was written against text the source
+wraps across two string literals, so the replacement never applied and the
+mutant "survived" vacuously. And the restore helper reused the loop variable
+name, so three appends meant for three different SQL files all hit the last one.
+
+A third, worse one belongs here too, because it took two rounds to stop being
+wrong: the two bypass rows were first measured against `tests/test_hosting.py`
+alone under a control printed for both modules, then "corrected" with numbers
+measured on a later tree under the earlier tree's control. Both versions were
+plausible. Neither was reproducible. They are now measured on the current tree
+in the round-seven table, where a reviewer can re-run them.
+
+Counted plainly, and recounted twice because both attempts were short. **Four**
+in round one: a restore that read git `HEAD` instead of the working copy; an
+unquoted zsh selector that ran nothing; a database-gate mutation that commented
+out only `database.open(...)` and survived for a reason the record then
+described wrongly; and an ordering mutation written with unbalanced parentheses
+that reported errors rather than failures. **Two** in round five: an anchor that
+never matched, and a clobbered loop variable. And **three successive wrong
+publications of the same two bypass numbers** — measured against a narrower
+selection than the printed control, then re-measured on a later tree under the
+earlier control, then carried forward unchanged into a table promising
+current-tree numbers.
+
+Plus one more found while correcting this round's numbers: two malformed
+mutations of the OAuth-authority and admission pre-connects, which produced
+collection errors rather than measurements and are reported as unmeasured rather
+than as survivors.
+
+That is **ten**. The first count said five, the second seven, the third nine —
+each contradicted by disclosures elsewhere in this same document, which is
+itself the pattern the count is about: a summary number drifting from the
+material it summarises. Two reviewers found the same shortfall independently,
+and the honest reading is that this record is better trusted for its individual
+measurements, each printed beside its control, than for any figure that
+aggregates them.
+
+Every one produced a plausible number. That is the reason every table here is
+printed beside its control, the reason a control must come from the identical
+command as the rows beneath it, and the reason the rows that kept moving are now
+stated only against the tree a reader has in front of them.
+
+Round six, against a control of 71 passed:
+
+| Mutation | Result |
+| --- | --- |
+| `starlette_app` catches the terminal refusal and returns a file-backed bundle | 1 failed |
+| `0008` grants `medawarcre_app` membership of the DDL role | 1 failed |
+| `0008` gains a single-line `ALTER DEFAULT PRIVILEGES … GRANT ALL` | 1 failed |
+| `bootstrap_roles.sql` gives `medawarcre_app` `CREATEDB CREATEROLE` | 1 failed |
+
+Rounds seven through ten, against a control of **78** passed — the current tree,
+so every row below is reproducible today. The two bypass rows are here, measured
+on this tree, after being published wrong three times. The control read 77 until
+round ten added the builder call-site pin to one of the two modules; a
+confirmation reviewer caught the stale caption, which is the same defect as the
+mixed controls above, one round after that defect was written up.
+
+| Mutation | Result |
+| --- | --- |
+| `create_http_app` recovers, gated on a variable the old pin stripped | 1 failed |
+| `main` recovers, gated on `CRE_HTTP_HOST` | 1 failed |
+| `main` recovers ungated — both arms see it | 2 failed |
+| Recovery gated on `CRE_HTTP_HOST`, which the Dockerfile's `ENV` sets | 1 failed |
+| `__main__.py` rebinds the builder before `main` runs | 1 failed |
+| `build_postgres_hosted_persistence` gains a `functools.wraps` decorator whose wrapper returns a bundle unconditionally | 17 failed |
+| The module rebinds the name to a `functools.wraps` wrapper that calls the strict function and returns a bundle on `HostedPersistenceUnavailable` | 16 failed |
+| A comma-separated role-membership grant in `0008` | 1 failed |
+| A membership grant hidden in `bootstrap_roles.sql` | 1 failed |
+| A second `ALTER ROLE … SUPERUSER CREATEDB CREATEROLE BYPASSRLS` | 1 failed |
+| A second `ALTER ROLE … LOGIN` | 1 failed |
+| `ALTER ROLE … SUPERUSER` written without the optional `WITH` | 1 failed |
+| A `GRANT` that is not the first token on its line | 1 failed |
+| The `PGOPTIONS` scrub is deleted | 1 failed |
+
+A reviewer predicted the two bypass rows must be symmetric, since both trip the
+same identity assertion. They are not, and the reason is behavioural rather than
+structural: the decorator mutant returns a bundle unconditionally, while the
+rebinding mutant calls the strict function first and recovers only from
+`HostedPersistenceUnavailable`, so one further test that drives a different
+failure sees different behaviour. Recorded because the prediction was reasonable
+and the measurement disagrees with it.
+
+Both rows carry their mutant's exact shape because a later reviewer could not
+reconstruct the 16 from prose and landed on 9 or 17 depending on how it read the
+description — a row is only reproducible if the mutation is stated precisely
+enough to rebuild. Both re-measured on the current tree at control 78: 17 and
+16.
+
+Each table is scoped to the control printed above it and to the tree of its own
+round. They are a record of what was measured when, not a suite to re-run: later
+rounds add pins, so an earlier row's failure count is lower than the same
+mutation produces today — deleting the database gate was 2 failures in round
+one and is 7 now. Two reviewers independently reconciled the earlier tables by
+subtracting the intervening pins and found them consistent.
+
+Two harness corrections are disclosed because both first produced a number that
+meant nothing.
+
+The database-gate mutation initially commented out only `database.open(...)`,
+and it survived — which is what produced the assertion tightening above. An
+earlier version of this paragraph explained that survival by saying
+`check_readiness` then raised into the same handler and produced the same
+message. That was false, and an independent reviewer reproduced the real
+mechanism: `check_readiness` catches every exception and *returns*
+`ok=False, code="database_unavailable"`, so control takes the `if not
+readiness.ok` branch and raises `hosted PostgreSQL is not release-ready
+(database_unavailable)` through the `except HostedPersistenceUnavailable: raise`
+path — a different message through a different handler. It survived because that
+message also contains the word "PostgreSQL", which is the whole point: the loose
+match could not tell the two doors apart. Under the exact assertion the same
+mutant fails both tests.
+
+That correction is left in place rather than smoothed away, because a false
+mechanism inside the paragraph whose subject is harness honesty is precisely the
+defect this record exists to catch.
+
+The ordering mutation was first written with unbalanced parentheses and reported
+`2 errors` rather than failures; a syntax error is not a surviving mutant, so it
+was redone as a valid one. A mutation result is only meaningful beside a green
+control run with the identical command.
+
+### The locale pin
+
+`tests/postgres/conftest.py` now runs all five of its subprocess spawns — two
+`psql`, `pg_ctl` start and stop, and `initdb` — under `LC_ALL=C` instead of
+inheriting the shell's. No assertion changed. Both reviewers independently
+confirmed the pin masks nothing: `initdb --no-locale` was already fixing the
+cluster to `C` collation and ctype regardless of the process environment, and
+one reviewer re-ran the whole PostgreSQL suite with the pin set to
+`en_US.UTF-8` instead and got the same 274 passed.
+
+### Evidence
+
+The complete suite was run with **both `LC_ALL` and `LANG` explicitly unset** —
+the exact condition that produced 229 errors before the pin:
+
+`5034 passed, 4 skipped, 1 warning in 187.72s (0:03:07)`
+
+That is `4,975` previously passing, plus the `2` repaired, plus `57` new pins.
+The count grew across ten review rounds and every step is reproducible: `5001`
+on the first candidate, then `5003`, `5010`, `5015`, `5023`, `5024`, `5027`,
+`5032`, `5033`, `5033`, `5034` as each round added `2`, `7`, `5`, `8`, `1`, `3`,
+`5`, `1`, `0`, and `1`. Each pair of reviewers independently reproduced the
+count of the candidate they were given. Only the categorized third-party Authlib
+deprecation appears.
+
+The per-round deltas understate the later rounds, in both directions. Round
+eight added one pin while doubling an existing eight-arm pin's coverage and
+**removing** three assertions that could not fail. Round nine added none at all:
+it strengthened four pins that reviewers had walked around and deleted another
+that could not fail. Round ten — the first to return two approvals — added the
+builder call-site pin and made a value-shaped assertion falsifiable by putting a
+value in scope, which is the third attempt at that particular block and the
+first that can fail.
+
+The growth is the honest shape of this correction: every one of those 57 pins
+exists because something was found unpinned. Most were added after a reviewer
+demonstrated the guard could be deleted with the whole suite green — the exact
+per-round attribution is not restated as a single number here, because an
+earlier version did and it was an assertion about review history rather than
+anything reproducible from the tree. The per-round counts understate the later
+rounds: much of rounds five and six was **strengthening** pins that already
+existed and could be walked around, which changes no count at all.
+
+Static gates: `compileall` clean over `src` and `tests`; `git diff --check`
+clean; changed-content credential scan clean; no port-8000 listener; no
+dependency or lockfile change; no migration change. Capability inventory
+`84578ae71567ed18` with 274 capabilities and 15 hosted-withheld; visible counts
+Local 8, National 10, Full Operator 20, JV Partner 11 — all unchanged. An
+isolated wheel packages the source-rights registry and all eight numbered
+migrations plus `restore_privileges.sql`.
+
+Three production entrypoints reach this boundary — `create_http_app`,
+`starlette_app`, and `run_server` — and each calls
+`build_postgres_hosted_persistence()` before any connection, any socket bind,
+and any local state. Not before *any* work: `create_http_app` constructs
+`CreConfig()` first, and `run_server` constructs it and resolves the transport
+first. An earlier version of this line said "before any other work", which
+overstated it; both reviewers caught the same sentence.
+
+A later version then said only two of the three were covered by a test and that
+`run_server` rested on "an argument from the call site". That is stale: all
+three, plus `main` and `__main__.py`, are pinned by
+`test_no_entrypoint_recovers_from_the_terminal_refusal` and its shim check —
+see the fail-closed section below. Both reviewers caught this sentence too,
+which is the second time a paragraph here has understated its own later work.
+
+### Findings from the two independent reviews, and what changed
+
+Both reviewers reproduced the frozen candidate hash unchanged at start and
+finish, reproduced `5001 passed, 4 skipped` independently, and reproduced all
+seven mutation rows. Both returned CHANGES REQUIRED. Every finding below was
+verified against the tree before it was accepted.
+
+| Finding | Disposition |
+| --- | --- |
+| The mutation-disclosure paragraph explained the surviving mutant with a mechanism the code does not have | Corrected above, with the real mechanism and the fact that it was wrong |
+| The Phase 5K contract was inside the candidate, undisclosed in this record, and its own text said the correction must land first | Removed from this commit. It belongs to the phase it describes |
+| `secrets.py` described `medawarcre_app` as `NOLOGIN NOINHERIT`; `bootstrap_roles.sql` declares it `NOLOGIN INHERIT` | Corrected. `INHERIT` is deliberate — the login member inherits exactly that group, which is what `assert_exact_group_session` requires |
+| An inventory entry could name a fictional consumer, or be deleted entirely — including the only DDL credential — with the suite green | Two pins added; both mutants fail. Round two showed the deletion half was still narrow — see below |
+| Two `psql` spawns in the PostgreSQL fixture still inherited the shell locale | Pinned, for consistency with the three that were |
+| "before any other work" overstated the entrypoint ordering | Corrected. Both reviewers flagged the same sentence |
+| "164 capabilities" restated the entitled count without its qualifier | Corrected to "164 entitled, 160 reachable" — which round two proved was itself false. Now 164 entitled, 11 withheld, 102 reachable |
+
+### Second review round: a real credential disclosure, and two false numbers
+
+Both fresh reviewers reproduced the repaired candidate hash unchanged, both
+reproduced `5003 passed, 4 skipped`, both reproduced all nine mutation rows —
+and both returned CHANGES REQUIRED again.
+
+**Both independently derived the same blocking finding, and they were right.**
+The replacement sentence written to fix the round-one "164 capabilities"
+complaint said "160 reachable". That is false. The true figure is **102**, and
+160 is not merely wrong but impossible: 11 of the 15 hosted-withheld
+capabilities are JV-entitled, so the ceiling is `164 − 11 = 153`. 160 is the
+union of the *non-withheld* capabilities grouped onto the 11 tools JV can see,
+counted without regard to entitlement — those facades are shared with other
+profiles, so most of the extra capabilities belong to them. Counting the
+withheld ones too gives 168. Three numbers describe those eleven tools and only
+one of them answers "what can JV actually call": 168 grouped, 160 grouped and
+not withheld, **102** grouped, not withheld, and entitled to JV.
+
+The origin matters more than the number. A round-one reviewer supplied 160, the
+builder ran their snippet, got 160, and wrote it into the ledger without
+deriving what it measured. **Reproducing a number is not checking that it
+measures what the sentence claims.** That is two consecutive rounds in which the
+correction to an overstatement was itself an overstatement, which is why the
+row above now carries both retracted versions rather than only the answer.
+
+**One reviewer found a real credential-disclosure path**, and it is repaired
+rather than carried. The round-one record described the `_pgconn` exposure as
+reachable only by introspecting a private attribute. That generalization was
+wrong. When psycopg cannot parse a DSN as a URL it falls back to keyword/value
+parsing and echoes the first whitespace-delimited token verbatim — and for a
+URL-form DSN that token is the entire connection string. One leading space is
+enough, which is an ordinary managed-store or copy-paste artifact, and it passes
+the preflight because `_present()` strips only for the presence test while the
+unstripped value goes to psycopg. Reproduced:
+
+```
+psycopg.ProgrammingError: missing "=" after
+  "postgresql://appuser:REALPASSWORD@10.0.0.5:5432/medawarcre"
+  in connection info string
+```
+
+Present in `str`, `repr`, `args`, and `traceback.format_exception()` of the
+chained cause, on the ordinary `hosted PostgreSQL is unavailable` path. A plain
+`logging.exception()` discloses it. This violates the non-negotiable invariant
+that secrets do not enter logs.
+
+Two production changes repair it. The database gate no longer chains the
+psycopg cause — it raises `from None` and names only the exception *type* — and
+`PostgresSettings.from_env` now strips the DSN so the presence check and the
+consumer agree on what counts as injected. Chaining the cause back in fails the
+new regression; the strip is defence in depth behind it and is pinned separately
+rather than counted as falsified by that test.
+
+Stated precisely, because the unqualified version of this is what got two
+earlier rounds rejected: `raise ... from None` sets `__cause__` to `None` and
+`__suppress_context__` to true, but does **not** clear `__context__`. Every
+renderer tested honours the suppression flag — `traceback.format_exception`
+under both signatures, `format_exc`, `format_exception_only`,
+`print_exception`, `TracebackException` compact and not and with
+`chain=True/False`, `logging.exception`, the default `sys.excepthook`,
+`rich.traceback`, and pytest's `getrepr` — across two independent reviews, with
+no renderer found that ignores it.
+
+**One** residual is carried rather than claimed closed: the original exception
+is reachable by reading `exc.__context__` directly, which is introspection
+rather than rendering.
+
+An earlier version of this paragraph claimed a second — that the psycopg
+exception stays bound to the frame local `error`, so a locals-rendering mode
+would disclose it without touching `__context__`. That is false. CPython
+compiles `except E as error:` with an implicit `finally: error = None; del
+error` which runs during unwinding, so the frame holds only `settings` and
+`database`; both reviewers independently drove `rich.traceback(show_locals=True)`
+and pytest `--showlocals` against a production-shaped call and measured no
+disclosure. One of them noted the confound that most likely produced the claim,
+because it caught them too on a first attempt: a probe harness that itself holds
+the DSN in a caller frame.
+
+That sentence was written to make the previous round's claim more precise, and
+it was wrong — the second time in this correction that a reviewer's finding was
+folded in without re-deriving it, after "160 reachable". The rule that keeps
+being relearned: a reviewer's measurement is a lead, not a result.
+
+**A third round found the fix had been applied to one site of four.** The same
+`from error` chaining of a DSN-echoing psycopg parse error was still present in
+`postgres/oauth_authority.py`, `postgres/admission.py`, and
+`postgres/backup.py`. Neither repository is constructed by the hosted process
+yet, and the backup CLI already collapses its error to a fixed code, so this was
+not a live disclosure — but they hold the two credentials the new preflight
+*requires* an operator to inject, and `cre_mcp.server` installs a root logging
+sink that would render the chain as soon as the domain wiring lands. All three
+are repaired, and the regression now covers the class rather than the one
+reported instance: a parametrized pin drives each opener with an unreadable DSN
+and asserts the canary reaches neither the message nor the formatted traceback.
+`backup._command_connection` gets its own, because its entire purpose is to lift
+a password out of the child's **command line** — where any local user can read
+it with `ps` — into the child's environment, which makes chaining a
+quote-it-back parse error the sharpest version of the defect. (This sentence was
+the fourth place carrying that description backwards; a reviewer found it after
+the other three were corrected.)
+
+The lesson is the one this document keeps relearning from the other direction:
+a reviewer reports an instance, and repairing exactly the instance leaves the
+class open.
+
+**One reviewer demonstrated the completeness pin was far narrower than its
+name.** The source scan can only see `MEDAWARCRE_*_URL`, so 14 of the 21 entries
+— including both webhook signing secrets — could be deleted outright with the
+whole repository green, taking their runbook obligation with them. An exact-set
+pin now fails on any deletion or rename. Deleting `CRE_STRIPE_API_KEY`,
+`CRE_SKOOL_WEBHOOK_SECRET`, or `CRE_PROXY_URL` each now fails.
+
+**One reviewer found the repaired tests had traded one ambient coupling for
+another.** With `CRE_HUMAN_IDENTITY_PROVIDER=clerk` and no Clerk key set in the
+shell — a supported configuration — the preflight demanded a fourth credential
+and refused before the database gate, so both hosting tests failed for a reason
+outside the repository. In the same commit whose locale rationale says exactly
+that is not release evidence. They now clear every variable the inventory names
+before setting what they need, and pass under the hostile environment that
+previously failed them.
+
+Also repaired: `least_privilege` was unpinned prose, including the single
+sentence this commit changes; a mutant that read `os.environ` while building the
+refusal was invisible to pins that pass synthetic mappings, and is now pinned;
+the stale "23 pins" count is gone; and the locale subsection now says five
+spawns rather than naming two of the five. Round three added two more pins for
+behaviours in `postgres/runtime.py` that were deletable with the suite green —
+the `finally: database.close()` that keeps a refused start-up from leaking a
+pool, and the `except HostedPersistenceUnavailable: raise` re-raise, which is
+the exact handler the corrected mutation mechanism above depends on.
+
+The `least_privilege` pin needed two attempts, and the first attempt is why this
+paragraph exists. It checked only that `NOLOGIN` and `INHERIT` appeared in both
+the role contract and the claim, so a reviewer rewrote "holds no DDL" to "holds
+full DDL and is a superuser" and the entire suite stayed green — while the
+record said "a pin now holds the request-path claim". It now also requires the
+role to be `NOSUPERUSER` in `bootstrap_roles.sql`, requires the claim to say the
+role holds no DDL, rejects a claim asserting superuser or full DDL, and checks
+that no `GRANT ... TO medawarcre_app` in `0001_authoritative_cloud.sql` confers
+`CREATE` or `ALL`. Written the first way, that check also had a false positive
+of its own — a bare substring test matched the column name `CREATED_AT` — so it
+is word-bounded.
+
+### Fourth review round: a live disclosure, and a door with no test
+
+**One reviewer found a fifth disclosure site, and this one was live.** Pydantic
+renders `input_value=...` into every `ValidationError`, so the validator that
+exists to reject a live Stripe key *printed that key*. Setting
+`CRE_STRIPE_API_KEY=sk_live_...` produced an uncaught traceback on stderr
+containing it, at **import** of `cre_mcp.server` — via the module-level
+`CreConfig()` in `http/policies.py`, before any entrypoint runs. That
+contradicted three separate written claims, including Phase 5J's own "no raised
+error carries a value" and the test module's "nothing reachable by a browser, a
+client, a log, or a serialization can disclose them". The existing pin could not
+see it: its sentinel is an `sk_test_` value, which the validator accepts.
+
+Repaired at the class rather than the instance — `hide_input_in_errors=True` on
+`CreConfig` — and pinned for a credential field and two non-credential fields,
+so the next validator to reject something cannot reintroduce it.
+
+Scoped precisely, because the first version of this sentence said the setting
+"suppresses the value for every validated field" and that is wider than the
+truth. It suppresses the value from the **rendered message**, which is what
+closes the stderr traceback. The exception object still carries the raw input
+on `errors()[0]["input"]` and in `ValidationError.json()`. Nothing in `src/`
+calls either on a configuration error today, and both are serializations rather
+than renders, but `tests/platform/test_secret_boundary.py` claims nothing
+reachable by "a log, or a serialization" can disclose a secret, and that claim
+is now qualified there too. One further residual: for `dict`-valued settings the
+error `loc` reproduces the input dict **key** — none of which is a credential on
+this model (source names, community ids, price ids, client names).
+
+**The other reviewer found the terminal fail-closed refusal had no test at
+all.** `build_postgres_hosted_persistence` ends by refusing unconditionally, and
+its docstring says that is what stops a reachable PostgreSQL from accidentally
+reviving SQLite or file-backed hosted authority. Nothing exercised that line:
+every working-app test patches the builder outright and every real-call test
+stops at an earlier gate. The reviewer replaced the final `raise` with a
+file-backed bundle — `PlatformApi` on the local SQLite cache, `WorkspaceRegistry`
+on `access/registry.json`, `AuditLog` on `access/audit.jsonl` — and got a
+**working ASGI app** out of both entrypoints against a live migrated cluster,
+with the whole repository green.
+
+That is the most serious gap this correction found. Round three had added pins
+for two *other* behaviours inside the same function and left the door itself
+open.
+
+The first repair was pinned with `inspect.getsource`, and **round five walked
+past it twice, independently**. `inspect.getsourcelines` calls `inspect.unwrap`
+first, so a `functools.wraps` decorator — or a module-level rebinding to a
+wrapper — leaves the AST reading the strict function while a different callable
+answers to the name. One reviewer used the decorator, the other the rebinding;
+both got a working hosted ASGI app against a live migrated cluster with the
+whole suite green. The behavioural half could not catch either, because it
+monkeypatches the preconditions, so an override gated on anything the suite
+never sets survives it.
+
+The pin now reads the source from the module file by name rather than from the
+object, and requires the object bound to that name to be the function defined
+there: no `__wrapped__`, `__code__.co_name` and `co_filename` and `co_firstlineno`
+all matching the definition, and an empty `decorator_list`. `functools.wraps`
+copies `__name__` and `__qualname__` but never `__code__`, which is what makes
+those checks survive a wrapper that impersonates the original. Both bypasses now
+fail, at the counts recorded in the round-seven table. An earlier version of
+this sentence said they fail "nine and eight assertions respectively", which was
+the retracted mismeasurement relabelled as assertions — and pytest stops a test
+at its first failing assertion, so it was not reproducible as written either.
+
+The lesson generalises past this function: a structural pin that reads a
+callable through `inspect` is checking whatever `inspect` decides to resolve to,
+not what will run.
+
+**And round six moved the same instance one frame further out.** Both reviewers
+independently left the hardened builder untouched and put the six lines in its
+*caller*: `starlette_app` catching `HostedPersistenceUnavailable`, building a
+file-backed bundle, and returning a working ASGI app with 59 routes and a cache
+database on disk — against a live migrated cluster, with the whole suite green.
+The builder pin could not see it because the builder was never modified, and the
+two DSN tests could not either, because they stop at the database gate where the
+shim re-raises. The behavioural half ran only through `create_http_app`.
+
+**Round seven moved it once more, and found the pin's own hiding place.** Both
+reviewers put the recovery in `main` — the frame the Dockerfile actually runs,
+`CMD ["python", "-m", "cre_mcp", "--http"]` — which the three-entrypoint
+parametrization did not cover, and whose only existing test patches `run_server`
+with a Mock so the handler never runs. One of them also gated a recovery in
+`create_http_app` on `MEDAWARCRE_MIGRATION_DATABASE_URL`: a variable every real
+deployment sets and which the pin's own `_clear_inventory_environment` helper
+deletes before each arm. **Stripping the environment to make the test
+deterministic was itself the hiding place.** Both bypasses served a hosted app —
+60 routes, a cache database on disk — with the whole suite green.
+
+A reviewer also showed the `run_server` arm did not fail on a bypass; it bound
+`0.0.0.0:8000` and blocked, so the arm meant to catch the defect turned it into
+an indefinite hang and a live listener, contradicting this program's own
+no-port-8000 gate. `FastMCP.run` is now replaced with a raising stub in the pin.
+
+The refusal is pinned at four entrypoints — `create_http_app`, `starlette_app`,
+`run_server`, and `main` — each under **two** environments, stripped and
+production-shaped. A reviewer's independent enumeration confirms no production
+module under `src/` constructs a `HostedPersistenceBundle` at all, and that the
+only way to obtain one is the builder, called from exactly three sites, all
+pinned.
+
+**Round eight relocated it twice more, and both times the pin's own idea of
+"production" was the hiding place.** One reviewer put the recovery in
+`src/cre_mcp/__main__.py` — the module `python -m cre_mcp` enters *before*
+`main`, which nothing in the repository read — and served a hosted app with a
+397 KB cache database on disk. Both reviewers, independently, gated a recovery
+on a variable from the **Dockerfile's own `ENV` block** (`CRE_HTTP_HOST=0.0.0.0`,
+`CRE_HTTP_PORT=8000`): the container sets them on every real run, and the
+hand-written "production-shaped" list set neither.
+
+Both are closed, and the second is closed at its cause rather than its instance:
+the production-shaped arm now **parses the `ENV` block out of the Dockerfile**
+instead of transcribing names, so the next `ENV` line is covered without anyone
+remembering. That was a reviewer's recommendation and it is the right one — a
+hand-written list of what "production" means had failed twice by then, once per
+round. `__main__.py` is pinned as a pure shim: imports, one call to `main`, no
+`try`, and no mention of the builder or the bundle type.
+
+Round nine relocated it twice more: the shim's `main` was re-pointed at a **new
+module** that wrapped the real one (the shape check held; nothing required the
+name to come from `cre_mcp.server`), and a recovery was gated on
+`CRE_CLERK_PUBLISHABLE_KEY` — documented in `DEPLOY.md`, correctly not a secret
+so not in `PRODUCTION_SECRETS`, and not in the Dockerfile. Both are closed, the
+second again at its cause: the arm now also derives names from the **runbook**,
+so "what a deployment sets" comes from the two files that define it rather than
+from anyone's memory.
+
+Six rounds, eight relocations of one defect: body, decorator, module rebinding,
+caller, entrypoint, module shim, a delegating module, and three times the
+test's own idea of the environment. Each repair was correct for the instance it
+was given.
+
+Round ten was the first to return two approvals, and both reviewers were asked
+directly whether the paragraph below is honest or an excuse. Both judged it
+honest and correctly scoped; one went looking for the realistic-regression
+counterexample it invites and reported finding none unpinned — its sharpest
+candidate, deleting the pre-connect that keeps `psycopg_pool`'s WARNING channel
+shut, already fails 12 tests in the module it names and 17 across
+`tests/postgres/`. Both also observed that the frame list
+`_HOSTED_ENTRYPOINTS` was still hand-written while the environment had been
+derived twice, which is the failure mode this correction says it learned. The
+set of builder call sites in `src/` is now derived and pinned at three, so a new
+caller fails the suite until someone decides whether it needs an arm.
+
+**What this does and does not establish.** Every one of these was an
+*adversarial insertion of new code* by a reviewer with write access to a copy —
+not a regression of existing code. No test suite can prove the absence of a
+deliberately added recovery path; a sufficiently determined insertion can always
+find one more frame. Eight rounds of reviewers driving the real system agree the
+**shipped behaviour is correct**: every entrypoint refuses under every hostile
+environment tried, including a live fully-migrated cluster, and creates no local
+state. What the pins buy is regression resistance — the property is now asserted
+at every frame that can express it, under an environment derived from the
+Dockerfile and the runbook rather than transcribed. That is the honest claim,
+and it is narrower than "this cannot be bypassed".
+
+**A third gap:** `backup._command_connection` exists to move a password out of
+the connection string before it becomes `pg_dump` argv, where any local user can
+read it with `ps`. Changing its `pop("password")` to `get("password")` left the
+entire repository green while putting the credential back on the command line.
+The postgres suite could not see it — its fixture DSNs carry no password. Now
+pinned, along with `sslpassword` and the `PGOPTIONS` scrub.
+
+That sentence was wrong twice, in the same way, one variable at a time. The
+`PGOPTIONS` half was false for two rounds. The repair then set all three
+variables in the parent — and still left `PGPASSWORD` and `PGSSLPASSWORD`
+unfalsifiable, because the test's DSN supplies both, so `_command_connection`
+re-sets them whether or not the scrub ran; a reviewer deleted both scrubs with
+the whole repository green. The pin now also drives a **passwordless** DSN, the
+shape a socket, trust, `.pgpass`, or IAM deployment uses — and the one this
+repository's own PostgreSQL fixtures use — where an ambient `PGPASSWORD` for an
+unrelated database would otherwise reach the `pg_dump` child.
+
+The original way it was false is still worth keeping: the assertion existed and
+passed, but **vacuously**.
+`_command_connection` copies `os.environ`, and the test process had no
+`PGOPTIONS`, so `assert "PGOPTIONS" not in environment` held whether or not the
+scrub ran — a reviewer deleted the scrub and the repository stayed green. The
+pin now sets `PGOPTIONS`, `PGPASSWORD`, and `PGSSLPASSWORD` in the parent before
+calling. An assertion that cannot fail is not coverage, and this one was
+recorded as coverage in a paragraph enumerating what had been closed.
+
+**A fourth:** the redacting `__repr__` on `PostgresSettings`,
+`PostgresOAuthAuthorityRepository`, and `PostgresAdmissionRepository` was
+unpinned at all three sites, under a module docstring reading "redaction-safe"
+and a class docstring promising "without a printable connection string". The
+chain-suppression class had been closed at four sites and pinned at four; the
+redaction class was closed at three and pinned at none. Now pinned at all three.
+
+Also this round: the GRANT scan read only `0001`, so adding
+`GRANT CREATE ON SCHEMA medawarcre TO medawarcre_app` to `0008` kept it green —
+it now reads all nine shipped SQL files; and two operator-path sites the builder
+found by sweeping rather than waiting to be told are repaired,
+`MigrationRunner` storing an unstripped DSN and the `from error` chain around
+the restore smoke test.
+
+Recorded honestly about what is still *not* pinned: a consumer must resolve, but
+it need not be the module that actually reads the variable — pointing an entry
+at some other real module survives. `purpose` and `rotation` remain unchecked
+prose. `least_privilege` is now partly checked for the request-path entry only;
+the other twenty entries' least-privilege sentences remain prose. The exact-set
+pin catches deletion, not a wrong description. Two guards a reviewer showed are
+deletable with the suite green are listed rather than pinned, both
+defence-in-depth against a caller that does not exist: `_activated`'s
+`.casefold()` (the provider field is a `Literal`, so a non-exact value fails
+configuration first) and `MigrationRunner`'s `role != MIGRATION_ROLE` guard
+(both production callers use the default). And `restore_backup`'s new
+`from None` is unpinned — reverting it to `from error` leaves the suite green,
+because reaching that handler needs a full dump, manifest and cluster; it is
+listed here rather than counted, on the same standard as the `.strip()` above,
+which by contrast *is* pinned directly.
+
+Two disclosure surfaces are carried rather than closed, both recorded so the
+staging security audit has them in scope, and both stated at the severity a
+reviewer measured rather than the one first written.
+
+`backup.py` retains **six** `psycopg.connect` calls with no conversion, so a
+parse error propagates raw. An earlier version said seven — the seventh, in
+`_backup_service_smoke`, is reached only from inside the `from None` handler
+this commit adds, so it no longer propagates. `migrations.py` holds **two** more,
+carrying the only DDL credential — a reviewer pointed out they had the same
+posture as the six but were outside the scope this paragraph hands to the
+staging audit, so they are named here. All eight are reachable only through
+`medawarcre-postgres`, whose CLI collapses `psycopg.Error` to a fixed code and
+prints no traceback.
+
+One channel is named here because a reviewer traced it and it is currently held
+shut by something that looks removable. `psycopg_pool` logs
+`error connecting in %r: %s` at WARNING, and for an unparseable DSN that message
+is the whole connection string, into the same root sink. No shipped opener
+reaches it: `pool.py`, `oauth_authority.py`, and `admission.py` each run a
+standalone `psycopg.connect(dsn)` **before** opening the pool, so a bad DSN
+raises into the `from None` handler and the pool never starts. Those three
+pre-connects look redundant beside the pool's own `configure` callback, which is
+exactly the shape of a well-meaning deletion — so a reviewer tried both
+plausible refactors and each fails.
+
+Measured here rather than restated: deleting the **runtime pool's** pre-connect
+(`pool.py:194-196`, the `with psycopg.connect(...)` block inside
+`PostgresDatabase.open`) fails **12** tests in
+`tests/postgres/test_release_audit_regressions.py` and **17** across
+`tests/postgres/`, the extra five being in `test_pool_health.py`. Load-bearing,
+already pinned, and now written down so the next reader knows the pre-connect is
+not redundant with the pool's own `configure` callback.
+
+An earlier version of this sentence said "each fails 17 tests in
+`tests/postgres/test_release_audit_regressions.py`" and attributed it to all
+three pre-connects. Both halves are wrong: 17 is the package figure, and that
+module holds 40 tests of which 12 fail. The number came from a round-ten
+reviewer and was written down without re-deriving it — the **fourth** time in
+this correction a reviewer's measurement was folded in as a result rather than
+treated as a lead, after "160 reachable", the frame-local `error` residual, and
+the bypass-row counts. Both confirmation reviewers caught it independently.
+
+No equivalent claim is made for the OAuth-authority and admission pre-connects,
+because I could not measure them: both mutations were malformed — a regex that
+removed a `with` statement and orphaned its body — and produced collection
+errors rather than failures. A broken mutant is not a survivor and not a result.
+That is the tenth harness error disclosed in this record — "eighth" here in an
+earlier draft, contradicting the tally twenty lines up, which is the same drift
+the tally itself is about.
+
+`http/browser.py:146` puts `CRE_PROXY_URL` — which this inventory itself
+describes as a URL that "embeds its own credentials" — into Chromium argv under
+a docstring claiming it builds options "without exposing configured secrets".
+An earlier version of this paragraph said that made it readable via `ps`. It is
+worse than that: a reviewer traced it end to end into a **log**. `nodriver`
+logs its launch arguments at INFO, and `server.py:38` installs a root
+`basicConfig(level=INFO, stream=sys.stderr)` sink, so the process prints
+`--proxy-server=http://user:PASSWORD@host:8080` to its own stderr. That is the
+channel this program calls non-negotiable. It is not hosted-reachable — hosted
+browser navigation fails closed at the source-rights gate before any launch —
+but it is **live in the shipped stdio product whenever a proxy is configured**,
+so it is now its own ledger row rather than a footnote here.
+
+This commit therefore changes production source in eight places — `config.py`,
+`platform/secrets.py`, `postgres/runtime.py`, `postgres/config.py`,
+`postgres/oauth_authority.py`, `postgres/admission.py`, `postgres/backup.py`,
+and `postgres/migrations.py`. Stated plainly, because the commit it corrects
+claimed "no source change" while adding 415 lines of it.
+
+### A process failure worth recording
+
+During round seven a reviewer appended a mutation to
+`deploy/postgres/bootstrap_roles.sql` **in the shared working tree** rather than
+in its own copy, then reverted it. Its own report disclosed this. The candidate
+hash was correct before and after, and that reviewer re-derived every result on
+a verified byte-identical copy — but for a window, a second reviewer's rsync
+captured a mutated tree and reported 123 PostgreSQL failures that were not the
+candidate's.
+
+Separately, a round-four reviewer's waiter process stayed attached after that
+reviewer had delivered its report, re-reported later against a by-then
+superseded candidate, and correctly called the hash mismatch blocking. Nothing
+was lost — every one of its findings had already been applied, and it said so
+after inspecting the moved tree — but it is the same shape as a failure this
+document already records from the hosted-withholding phase.
+
+A third instance followed in round nine, and this one was mine: clearing
+accumulated reviewer copies to recover disk space, I deleted by prefix and swept
+two live reviewers' working directories out from under running mutation batches.
+Nothing was lost — both re-derived their results on fresh byte-identical copies
+and the shared checkout hash verified intact — but it cost a reviewer a
+measurement round.
+
+Three rules follow, each written down only after being violated: a reviewer must
+never write to the shared checkout; a candidate must stay frozen until every
+attached reviewer has reported *and detached*, because a completion notification
+is not the same thing as a released hash; and cleanup must name its own
+directories exactly, never by prefix glob.
+
+### Boundary
+
+No deployment, DNS, billing, provider mutation, or customer-data action. No
+schema, migration, dependency, capability, or surface-count change: migrations
+`0001`–`0008` and `pyproject.toml` are untouched, the capability inventory is
+`84578ae71567ed18` with 274 capabilities and 15 hosted-withheld, and the visible
+counts remain Local 8, National 10, Full Operator 20, JV Partner 11. `5452be3`
+is not rewritten; the correction lands as its own commit so both states stay
+visible.
+
+Fourteen paths change: `deploy/DEPLOY.md`, `docs/launch/PROGRAM_STATUS.md`,
+eight production modules (`config.py`, `platform/secrets.py`,
+`postgres/runtime.py`, `postgres/config.py`, `postgres/oauth_authority.py`,
+`postgres/admission.py`, `postgres/backup.py`, `postgres/migrations.py`), three
+existing test modules, and one new test module.
 
 ## Stripe test integration evidence
 

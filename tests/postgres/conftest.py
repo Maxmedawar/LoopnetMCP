@@ -20,6 +20,21 @@ def _required_program(name: str) -> str:
     return path
 
 
+def _cluster_environment() -> dict[str, str]:
+    """The environment the disposable server is started under.
+
+    ``LC_ALL`` is pinned because leaving it to the developer's shell makes the
+    result of this suite depend on it. On macOS, with ``LC_ALL`` unset, the
+    postmaster becomes multithreaded during start-up and ``pg_ctl`` refuses to
+    start it — every PostgreSQL test then errors, which reads exactly like a
+    regression in the code under test. A gate that can turn red for a reason
+    outside the repository is not release evidence.
+    """
+    environment = dict(os.environ)
+    environment["LC_ALL"] = "C"
+    return environment
+
+
 def _unused_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as candidate:
         candidate.bind(("127.0.0.1", 0))
@@ -55,6 +70,7 @@ class DisposablePostgres:
             check=True,
             capture_output=True,
             text=True,
+            env=_cluster_environment(),
         )
 
     def create_database(self, prefix: str = "phase2") -> tuple[str, str, str]:
@@ -79,6 +95,7 @@ class DisposablePostgres:
             check=True,
             capture_output=True,
             text=True,
+            env=_cluster_environment(),
         )
         self.running = False
 
@@ -103,6 +120,7 @@ class DisposablePostgres:
             check=True,
             capture_output=True,
             text=True,
+            env=_cluster_environment(),
         )
         self.running = True
 
@@ -131,6 +149,7 @@ def _initialize_cluster(
         check=True,
         capture_output=True,
         text=True,
+        env=_cluster_environment(),
     )
     cluster = DisposablePostgres(
         data_dir=data_dir,
@@ -155,6 +174,7 @@ def _initialize_cluster(
         check=True,
         capture_output=True,
         text=True,
+        env=_cluster_environment(),
     )
     if include_test_logins:
         cluster.sql(

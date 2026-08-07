@@ -8,6 +8,13 @@ by a browser, a client, a log, or a serialization can disclose them.
 These pins enforce the properties that make that true, so a later change cannot
 quietly reintroduce a plaintext credential field, a required `.env`, or a route
 that answers with configuration.
+
+One documented exception to the "or a serialization" clause above, so this
+docstring does not overstate what is enforced: a `ValidationError` raised while
+building `CreConfig` still carries the rejected input on `errors()[0]["input"]`
+and in `ValidationError.json()`. `hide_input_in_errors` keeps it out of the
+rendered message, which is what reaches a log or a traceback, and nothing in
+`src/` serializes a configuration error — but the object holds it.
 """
 
 from __future__ import annotations

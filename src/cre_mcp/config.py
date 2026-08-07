@@ -697,6 +697,12 @@ class CreConfig(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
+        # Pydantic renders `input_value=...` into every ValidationError. For a
+        # credential field that means the guard which rejects a bad key prints
+        # that key: a live `CRE_STRIPE_API_KEY` produced an uncaught traceback
+        # on stderr containing the key itself, at import of `cre_mcp.server`.
+        # The refusal must name the field, never the value.
+        hide_input_in_errors=True,
     )
 
 

@@ -69,7 +69,12 @@ class PostgresSettings:
         *,
         dsn_env: str = "MEDAWARCRE_DATABASE_URL",
     ) -> "PostgresSettings":
-        dsn = os.environ.get(dsn_env, "")
+        # Stripped, because the presence check in the production-secret
+        # preflight strips before deciding a value was injected. Without this
+        # the two disagree: a DSN with one stray leading space counts as
+        # present, then reaches psycopg unstripped, which cannot read it as a
+        # URL and falls back to keyword/value parsing.
+        dsn = os.environ.get(dsn_env, "").strip()
 
         def integer(name: str, default: int) -> int:
             raw = os.environ.get(prefix + name)

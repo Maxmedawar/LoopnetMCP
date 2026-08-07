@@ -314,7 +314,16 @@ def _command_connection(dsn: str) -> tuple[str, dict[str, str]]:
         ssl_password = parameters.pop("sslpassword", None)
         safe_connection = make_conninfo(**parameters)
     except Exception as error:
-        raise BackupError("database connection configuration is invalid") from error
+        # Not chained: this function exists to split a credential out of a DSN,
+        # and psycopg's parse error quotes the DSN it could not read. Chaining
+        # would put the password in the traceback of the one code path whose
+        # whole purpose is to keep it out of the child process *command line*,
+        # where any local user can read it with `ps`. It moves the password
+        # into the child's environment, which is the safer of the two channels,
+        # not out of it.
+        raise BackupError(
+            f"database connection configuration is invalid ({type(error).__name__})"
+        ) from None
     environment = os.environ.copy()
     environment.pop("PGPASSWORD", None)
     environment.pop("PGSSLPASSWORD", None)
@@ -1355,7 +1364,11 @@ def restore_backup(
         except BackupVerificationError:
             raise
         except Exception as error:
-            raise BackupVerificationError("restored service smoke failed") from error
+            # Not chained: this wraps connection attempts on two operator DSNs,
+            # and psycopg quotes back a connection string it cannot parse.
+            raise BackupVerificationError(
+                f"restored service smoke failed ({type(error).__name__})"
+            ) from None
     finally:
         _remove_smoke_binding(dsn)
     verified_again = _verify_restored_database(dsn, manifest)

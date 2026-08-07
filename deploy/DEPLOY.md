@@ -81,7 +81,28 @@ the managed store and restart the process. Nothing is captured at import time.
 | `CRE_STRIPE_API_KEY` | `StripeReconciliationService` | Read-only on subscriptions. Test-mode key only until live billing is separately approved. |
 | `CRE_STRIPE_WEBHOOK_SECRET` / `_SECRETS` | webhook signature verification | Verification only; rotating set supported. |
 | `CRE_SKOOL_WEBHOOK_SECRET` / `_SECRETS` | Skool relay verification | Verification only; rotating set supported. |
-| PostgreSQL role credentials | hosted request lifecycle | The exact per-service roles in `deploy/postgres/bootstrap_roles.sql`, not a superuser. |
+
+The PostgreSQL credentials are separate connection strings rather than one
+shared superuser, so a compromise of the request path cannot migrate the schema
+or read the OAuth tables. Each logs in as a distinct login role that is a member
+of exactly one of the roles in `deploy/postgres/bootstrap_roles.sql`.
+
+The serving process **refuses to start** without the first three. It reports the
+missing variable names before it opens a connection or binds a socket, so a
+deployment misconfiguration stops at the boundary rather than surfacing later as
+a connection error whose real cause is an absent credential.
+
+| Variable | Consumer | Scope it needs |
+| --- | --- | --- |
+| `MEDAWARCRE_DATABASE_URL` | hosted request path | Member of `medawarcre_app`. No DDL, no reach into OAuth or provider secrets. |
+| `MEDAWARCRE_OAUTH_DATABASE_URL` | OAuth authority pool | Member of `medawarcre_oauth` only. Execute on the fixed authority function; no deal, search, or provider tables. |
+| `MEDAWARCRE_ADMISSION_DATABASE_URL` | admission and decision audit | Member of `medawarcre_admission` only. Append-only on the decision audit. |
+| `MEDAWARCRE_MIGRATION_DATABASE_URL` | `medawarcre-postgres migrate` | The only credential carrying DDL. Injected for the duration of the command; it must be absent from the serving process. |
+| `MEDAWARCRE_BACKUP_DATABASE_URL` | backup, restore, release check | Member of `medawarcre_backup` only. Read and restore; no application writes. |
+| `MEDAWARCRE_APP_DATABASE_URL` | release smoke check | Member of `medawarcre_app` only; the same underlying role as the request path, rotated with it. |
+
+The last three are operator credentials. They are injected for the duration of
+one command and are not part of the running service's environment.
 
 Provider data-source keys (`CRE_CENSUS_API_KEY`, `CRE_BLS_API_KEY`,
 `CRE_FRED_API_KEY`, `CRE_HUD_API_TOKEN`, `CRE_BEA_API_KEY`,

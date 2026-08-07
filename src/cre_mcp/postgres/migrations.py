@@ -136,7 +136,11 @@ class MigrationRunner:
         _validate_sequence(selected)
         if role != MIGRATION_ROLE:
             raise ValueError("unsupported migration role")
-        self._dsn = dsn
+        # Stripped for the same reason as PostgresSettings.from_env: the guard
+        # above tests `dsn.strip()`, so storing the raw value lets a DSN with
+        # one stray leading space pass validation and then reach psycopg as an
+        # unparseable token, which psycopg quotes back in full.
+        self._dsn = dsn.strip()
         self.migrations = selected
         self.role = role
 

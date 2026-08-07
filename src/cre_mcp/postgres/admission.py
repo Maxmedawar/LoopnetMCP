@@ -169,9 +169,12 @@ class PostgresAdmissionRepository:
         except AdmissionUnavailable:
             raise
         except Exception as error:
+            # Not chained: psycopg echoes a DSN it cannot parse as a URL, so the
+            # cause would carry this credential into every traceback. See the
+            # same treatment in postgres/runtime.py.
             raise AdmissionUnavailable(
-                "admission database is unavailable"
-            ) from error
+                f"admission database is unavailable ({type(error).__name__})"
+            ) from None
 
     def close(self) -> None:
         self._pool.close()

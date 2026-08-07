@@ -106,9 +106,15 @@ def build_postgres_hosted_persistence() -> HostedPersistenceBundle:
     except HostedPersistenceUnavailable:
         raise
     except Exception as error:
+        # Deliberately not chained. psycopg echoes the token it could not parse,
+        # and for a DSN it cannot read as a URL — one leading space is enough,
+        # which is an ordinary managed-store or copy-paste artifact — that token
+        # is the entire connection string, password included. Chaining puts it
+        # in every formatted traceback and in any logging.exception() call. The
+        # exception type is diagnostic and carries none of the input.
         raise HostedPersistenceUnavailable(
-            "hosted PostgreSQL is unavailable"
-        ) from error
+            f"hosted PostgreSQL is unavailable ({type(error).__name__})"
+        ) from None
     finally:
         database.close()
 

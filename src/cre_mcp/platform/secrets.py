@@ -131,7 +131,9 @@ PRODUCTION_SECRETS: tuple[ProductionSecret, ...] = (
         rotation="rotate the login role's password in the managed store, then "
         "restart; the DSN is read per process, never baked into an image",
         least_privilege="logs in as the single login role that is a member of "
-        "medawarcre_app, which is NOLOGIN NOINHERIT and holds no DDL",
+        "medawarcre_app, which is itself NOLOGIN INHERIT and holds no DDL; the "
+        "login member inherits exactly that group's privileges and the runtime "
+        "pool rejects a session that resolves to any other role",
     ),
     ProductionSecret(
         name="MEDAWARCRE_OAUTH_DATABASE_URL",
