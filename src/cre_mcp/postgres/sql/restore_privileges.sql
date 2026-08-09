@@ -189,6 +189,7 @@ GRANT SELECT ON
     medawarcre.deal_exchange_replacements,
     medawarcre.deal_ic_decisions,
     medawarcre.internal_opportunity_sources,
+    medawarcre.internal_opportunity_reviews,
     medawarcre.consents,
     medawarcre.privacy_requests,
     medawarcre.retention_actions,
@@ -296,6 +297,9 @@ GRANT INSERT, UPDATE, DELETE ON
     medawarcre.truth_claims
 TO medawarcre_app;
 GRANT INSERT ON medawarcre.staff_audit_log TO medawarcre_admin;
+-- Append-only, like the staff audit log: SELECT and INSERT only, and the
+-- table's triggers reject UPDATE and DELETE.
+GRANT INSERT ON medawarcre.internal_opportunity_reviews TO medawarcre_admin;
 GRANT SELECT ON ALL TABLES IN SCHEMA medawarcre TO medawarcre_backup;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA medawarcre
 TO medawarcre_app, medawarcre_admin;

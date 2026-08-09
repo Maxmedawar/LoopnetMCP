@@ -937,6 +937,11 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
         ("internal_authorized", ""): {"medawarcre_admin"},
         ("internal_can_mutate", ""): {"medawarcre_admin"},
         ("reject_audit_mutation", ""): set(),
+        # Phase 5K: archives an index entry whose last contributing
+        # observation was deleted. A trigger function, so no role holds
+        # EXECUTE on it directly.
+        ("archive_sourceless_opportunity", ""): set(),
+        ("require_canonical_merge_target", ""): set(),
         ("reject_provider_event_binding_mutation", ""): set(),
         ("enforce_provider_event_attempt_binding", ""): set(),
         ("propagate_provider_event_workspace_binding", ""): set(),

@@ -14,6 +14,7 @@ GLOBAL_TABLES = frozenset(
         "operator_sessions",
         "oauth_authorization_requests",
         "internal_opportunities",
+        "internal_opportunity_reviews",
         "legacy_id_aliases",
     }
 )
@@ -78,6 +79,7 @@ EXPECTED_RLS_TABLES = TENANT_TABLES | frozenset(
         "operator_sessions",
         "oauth_authorization_requests",
         "internal_opportunities",
+        "internal_opportunity_reviews",
         "legacy_id_aliases",
     }
 )
@@ -547,9 +549,16 @@ SERVICE_OWNED_TABLES = frozenset(
     }
 )
 IMMUTABLE_TABLES = frozenset(
-    {"staff_audit_log", "access_decision_audit", "legacy_id_aliases"}
+    {
+        "staff_audit_log",
+        "access_decision_audit",
+        "legacy_id_aliases",
+        "internal_opportunity_reviews",
+    }
 )
-ADMIN_INSERT_ONLY_TABLES = frozenset({"staff_audit_log"})
+ADMIN_INSERT_ONLY_TABLES = frozenset(
+    {"staff_audit_log", "internal_opportunity_reviews"}
+)
 ADMIN_MUTATION_TABLES = (
     EXPECTED_TABLES
     - MIGRATION_MANAGED_TABLES
@@ -557,13 +566,13 @@ ADMIN_MUTATION_TABLES = (
     - SERVICE_OWNED_TABLES
     - IMMUTABLE_TABLES
 )
-EXPECTED_MIGRATION_VERSION = 8
+EXPECTED_MIGRATION_VERSION = 9
 SCHEMA_NAME = "medawarcre"
 
 # Generated from ``catalog.catalog_fingerprint()`` on the reviewed PostgreSQL
 # 16 launch schema. Any schema migration must update this value deliberately.
 EXPECTED_CATALOG_FINGERPRINT = (
-    "bf1bc746d6269d976d4b687b8ccef685a1088bb23d580fa629dd3c856da05e70"
+    "e452f1486a6d2c22731b0f854498d9a4728a9375ac602a5ab217629265a1cbf6"
 )
 
 __all__ = [

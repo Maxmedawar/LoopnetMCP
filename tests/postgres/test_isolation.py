@@ -219,12 +219,22 @@ def test_internal_index_has_no_customer_grant_and_admin_needs_reason(
             "(id,canonical_key,title,status) VALUES (%s,'fixture:1','Combined','active')",
             (opportunity_id,),
         )
+        # Migration 0009 makes provenance mandatory: an index row must name the
+        # deal it came from and the member who owned it, so this fixture now
+        # supplies both. A faithful fixture, not a relaxed assertion — the
+        # test's expectations below are unchanged.
+        deal_row = connection.execute(
+            "SELECT id FROM medawarcre.deals WHERE workspace_id=%s LIMIT 1",
+            (workspace_a,),
+        ).fetchone()
         connection.execute(
             "INSERT INTO medawarcre.internal_opportunity_sources"
             "(workspace_id,opportunity_id,source,source_record_id,access_class,"
-            "score_version,provenance) VALUES (%s,%s,'fixture','a-1','private',"
-            "'score-v1','{}'::jsonb)",
-            (workspace_a, opportunity_id),
+            "score_version,provenance,origin,source_user_id,source_deal_id,"
+            "observed_property_identity) "
+            "VALUES (%s,%s,'fixture','a-1','private','score-v1','{}'::jsonb,"
+            "'deal',%s,%s,'{}'::jsonb)",
+            (workspace_a, opportunity_id, user_a, deal_row[0]),
         )
 
     with psycopg.connect(app_dsn) as connection:

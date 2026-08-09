@@ -1092,7 +1092,14 @@ async def test_rows_upgraded_by_0008_remain_readable_and_mutable(
     from cre_mcp.postgres.migrations import load_migrations
 
     migrations = load_migrations()
-    MigrationRunner(migration_dsn, migrations[:-1]).apply()
+    # Sliced by version rather than by position. These tests exercise the
+    # 0008 deal upgrade, and `migrations[:-1]` meant "everything before 0008"
+    # only while 0008 happened to be last; adding 0009 silently turned it into
+    # "everything including 0008", so the legacy row could no longer be
+    # inserted. Naming the version keeps the test about what it is about.
+    before_0008 = [item for item in migrations if item.version < 8]
+    from_0008 = [item.version for item in migrations if item.version >= 8]
+    MigrationRunner(migration_dsn, before_0008).apply()
 
     actor_id = str(uuid4())
     workspace_id = str(uuid4())
@@ -1121,7 +1128,7 @@ async def test_rows_upgraded_by_0008_remain_readable_and_mutable(
             (workspace_id, actor_id),
         )
 
-    assert MigrationRunner(migration_dsn, migrations).apply() == [migrations[-1].version]
+    assert MigrationRunner(migration_dsn, migrations).apply() == from_0008
 
     stage = _admission("update_deal_stage", actor_user_id=actor_id)
     assign = _admission("assign_deal", actor_user_id=actor_id)
@@ -1646,7 +1653,14 @@ async def test_assign_deal_alone_heals_a_pre_0008_row(
     from cre_mcp.postgres.migrations import load_migrations
 
     migrations = load_migrations()
-    MigrationRunner(migration_dsn, migrations[:-1]).apply()
+    # Sliced by version rather than by position. These tests exercise the
+    # 0008 deal upgrade, and `migrations[:-1]` meant "everything before 0008"
+    # only while 0008 happened to be last; adding 0009 silently turned it into
+    # "everything including 0008", so the legacy row could no longer be
+    # inserted. Naming the version keeps the test about what it is about.
+    before_0008 = [item for item in migrations if item.version < 8]
+    from_0008 = [item.version for item in migrations if item.version >= 8]
+    MigrationRunner(migration_dsn, before_0008).apply()
     actor_id = str(uuid4())
     workspace_id = str(uuid4())
     with psycopg.connect(admin_dsn) as connection:
@@ -1672,7 +1686,7 @@ async def test_assign_deal_alone_heals_a_pre_0008_row(
             "VALUES (%s,'crexi','legacy-assign','Legacy Assign',%s)",
             (workspace_id, actor_id),
         )
-    assert MigrationRunner(migration_dsn, migrations).apply() == [migrations[-1].version]
+    assert MigrationRunner(migration_dsn, migrations).apply() == from_0008
 
     assign = _admission("assign_deal", actor_user_id=actor_id)
     with psycopg.connect(admin_dsn) as connection:
