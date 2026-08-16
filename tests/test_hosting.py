@@ -905,9 +905,34 @@ def test_hosting_artifacts_are_present_and_keep_secrets_out_of_image():
     assert 'python -c "import cre_mcp.server"' in dockerfile
     assert "pip install -e ." not in dockerfile
     assert ".env" in dockerignore
-    assert "LAUNCH BLOCKED" in tunnel
-    assert "service: http://cre-mcp:8000" in tunnel
+    # The tunnel config used to be pinned by its "LAUNCH BLOCKED" header and by
+    # `service: http://cre-mcp:8000`. Both were retired deliberately when the
+    # hosted process became startable: the header was a stale blocker notice,
+    # which is indistinguishable from a live one to whoever reads it next, and
+    # 8000 is held on this host by an unrelated service. What is pinned now is
+    # what still has to be true.
+    #
+    # Inert without a human: neither placeholder may be filled in here.
+    assert "<TUNNEL_UUID>" in tunnel
+    assert "<STAGING_HOSTNAME>" in tunnel
+    # The dedicated loopback port, and not the one that is already taken.
+    assert "http://127.0.0.1:8791" in tunnel
+    assert "http://127.0.0.1:8000" not in tunnel
+    # The catch-all, so adding a second hostname later cannot reach this
+    # service by accident.
     assert "service: http_status:404" in tunnel
+    # Nothing internal may ever get an ingress rule. Asserted over the actual
+    # `service:` values rather than by searching the file for words -- the
+    # first version of this searched for "postgres" and failed on the prose
+    # explaining that PostgreSQL must not be routed, which is a detector that
+    # fires on its own documentation.
+    services = {
+        line.split("service:", 1)[1].strip()
+        for line in tunnel.splitlines()
+        if line.strip().startswith("- service:")
+        or (line.strip().startswith("service:") and "http" in line)
+    }
+    assert services <= {"http://127.0.0.1:8791", "http_status:404"}, services
     assert "Status: **not runnable and not approved for public deployment**" in deploy
     assert "docs/launch/PROGRAM_STATUS.md" in deploy
     assert "there is no supported deployment command" in deploy
