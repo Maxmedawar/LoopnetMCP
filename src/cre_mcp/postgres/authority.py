@@ -26,7 +26,7 @@ ADMISSION_FUNCTIONS = frozenset(
         # that never updates or deletes.
         (
             "project_platform_identity",
-            "uuid, text, text, text, uuid, text, text, text",
+            "uuid, text, uuid, bigint",
         ),
         # Migration 0012, second half, added with the same deliberateness --
         # and it is the larger of the two, so it gets the larger justification.
@@ -49,8 +49,7 @@ ADMISSION_FUNCTIONS = frozenset(
         # the platform stores, before admission is reached at all.
         (
             "project_platform_authority",
-            "uuid, uuid, uuid, text, text[], text, text, timestamp with time zone, "
-            "text, text, jsonb, uuid[], text[]",
+            "uuid, text, uuid, bigint, uuid, text, text, text",
         ),
     }
 )

@@ -449,22 +449,23 @@ GRANT SELECT, INSERT ON medawarcre.access_audit_log TO medawarcre_app;
 GRANT SELECT ON medawarcre.access_audit_log TO medawarcre_admin, medawarcre_backup;
 
 REVOKE ALL ON FUNCTION medawarcre.project_platform_identity(
-    uuid, text, text, text, uuid, text, text, text
+    uuid, text, uuid, bigint
 ) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION medawarcre.project_platform_identity(
-    uuid, text, text, text, uuid, text, text, text
+    uuid, text, uuid, bigint
 ) TO medawarcre_admission, medawarcre_admin;
 
 REVOKE ALL ON FUNCTION medawarcre.project_platform_authority(
-    uuid, uuid, uuid, text, text[], text, text, timestamptz, text, text,
-    jsonb, uuid[], text[]
+    uuid, text, uuid, bigint, uuid, text, text, text
 ) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION medawarcre.project_platform_authority(
-    uuid, uuid, uuid, text, text[], text, text, timestamptz, text, text,
-    jsonb, uuid[], text[]
+    uuid, text, uuid, bigint, uuid, text, text, text
 ) TO medawarcre_admission, medawarcre_admin;
+
+REVOKE INSERT, UPDATE, DELETE ON medawarcre.platform_internal_admins
+    FROM medawarcre_app;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE medawarcre_migration IN SCHEMA medawarcre
     REVOKE ALL ON TABLES FROM PUBLIC;

@@ -115,15 +115,28 @@ PLATFORM_AUTHORITY_TABLES = frozenset(
     }
 )
 
-#: Platform authority tables the application role may fully mutate. It is the
-#: whole set minus the append-only audit, which it may only read and append.
-PLATFORM_APP_MUTABLE_TABLES = PLATFORM_AUTHORITY_TABLES - frozenset(
-    {"platform_admin_audit"}
-)
-
 #: Platform-layer relations the application role may read and append but never
 #: change or remove. Their triggers refuse UPDATE and DELETE as a second layer.
 PLATFORM_APP_APPEND_ONLY_TABLES = frozenset({"platform_admin_audit"})
+
+#: Platform-layer relations the application role may only read.
+#:
+#: `platform_internal_admins` is the one, and it is here because of a confirmed
+#: privilege escalation: `medawarcre_app` is the customer-serving role, and with
+#: INSERT it could write itself the exact `platform_admin` identity
+#: `AdminControlStore._mutate` checks before permitting workspace, grant and
+#: territory mutation. No store writes it on a request path, and
+#: `AuthorityResolver` reads it on every request, so read-only is both
+#: sufficient and necessary. Migration 0013 revokes the writes.
+PLATFORM_APP_READ_ONLY_TABLES = frozenset({"platform_internal_admins"})
+
+#: Platform authority tables the application role may fully mutate: the whole
+#: set minus the append-only audit and the read-only escalation surface.
+PLATFORM_APP_MUTABLE_TABLES = (
+    PLATFORM_AUTHORITY_TABLES
+    - PLATFORM_APP_APPEND_ONLY_TABLES
+    - PLATFORM_APP_READ_ONLY_TABLES
+)
 
 #: The durable access-decision audit sink (migration 0011). Not a tenant table:
 #: its workspace column is the public identifier string, not a uuid, because
@@ -632,7 +645,7 @@ ADMIN_MUTATION_TABLES = (
     - SERVICE_OWNED_TABLES
     - IMMUTABLE_TABLES
 )
-EXPECTED_MIGRATION_VERSION = 12
+EXPECTED_MIGRATION_VERSION = 13
 SCHEMA_NAME = "medawarcre"
 
 # Generated from ``catalog.catalog_fingerprint()`` on the reviewed PostgreSQL
@@ -642,7 +655,7 @@ SCHEMA_NAME = "medawarcre"
 # e452f1486a6d2c22731b0f854498d9a4728a9375ac602a5ab217629265a1cbf6 (0009),
 # 7a4c98bfa5d0e4c1df810091c6507a3b955860486a6d531dfd2e880dc49d7f56 (0011).
 EXPECTED_CATALOG_FINGERPRINT = (
-    "1b1474a0b1d5d693d1141a44dbb287ae26b607ace3d48e70a803789999dd6439"
+    "688739c78ffe154ab63694bedb6dc43517b29c225858b5a9761e07eeebd4bb3c"
 )
 
 __all__ = [
@@ -669,6 +682,7 @@ __all__ = [
     "IMMUTABLE_TABLES",
     "MIGRATION_MANAGED_TABLES",
     "PLATFORM_APP_APPEND_ONLY_TABLES",
+    "PLATFORM_APP_READ_ONLY_TABLES",
     "PLATFORM_APP_MUTABLE_TABLES",
     "PLATFORM_AUTHORITY_TABLES",
     "SCHEMA_NAME",

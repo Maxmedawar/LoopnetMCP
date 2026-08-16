@@ -1,22 +1,17 @@
-"""What migration 0012's identity projection does, and where it stops.
+"""The mechanics of the identity projection: derivation, idempotency, refusal.
 
-`medawarcre.project_platform_identity` closes the *identity* half of the hosted
-admission gap: the platform authority keys identity with bigints, the certified
-tenant schema keys it with uuids, and `PostgresAdmissionRepository.admit` parses
-its actor and session as uuids. These tests pin that half -- idempotency, tenant
-isolation, and the projected values matching what the caller read out of the
-platform stores.
+The security properties live next door in `test_projection_is_a_projection.py`,
+which pins the four defects an independent review found in migration 0012. This
+file covers the parts that are true regardless of those: that the derived
+identifiers are stable and idempotent, that two platform workspaces stay
+distinct, and that a projection with nothing to copy refuses rather than
+inventing.
 
-They also pin the half that is *not* closed, and the exact reason it cannot be
-closed from inside this module. `medawarcre.atomic_admit_tool_call` (migration
-0003) re-resolves the whole authority in SQL from a `credential` CTE over
-`oauth_sessions`, `oauth_clients`, `access_grants`, `plans`, `territories` and
-`workspace_accounts`. Nothing writes those rows, so admission returns
-`authority_missing`. Projecting them needs the admission role to be able to
-execute a call it cannot execute today, and `ADMISSION_FUNCTIONS` in
-`cre_mcp/postgres/authority.py` is an exact-set pin that refuses both ways of
-providing one. `test_extending_the_projection_needs_the_admission_pin_widened`
-is that refusal, executed rather than asserted in prose.
+This file previously tested migration 0012's API, which accepted the projected
+values as arguments, and its last test pinned "extending this needs the
+admission pin widened" as a blocker. Both are gone: 0013 replaced the functions
+so they read the platform relations, and the pin was widened deliberately with
+its reasoning recorded in `postgres/authority.py`.
 """
 
 from __future__ import annotations
@@ -24,326 +19,180 @@ from __future__ import annotations
 import psycopg
 import pytest
 
-from cre_mcp.postgres.authority import (
-    UnsafeDatabaseRoleError,
-    assert_admission_object_authority,
+from cre_mcp.platform.projected_ids import (
+    IDENTITY_NAMESPACE,
+    ProjectedIdentityError,
+    session_uuid,
+    user_uuid,
+    workspace_uuid,
 )
 from cre_mcp.postgres.identity_projection import (
     IdentityProjectionUnavailable,
     PlatformIdentityProjection,
-    certified_role,
-    user_uuid,
-    workspace_uuid,
 )
 from cre_mcp.postgres.migrations import MigrationRunner
 
-# The certified relations the `credential` CTE in migration 0003 reads, and
-# which nothing in the product writes. `workspace_accounts` is easy to miss:
-# the CTE LEFT JOINs it and the authority reason ladder turns a missing row
-# into `account_missing`, so projecting the session and the grant without it
-# still denies.
-AUTHORITY_RELATIONS = (
-    "oauth_clients",
-    "oauth_sessions",
-    "access_grants",
-    "territories",
-    "workspace_accounts",
-)
-
-
-def _admission_dsn(app_dsn: str) -> str:
-    return app_dsn.replace("user=medawarcre_test_app", "user=medawarcre_test_admission")
-
 
 @pytest.fixture
-def migrated(postgres_database):
-    """A migrated cluster, plus the superuser and admission DSNs for it."""
-    superuser_dsn, migration_dsn, app_dsn = postgres_database
+def projection(postgres_database):
+    _, migration_dsn, app_dsn = postgres_database
     MigrationRunner(migration_dsn).apply()
-    return superuser_dsn, migration_dsn, _admission_dsn(app_dsn)
+    admission_dsn = app_dsn.replace(
+        "user=medawarcre_test_app", "user=medawarcre_test_admission"
+    )
+    owner_dsn = app_dsn.replace("user=medawarcre_test_app", "user=postgres")
+    return PlatformIdentityProjection(admission_dsn), owner_dsn
 
 
-def _rows(dsn: str, statement: str, parameters=()):
-    with psycopg.connect(dsn) as connection:
+def _owner(owner_dsn: str, statement: str, parameters=()):
+    with psycopg.connect(owner_dsn) as connection:
         connection.execute("SET search_path TO medawarcre, pg_catalog")
-        return connection.execute(statement, parameters).fetchall()
+        result = connection.execute(statement, parameters).fetchall()
+        connection.commit()
+        return result
 
 
-def _one(dsn: str, statement: str, parameters=()):
-    rows = _rows(dsn, statement, parameters)
-    return None if not rows else rows[0]
+def _seed_platform(owner_dsn: str, public_id: str, name: str) -> tuple[int, int]:
+    """One platform workspace, user and membership — the projection's source."""
+    with psycopg.connect(owner_dsn) as connection:
+        connection.execute("SET search_path TO medawarcre, pg_catalog")
+        plan = connection.execute(
+            "INSERT INTO platform_plans(key,name,created_at,updated_at) "
+            "VALUES (%s,%s,'2026-01-01','2026-01-01') "
+            "ON CONFLICT (key) DO UPDATE SET name=EXCLUDED.name RETURNING id",
+            ("local", "Local"),
+        ).fetchone()[0]
+        workspace = connection.execute(
+            "INSERT INTO platform_workspaces(public_id,name,plan_id,created_at,"
+            "updated_at) VALUES (%s,%s,%s,'2026-01-01','2026-01-01') RETURNING id",
+            (public_id, name, plan),
+        ).fetchone()[0]
+        user = connection.execute(
+            "INSERT INTO platform_users(email,name,created_at,updated_at) "
+            "VALUES (%s,%s,'2026-01-01','2026-01-01') RETURNING id",
+            (f"{public_id}@example.test", f"{name} Member"),
+        ).fetchone()[0]
+        connection.execute(
+            "INSERT INTO platform_memberships(workspace_id,user_id,role,"
+            "created_at,updated_at) VALUES (%s,%s,'member','2026-01-01',"
+            "'2026-01-01')",
+            (workspace, user),
+        )
+        connection.commit()
+    return workspace, user
 
 
-def _ensure(projection: PlatformIdentityProjection, **overrides):
-    """Project one platform identity, with the shape `admit()` supplies."""
-    payload = {
-        "workspace_public_id": "ws_projection_alpha",
-        "workspace_name": "Projection Alpha",
-        "plan_key": "local",
-        "platform_user_id": "41",
-        "user_email": "platform-41@platform.medawarcre.invalid",
-        "user_name": "platform-user-41",
-        "role": "owner",
-    }
-    payload.update(overrides)
-    return projection.ensure(**payload)
+# --- derivation --------------------------------------------------------------
 
 
-def test_projected_values_match_the_platform_source(migrated):
-    superuser_dsn, _, admission_dsn = migrated
-    projection = PlatformIdentityProjection(admission_dsn)
+def test_the_derived_identifiers_are_stable_and_namespaced() -> None:
+    assert workspace_uuid("ws_alpha") == workspace_uuid("ws_alpha")
+    assert workspace_uuid("ws_alpha") != workspace_uuid("ws_beta")
+    assert user_uuid("41") != session_uuid("41")
+    assert str(IDENTITY_NAMESPACE)
 
-    resolved_workspace, resolved_user = _ensure(projection)
 
-    assert resolved_workspace == workspace_uuid("ws_projection_alpha")
-    assert resolved_user == user_uuid("41")
+def test_derivation_is_idempotent_on_an_already_derived_value() -> None:
+    """The context is built once and read many times.
 
-    workspace = _one(
-        superuser_dsn,
-        "SELECT public_id, name, state, plan_id FROM workspaces WHERE id=%s",
-        (resolved_workspace,),
+    A second application would silently produce a different tenant, so a value
+    that is already a uuid comes back unchanged.
+    """
+    once = user_uuid("41")
+    assert user_uuid(once) == once
+    assert user_uuid(str(once)) == once
+    assert session_uuid(session_uuid("sess_x")) == session_uuid("sess_x")
+
+
+def test_an_empty_identifier_is_refused() -> None:
+    for call in (workspace_uuid, user_uuid, session_uuid):
+        with pytest.raises(ProjectedIdentityError):
+            call("   ")
+
+
+# --- projection --------------------------------------------------------------
+
+
+def test_the_projection_copies_the_platform_row(projection) -> None:
+    desk, owner_dsn = projection
+    _workspace, user = _seed_platform(owner_dsn, "ws_copy", "Copy Tenant")
+
+    workspace_id, user_id = desk.ensure(
+        workspace_public_id="ws_copy", platform_user_id=user
     )
-    assert workspace[0] == "ws_projection_alpha"
-    assert workspace[1] == "Projection Alpha"
-    assert workspace[2] == "active"
+    assert workspace_id == workspace_uuid("ws_copy")
+    assert user_id == user_uuid(str(user))
 
-    plan = _one(superuser_dsn, "SELECT id, plan_key FROM plans WHERE plan_key='local'")
-    assert plan is not None
-    assert workspace[3] == plan[0]
-
-    user = _one(
-        superuser_dsn,
-        "SELECT email, name FROM users WHERE id=%s",
-        (resolved_user,),
-    )
-    assert user == ("platform-41@platform.medawarcre.invalid", "platform-user-41")
-
-    membership = _one(
-        superuser_dsn,
-        "SELECT role, state FROM memberships WHERE workspace_id=%s AND user_id=%s",
-        (resolved_workspace, resolved_user),
-    )
-    assert membership == ("owner", "active")
-
-
-def test_replaying_the_same_request_projects_nothing_new(migrated):
-    """Idempotency: the same request twice is one row, not two, and no rotation."""
-    superuser_dsn, _, admission_dsn = migrated
-    projection = PlatformIdentityProjection(admission_dsn)
-
-    first = _ensure(projection)
-    before = _one(
-        superuser_dsn,
-        "SELECT w.id, w.public_id, w.name, w.plan_id, w.state, w.created_at, "
-        "w.updated_at, m.id, m.role, m.state, u.email "
-        "FROM workspaces w "
-        "JOIN memberships m ON m.workspace_id = w.id "
-        "JOIN users u ON u.id = m.user_id",
-    )
-
-    second = _ensure(projection)
-    third = _ensure(projection)
-    assert first == second == third
-
-    after = _one(
-        superuser_dsn,
-        "SELECT w.id, w.public_id, w.name, w.plan_id, w.state, w.created_at, "
-        "w.updated_at, m.id, m.role, m.state, u.email "
-        "FROM workspaces w "
-        "JOIN memberships m ON m.workspace_id = w.id "
-        "JOIN users u ON u.id = m.user_id",
-    )
-    # Every column, including the surrogate membership id and both timestamps:
-    # a projection that re-inserted, or that rotated an identifier, would show
-    # up here even if the counts happened to stay right.
-    assert after == before
-
-    for relation in ("users", "workspaces", "memberships", "plans"):
-        assert _one(superuser_dsn, f"SELECT count(*) FROM {relation}")[0] == 1
-
-
-def test_two_platform_workspaces_stay_isolated(migrated):
-    superuser_dsn, _, admission_dsn = migrated
-    projection = PlatformIdentityProjection(admission_dsn)
-
-    alpha_workspace, alpha_user = _ensure(projection)
-    beta_workspace, beta_user = _ensure(
-        projection,
-        workspace_public_id="ws_projection_beta",
-        workspace_name="Projection Beta",
-        plan_key="national",
-        platform_user_id="77",
-        user_email="platform-77@platform.medawarcre.invalid",
-        user_name="platform-user-77",
-        role="member",
-    )
-
-    assert alpha_workspace != beta_workspace
-    assert alpha_user != beta_user
-
-    memberships = _rows(
-        superuser_dsn,
-        "SELECT workspace_id, user_id, role FROM memberships ORDER BY role",
-    )
-    assert memberships == [
-        (beta_workspace, beta_user, "member"),
-        (alpha_workspace, alpha_user, "owner"),
+    assert _owner(
+        owner_dsn, "SELECT public_id, name, state FROM workspaces"
+    ) == [("ws_copy", "Copy Tenant", "active")]
+    assert _owner(owner_dsn, "SELECT email FROM users") == [
+        ("ws_copy@example.test",)
+    ]
+    # The platform's own role, not a fabricated 'owner'.
+    assert _owner(owner_dsn, "SELECT role, state FROM memberships") == [
+        ("member", "active")
     ]
 
-    # Neither workspace acquired the other's plan.
-    assert _one(
-        superuser_dsn,
-        "SELECT p.plan_key FROM workspaces w JOIN plans p ON p.id=w.plan_id "
-        "WHERE w.id=%s",
-        (alpha_workspace,),
-    ) == ("local",)
-    assert _one(
-        superuser_dsn,
-        "SELECT p.plan_key FROM workspaces w JOIN plans p ON p.id=w.plan_id "
-        "WHERE w.id=%s",
-        (beta_workspace,),
-    ) == ("national",)
+
+def test_projecting_twice_changes_nothing(projection) -> None:
+    desk, owner_dsn = projection
+    _workspace, user = _seed_platform(owner_dsn, "ws_twice", "Twice Tenant")
+
+    first = desk.ensure(workspace_public_id="ws_twice", platform_user_id=user)
+    before = _owner(owner_dsn, "SELECT id, public_id FROM workspaces")
+    for _ in range(2):
+        assert desk.ensure(
+            workspace_public_id="ws_twice", platform_user_id=user
+        ) == first
+    assert _owner(owner_dsn, "SELECT id, public_id FROM workspaces") == before
+    for table in ("users", "workspaces", "memberships"):
+        assert _owner(owner_dsn, f"SELECT count(*) FROM {table}") == [(1,)]
 
 
-def test_an_unmapped_role_is_refused_rather_than_widened(migrated):
-    """Both halves refuse it: the Python map, and the function itself."""
-    _, _, admission_dsn = migrated
-    projection = PlatformIdentityProjection(admission_dsn)
+def test_two_platform_workspaces_stay_distinct(projection) -> None:
+    desk, owner_dsn = projection
+    _a, user_a = _seed_platform(owner_dsn, "ws_one", "One Tenant")
+    _b, user_b = _seed_platform(owner_dsn, "ws_two", "Two Tenant")
+
+    one = desk.ensure(workspace_public_id="ws_one", platform_user_id=user_a)
+    two = desk.ensure(workspace_public_id="ws_two", platform_user_id=user_b)
+    assert one[0] != two[0]
+    assert one[1] != two[1]
+    assert sorted(
+        row[0] for row in _owner(owner_dsn, "SELECT public_id FROM workspaces")
+    ) == ["ws_one", "ws_two"]
+    assert _owner(owner_dsn, "SELECT count(*) FROM memberships") == [(2,)]
+
+
+def test_a_workspace_the_platform_does_not_hold_is_refused(projection) -> None:
+    desk, owner_dsn = projection
+    _workspace, user = _seed_platform(owner_dsn, "ws_real", "Real Tenant")
 
     with pytest.raises(IdentityProjectionUnavailable):
-        _ensure(projection, role="guest")
+        desk.ensure(workspace_public_id="ws_absent", platform_user_id=user)
+    assert _owner(
+        owner_dsn, "SELECT count(*) FROM workspaces WHERE public_id='ws_absent'"
+    ) == [(0,)]
+
+
+def test_a_user_who_is_not_a_member_is_refused(projection) -> None:
+    """Membership is the authorization fact, not a formality."""
+    desk, owner_dsn = projection
+    _workspace, member = _seed_platform(owner_dsn, "ws_member", "Member Tenant")
+    with psycopg.connect(owner_dsn) as connection:
+        connection.execute("SET search_path TO medawarcre, pg_catalog")
+        stranger = connection.execute(
+            "INSERT INTO platform_users(email,name,created_at,updated_at) "
+            "VALUES ('stranger@example.test','Stranger','2026-01-01',"
+            "'2026-01-01') RETURNING id"
+        ).fetchone()[0]
+        connection.commit()
+
     with pytest.raises(IdentityProjectionUnavailable):
-        certified_role("superuser")
-
-    with psycopg.connect(admission_dsn) as connection:
-        connection.execute("SET search_path TO pg_catalog")
-        connection.execute("SET ROLE medawarcre_admission")
-        with pytest.raises(psycopg.errors.CheckViolation):
-            connection.execute(
-                "SELECT medawarcre.project_platform_identity("
-                "%s,%s,%s,%s,%s,%s,%s,%s)",
-                (
-                    workspace_uuid("ws_projection_alpha"),
-                    "ws_projection_alpha",
-                    "Projection Alpha",
-                    "local",
-                    user_uuid("41"),
-                    "platform-41@platform.medawarcre.invalid",
-                    "platform-user-41",
-                    "guest",
-                ),
-            )
-
-
-def test_the_authority_half_of_the_projection_is_still_absent(migrated):
-    """Identity projects; authority does not, and admission reads authority.
-
-    This is the live statement of the remaining gap. After a successful
-    projection the certified schema holds the user, workspace and membership
-    the `credential` CTE joins -- and none of the five relations it also needs.
-    """
-    superuser_dsn, _, admission_dsn = migrated
-    projection = PlatformIdentityProjection(admission_dsn)
-    resolved_workspace, resolved_user = _ensure(projection)
-
-    for relation in AUTHORITY_RELATIONS:
-        assert _one(superuser_dsn, f"SELECT count(*) FROM {relation}")[0] == 0, (
-            f"{relation} unexpectedly populated; if the authority projection "
-            "has landed, this test and its docstring are stale"
-        )
-
-    # The identity half really is there, so the gap is authority and nothing
-    # else -- not a missing user or a mis-derived uuid.
-    assert _one(
-        superuser_dsn,
-        "SELECT count(*) FROM memberships WHERE workspace_id=%s AND user_id=%s "
-        "AND state='active'",
-        (resolved_workspace, resolved_user),
-    ) == (1,)
-
-
-def test_extending_the_projection_needs_the_admission_pin_widened(migrated):
-    """The exact wall the authority projection hits.
-
-    `ADMISSION_FUNCTIONS` in `cre_mcp/postgres/authority.py` is an exact set of
-    (function name, argument types) that `medawarcre_admission` may execute, and
-    `assert_admission_object_authority` compares the live catalog against it on
-    *every* admission connection (`postgres/admission.py`), not only in tests.
-    Both ways of giving the admission role the ability to project an oauth
-    session, a grant, a territory and a workspace account are therefore refused
-    until that set is edited:
-
-      * a second SECURITY DEFINER function granted to the role, and
-      * widening `project_platform_identity`'s own signature -- including with
-        DEFAULTed parameters, because `pg_catalog.oidvectortypes(proargtypes)`
-        reports the full argument vector regardless of defaults.
-
-    Deleting this test to unblock the work would be deleting the review gate,
-    which is what the pin exists to force.
-    """
-    _, migration_dsn, admission_dsn = migrated
-
-    with psycopg.connect(admission_dsn) as connection:
-        assert_admission_object_authority(connection)
-
-    with psycopg.connect(migration_dsn) as connection:
-        connection.execute("SET ROLE medawarcre_migration")
-        connection.execute(
-            "CREATE FUNCTION medawarcre.project_platform_authority("
-            "p_workspace_id uuid, p_session_id uuid, p_expires_at timestamptz) "
-            "RETURNS void LANGUAGE sql SECURITY DEFINER "
-            "SET search_path = pg_catalog, medawarcre AS $$ SELECT $$"
-        )
-        connection.execute(
-            "GRANT EXECUTE ON FUNCTION medawarcre.project_platform_authority("
-            "uuid, uuid, timestamptz) TO medawarcre_admission"
-        )
-        connection.commit()
-
-    with psycopg.connect(admission_dsn) as connection:
-        with pytest.raises(UnsafeDatabaseRoleError):
-            assert_admission_object_authority(connection)
-
-    with psycopg.connect(migration_dsn) as connection:
-        connection.execute("SET ROLE medawarcre_migration")
-        connection.execute(
-            "DROP FUNCTION medawarcre.project_platform_authority("
-            "uuid, uuid, timestamptz)"
-        )
-        connection.execute(
-            "CREATE FUNCTION medawarcre.project_platform_identity("
-            "p_workspace_id uuid, p_workspace_public_id text, "
-            "p_workspace_name text, p_plan_key text, p_user_id uuid, "
-            "p_user_email text, p_user_name text, p_role text, "
-            "p_session_id uuid DEFAULT NULL) "
-            "RETURNS uuid LANGUAGE sql SECURITY DEFINER "
-            "SET search_path = pg_catalog, medawarcre "
-            "AS $$ SELECT p_workspace_id $$"
-        )
-        connection.execute(
-            "GRANT EXECUTE ON FUNCTION medawarcre.project_platform_identity("
-            "uuid, text, text, text, uuid, text, text, text, uuid) "
-            "TO medawarcre_admission"
-        )
-        connection.commit()
-
-    with psycopg.connect(admission_dsn) as connection:
-        connection.execute("SET search_path TO pg_catalog")
-        signatures = {
-            row[0]
-            for row in connection.execute(
-                "SELECT p.proname || '|' || "
-                "pg_catalog.oidvectortypes(p.proargtypes) "
-                "FROM pg_catalog.pg_proc p "
-                "JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace "
-                "WHERE n.nspname='medawarcre' "
-                "AND p.proname='project_platform_identity'"
-            ).fetchall()
-        }
-        assert signatures == {
-            "project_platform_identity|uuid, text, text, text, uuid, text, text, text",
-            "project_platform_identity|uuid, text, text, text, uuid, text, text, "
-            "text, uuid",
-        }
-        with pytest.raises(UnsafeDatabaseRoleError):
-            assert_admission_object_authority(connection)
+        desk.ensure(workspace_public_id="ws_member", platform_user_id=stranger)
+    # And nothing partial survives: no certified user row for the stranger.
+    assert _owner(
+        owner_dsn,
+        "SELECT count(*) FROM users WHERE email='stranger@example.test'",
+    ) == [(0,)]

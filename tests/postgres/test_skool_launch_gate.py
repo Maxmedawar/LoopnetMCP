@@ -112,6 +112,19 @@ def _one(dsn: str, statement: str, parameters=()):
         return connection.execute(statement, parameters).fetchone()
 
 
+def _owner_one(dsn: str, statement: str, parameters=()):
+    """Read as the cluster owner, bypassing row-level security deliberately.
+
+    An application-role connection with no admitted request sees nothing, so a
+    negative assertion made through one is true regardless of what is stored.
+    """
+    with psycopg.connect(
+        dsn.replace("user=medawarcre_test_app", "user=postgres")
+    ) as connection:
+        connection.execute("SET search_path TO medawarcre, pg_catalog")
+        return connection.execute(statement, parameters).fetchone()
+
+
 def _skool_grant(dsn: str, workspace_row_id: int):
     row = _one(
         dsn,
@@ -177,7 +190,9 @@ async def test_skool_access_is_granted_and_revoked_on_the_postgresql_path(
         "launch-gate-operator@example.test", "Launch Gate Operator"
     )
     assert operator is not None
-    with psycopg.connect(dsn) as connection:
+    with psycopg.connect(
+        dsn.replace("user=medawarcre_test_app", "user=postgres")
+    ) as connection:
         connection.execute("SET search_path TO medawarcre, pg_catalog")
         connection.execute(
             "INSERT INTO platform_internal_admins"
@@ -390,7 +405,9 @@ async def test_admission_refuses_identity_that_never_passed_the_resolver(
         actor_id="4242",
         session_id="sess_never_resolved",
     )
-    with pytest.raises(ValueError, match="must be a UUID"):
+    from cre_mcp.postgres.identity_projection import IdentityProjectionUnavailable
+
+    with pytest.raises(IdentityProjectionUnavailable, match="resolver-issued"):
         bundle.admission_repository.admit(
             raw_platform_identity,
             "cre_pipeline",
@@ -401,8 +418,23 @@ async def test_admission_refuses_identity_that_never_passed_the_resolver(
 
     # And nothing was projected for it: a refused admission must not leave a
     # tenant behind.
-    assert _one(
+    #
+    # Read as the cluster owner. The first version of this line read as
+    # `medawarcre_test_app` under row-level security with no workspace bound,
+    # where the count is 0 for every input -- so it asserted nothing at all,
+    # and an independent reviewer confirmed the row was there. That is the same
+    # vacuity class this program has a documented history of, and it is why the
+    # helper below is a separate one with the reason attached rather than the
+    # convenient one already in the file.
+    assert _owner_one(
         dsn,
         "SELECT count(*) FROM workspaces WHERE public_id=%s",
         ("ws_never_resolved",),
+    )[0] == 0
+    # The same for a workspace that does exist in the platform authority but
+    # whose caller supplied a fabricated profile: the projection reads the
+    # grant rather than the argument, so there is nothing to fabricate.
+    assert _owner_one(
+        dsn,
+        "SELECT count(*) FROM access_grants WHERE profile='full_operator'",
     )[0] == 0

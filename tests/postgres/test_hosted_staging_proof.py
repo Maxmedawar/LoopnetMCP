@@ -205,7 +205,9 @@ async def test_two_customers_share_a_server_and_never_each_other_s_data(
     operator = await repository.create_user(
         "staging-operator@example.test", "Staging Operator"
     )
-    with psycopg.connect(dsn) as connection:
+    with psycopg.connect(
+        dsn.replace("user=medawarcre_test_app", "user=postgres")
+    ) as connection:
         connection.execute("SET search_path TO medawarcre, pg_catalog")
         connection.execute(
             "INSERT INTO platform_internal_admins"

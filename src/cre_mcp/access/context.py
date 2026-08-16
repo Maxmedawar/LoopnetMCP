@@ -35,6 +35,19 @@ class TenantContext(BaseModel):
     display_name: str = ""
     actor_id: str = ""
     session_id: str = ""
+    # The platform authority's own keys for the same actor and session.
+    #
+    # On the hosted PostgreSQL backend `actor_id` and `session_id` carry the
+    # derived certified uuids, because atomic admission parses them as uuids and
+    # row-level security compares them. The identity projection still needs the
+    # bigint and the session string, because they are how it finds the
+    # `platform_*` rows it is allowed to copy — and being unable to find them is
+    # what stops it projecting a tenant that does not exist.
+    #
+    # Empty on the local file-backed default, where `actor_id` is already the
+    # platform key and nothing projects.
+    platform_actor_id: str = ""
+    platform_session_id: str = ""
 
 
 _current: ContextVar[TenantContext | None] = ContextVar(

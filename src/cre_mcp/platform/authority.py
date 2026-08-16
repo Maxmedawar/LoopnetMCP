@@ -367,6 +367,10 @@ class AuthorityResolver:
                 display_name=workspace.name,
                 actor_id=_certified_actor_id(membership),
                 session_id=_certified_session_id(session.session_id),
+                platform_actor_id=(
+                    "" if membership is None else str(membership.user_id)
+                ),
+                platform_session_id=str(session.session_id),
             )
 
         return AuthorityOutcome(

@@ -69,58 +69,60 @@ def certified_role(platform_role: str) -> str:
 
 
 class PlatformIdentityProjection:
-    """Project the platform's identity for one request, idempotently."""
+    """Copy the platform authority's own rows into the certified schema.
+
+    Every method takes identifiers and nothing else. The values -- workspace
+    name, user email, membership role, account state, grant profile and plan,
+    quota limits, territories -- are read from the `platform_*` relations
+    inside the SECURITY DEFINER function, so a caller cannot supply them and a
+    row the platform authority does not hold cannot be projected.
+
+    That is a correction, not a design note. Migration 0012 accepted those
+    values as arguments, and an independent review projected a workspace that
+    did not exist, with `full_operator` and a quota of 999999, straight into
+    the certified schema. Migration 0013 replaced both functions.
+    """
 
     def __init__(self, dsn: str) -> None:
         if not dsn.strip():
             raise ValueError("a PostgreSQL DSN is required")
         self._dsn = dsn.strip()
 
-    def ensure(
-        self,
-        *,
-        workspace_public_id: str,
-        workspace_name: str,
-        plan_key: str | None,
-        platform_user_id: Any,
-        user_email: str,
-        user_name: str,
-        role: str,
-    ) -> tuple[UUID, UUID]:
-        """Return (workspace uuid, user uuid), creating certified rows if new."""
-        target_workspace = workspace_uuid(workspace_public_id)
-        target_user = user_uuid(platform_user_id)
+    def _call(self, statement: str, parameters: tuple, *, label: str):
         try:
             with psycopg.connect(self._dsn) as connection:
                 connection.execute("SET search_path TO pg_catalog")
                 # The admission login is NOINHERIT by contract, so its group's
-                # EXECUTE grant is not active until the role is assumed. Without
-                # this the call fails InsufficientPrivilege and the request is
-                # refused with a message that names neither the role nor the
-                # function.
+                # EXECUTE grant is not active until the role is assumed.
                 connection.execute("SET ROLE medawarcre_admission")
-                row = connection.execute(
-                    "SELECT medawarcre.project_platform_identity("
-                    "%s,%s,%s,%s,%s,%s,%s,%s)",
-                    (
-                        target_workspace,
-                        workspace_public_id.strip(),
-                        (workspace_name or workspace_public_id).strip(),
-                        plan_key,
-                        target_user,
-                        user_email,
-                        user_name,
-                        certified_role(role),
-                    ),
-                ).fetchone()
+                row = connection.execute(statement, parameters).fetchone()
                 connection.commit()
-        except IdentityProjectionUnavailable:
-            raise
+                return row
         except psycopg.Error as error:
             # Not chained: a psycopg error can echo the DSN it could not parse.
             raise IdentityProjectionUnavailable(
-                f"identity projection failed ({type(error).__name__})"
+                f"{label} failed ({type(error).__name__})"
             ) from None
+
+    def ensure(
+        self,
+        *,
+        workspace_public_id: str,
+        platform_user_id: Any,
+    ) -> tuple[UUID, UUID]:
+        """Return (workspace uuid, user uuid), refusing an unknown identity."""
+        target_workspace = workspace_uuid(workspace_public_id)
+        target_user = user_uuid(platform_user_id)
+        row = self._call(
+            "SELECT medawarcre.project_platform_identity(%s,%s,%s,%s)",
+            (
+                target_workspace,
+                workspace_public_id.strip(),
+                target_user,
+                int(platform_user_id),
+            ),
+            label="identity projection",
+        )
         if row is None or row[0] is None:
             raise IdentityProjectionUnavailable("identity projection returned no row")
         return UUID(str(row[0])), target_user
@@ -129,57 +131,29 @@ class PlatformIdentityProjection:
         self,
         *,
         workspace_id: UUID,
+        workspace_public_id: str,
         user_id: UUID,
+        platform_user_id: Any,
         session_id: UUID,
-        client_id: str,
-        scopes: tuple[str, ...],
+        platform_session_id: str,
         audience: str,
         resource: str,
-        access_expires_at: Any,
-        profile: str,
-        plan_key: str | None,
-        daily_quotas: dict[str, int] | None,
-        territories: tuple[str, ...],
-        workspace_public_id: str,
     ) -> None:
         """Project the authority rows admission's credential CTE reads."""
-        territory_values = [
-            value.strip() for value in territories if value and value.strip()
-        ]
-        territory_ids = [
-            territory_uuid(workspace_public_id, index, value)
-            for index, value in enumerate(territory_values)
-        ]
-        try:
-            with psycopg.connect(self._dsn) as connection:
-                connection.execute("SET search_path TO pg_catalog")
-                connection.execute("SET ROLE medawarcre_admission")
-                connection.execute(
-                    "SELECT medawarcre.project_platform_authority("
-                    "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                    (
-                        workspace_id,
-                        user_id,
-                        session_id,
-                        client_id,
-                        list(scopes) or ["mcp:tools"],
-                        audience,
-                        resource,
-                        access_expires_at,
-                        profile,
-                        plan_key,
-                        Jsonb(dict(daily_quotas or {})),
-                        territory_ids,
-                        territory_values,
-                    ),
-                )
-                connection.commit()
-        except IdentityProjectionUnavailable:
-            raise
-        except psycopg.Error as error:
-            raise IdentityProjectionUnavailable(
-                f"authority projection failed ({type(error).__name__})"
-            ) from None
+        self._call(
+            "SELECT medawarcre.project_platform_authority(%s,%s,%s,%s,%s,%s,%s,%s)",
+            (
+                workspace_id,
+                workspace_public_id.strip(),
+                user_id,
+                int(platform_user_id),
+                session_id,
+                str(platform_session_id),
+                audience,
+                resource,
+            ),
+            label="authority projection",
+        )
 
 
 class ProjectingAdmissionRepository:
@@ -205,46 +179,36 @@ class ProjectingAdmissionRepository:
         self._session_ttl = session_ttl
 
     def admit(self, context: Any, tool_name: str, arguments: dict, **kwargs: Any):
-        actor = getattr(context, "actor_id", "")
-        session = getattr(context, "session_id", "")
+        actor = getattr(context, "platform_actor_id", "") or ""
+        session = getattr(context, "platform_session_id", "") or ""
         workspace_public_id = getattr(context, "workspace_id", "")
+        if not actor or not session:
+            # The context did not come from AuthorityResolver on the hosted
+            # backend. Refused rather than projected: the platform keys are how
+            # the projection finds the rows it is allowed to copy, and without
+            # them it would have nothing to check the caller against.
+            raise IdentityProjectionUnavailable(
+                "hosted admission requires a resolver-issued platform identity"
+            )
         workspace_id, projected_user = self._projection.ensure(
             workspace_public_id=workspace_public_id,
-            workspace_name=getattr(context, "display_name", "") or "",
-            plan_key=getattr(context, "plan", None),
             platform_user_id=actor,
-            user_email=f"{user_uuid(actor)}@platform.medawarcre.invalid",
-            user_name=f"platform-user-{actor}",
-            role="owner" if getattr(context, "profile", "") else "member",
         )
         self._projection.ensure_authority(
             workspace_id=workspace_id,
+            workspace_public_id=workspace_public_id,
             user_id=projected_user,
+            platform_user_id=actor,
             session_id=session_uuid(session),
-            client_id=f"projected-{session_uuid(session)}",
-            scopes=("mcp:tools",),
+            platform_session_id=session,
             audience=self._audience(),
             resource=self._resource(),
-            # The projected session must not outlive the live one by more than
-            # the window this request needs. It is bounded rather than copied
-            # because `TenantContext` carries no expiry -- the live session was
-            # already validated by AuthorityResolver on this request, and the
-            # next request revalidates it before reaching here.
-            access_expires_at=datetime.now(UTC) + self._session_ttl,
-            profile=getattr(context, "profile", ""),
-            plan_key=getattr(context, "plan", None),
-            daily_quotas=dict(getattr(context, "quota_limits", {}) or {}),
-            territories=tuple(getattr(context, "territories", ()) or ()),
-            workspace_public_id=workspace_public_id,
         )
         # No translation on the way in or out. `AuthorityResolver` already puts
         # the certified uuids in the context when the PostgreSQL backend is
         # installed, so the context, the admission outcome, the RLS session
         # variables and every domain repository's `compare_digest` check all
-        # see the same values. An earlier version translated here instead and
-        # restored the platform ids on the outcome; that satisfied admission
-        # and finalization and silently broke row-level security, because
-        # `admitted_connection` sets `app.actor_user_id` from the outcome.
+        # see the same values.
         return self._inner.admit(context, tool_name, arguments, **kwargs)
 
     def _audience(self) -> str:

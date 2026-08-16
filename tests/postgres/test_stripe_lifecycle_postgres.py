@@ -203,7 +203,9 @@ async def _provision(app, config, dsn, *, name: str, customer: str):
         f"{customer}-operator@example.test", f"{name} Operator"
     )
     assert operator is not None
-    with psycopg.connect(dsn) as connection:
+    with psycopg.connect(
+        dsn.replace("user=medawarcre_test_app", "user=postgres")
+    ) as connection:
         connection.execute("SET search_path TO medawarcre, pg_catalog")
         connection.execute(
             "INSERT INTO platform_internal_admins"

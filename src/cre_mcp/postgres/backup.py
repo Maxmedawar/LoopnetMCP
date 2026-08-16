@@ -56,6 +56,7 @@ from cre_mcp.postgres.schema import (
     AUDIT_SINK_TABLES,
     EXPECTED_TABLES,
     PLATFORM_APP_MUTABLE_TABLES,
+    PLATFORM_APP_READ_ONLY_TABLES,
     PLATFORM_AUTHORITY_TABLES,
     SCHEMA_NAME,
 )
@@ -809,13 +810,18 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
             table in PLATFORM_AUTHORITY_TABLES or table in AUDIT_SINK_TABLES
         )
         platform_mutable = table in PLATFORM_APP_MUTABLE_TABLES
+        # Read-only for the application role, and the reason is in schema.py:
+        # with INSERT it could make itself a platform_admin.
+        platform_insertable = platform_readable and (
+            table not in PLATFORM_APP_READ_ONLY_TABLES
+        )
         expected_by_role = {
             "medawarcre_app": (
                 table in APP_READ_TABLES or platform_readable,
                 (
                     table in APP_WRITE_TABLES
                     or table in APP_INSERT_ONLY_TABLES
-                    or platform_readable
+                    or platform_insertable
                 ),
                 table in APP_WRITE_TABLES or platform_mutable,
                 (
@@ -889,7 +895,7 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
                 expected_insert = (
                     table in APP_WRITE_TABLES
                     or table in APP_INSERT_ONLY_TABLES
-                    or platform_readable
+                    or platform_insertable
                     or str(column_name)
                     in APP_COLUMN_INSERTS.get(table, frozenset())
                     if role == "medawarcre_app"
@@ -1015,12 +1021,11 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
         # only new function any role may call.
         (
             "project_platform_identity",
-            "uuid, text, text, text, uuid, text, text, text",
+            "uuid, text, uuid, bigint",
         ): {ADMISSION_ROLE, "medawarcre_admin"},
         (
             "project_platform_authority",
-            "uuid, uuid, uuid, text, text[], text, text, timestamp with time zone, "
-            "text, text, jsonb, uuid[], text[]",
+            "uuid, text, uuid, bigint, uuid, text, text, text",
         ): {ADMISSION_ROLE, "medawarcre_admin"},
     }
     if functions != set(function_contract):

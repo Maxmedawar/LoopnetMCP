@@ -243,7 +243,12 @@ def test_an_admin_mutation_writes_its_audit_row_in_the_same_transaction(
 
     operator, workspace = asyncio.run(scenario())
 
-    with psycopg.connect(app_dsn) as connection:
+    # Seeded as the cluster owner: migration 0013 revoked the application
+    # role's write on this table, because it could otherwise make itself the
+    # exact identity AdminControlStore._mutate checks.
+    with psycopg.connect(
+        app_dsn.replace("user=medawarcre_test_app", "user=postgres")
+    ) as connection:
         connection.execute("SET search_path TO medawarcre, pg_catalog")
         connection.execute(
             "INSERT INTO platform_internal_admins"

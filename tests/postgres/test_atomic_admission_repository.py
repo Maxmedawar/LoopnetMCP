@@ -349,11 +349,11 @@ def test_migrations_through_0012_and_exact_admission_function_inventory() -> Non
     # The literal is kept rather than derived so that adding a migration
     # cannot pass unnoticed -- which is the only reason this line exists.
     assert [migration.version for migration in migrations] == [
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
     ]
     assert migrations[2].name == "atomic request admission"
     assert migrations[3].name == "request scoped domain authority"
-    assert EXPECTED_MIGRATION_VERSION == 12
+    assert EXPECTED_MIGRATION_VERSION == 13
     assert ADMISSION_FUNCTIONS == {
         (
             "atomic_admit_tool_call",
@@ -370,7 +370,7 @@ def test_migrations_through_0012_and_exact_admission_function_inventory() -> Non
         # memberships, which would let any hosted request invent a tenant.
         (
             "project_platform_identity",
-            "uuid, text, text, text, uuid, text, text, text",
+            "uuid, text, uuid, bigint",
         ),
         # Migration 0012, second half. Projects the session, account, grant,
         # plan quotas and territories that `atomic_admit_tool_call`'s credential
@@ -378,8 +378,7 @@ def test_migrations_through_0012_and_exact_admission_function_inventory() -> Non
         # in `postgres/authority.py` next to the same tuple.
         (
             "project_platform_authority",
-            "uuid, uuid, uuid, text, text[], text, text, timestamp with time zone, "
-            "text, text, jsonb, uuid[], text[]",
+            "uuid, text, uuid, bigint, uuid, text, text, text",
         ),
     }
 
@@ -390,7 +389,7 @@ def test_migrations_upgrade_immutable_0002(
     _, migration_dsn, _ = postgres_database
     migrations = load_migrations()
     assert MigrationRunner(migration_dsn, migrations[:2]).apply() == [1, 2]
-    assert MigrationRunner(migration_dsn, migrations).apply() == [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert MigrationRunner(migration_dsn, migrations).apply() == [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
 
 def test_atomic_admission_revalidates_authority_and_mutates_nothing_on_denial(
