@@ -19,11 +19,24 @@ set -e
 ROOT=${ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 DATA=${MEDAWARCRE_PGDATA:-$HOME/Library/Application Support/medawarcre/pgdata}
 SOCK=${MEDAWARCRE_PGSOCK:-/tmp/medawarcre-pg}
+ENV_FILE=${MEDAWARCRE_ENV_FILE:-$HOME/Library/Application Support/medawarcre/database.env}
 PGPORT=${MEDAWARCRE_PGPORT:-54330}
 DB=medawarcre
 
 export LC_ALL=C
 export LANG=C
+
+# The environment variable each service role's DSN is injected as.
+_dsn_var() {
+  case "$1" in
+    migration) echo MEDAWARCRE_MIGRATION_DATABASE_URL ;;
+    app)       echo MEDAWARCRE_DATABASE_URL ;;
+    admission) echo MEDAWARCRE_ADMISSION_DATABASE_URL ;;
+    oauth)     echo MEDAWARCRE_OAUTH_DATABASE_URL ;;
+    backup)    echo MEDAWARCRE_BACKUP_DATABASE_URL ;;
+    admin)     echo MEDAWARCRE_WORKER_DATABASE_URL ;;
+  esac
+}
 
 INITDB=$(command -v initdb || echo /opt/homebrew/opt/postgresql@16/bin/initdb)
 PGCTL=$(command -v pg_ctl || echo /opt/homebrew/opt/postgresql@16/bin/pg_ctl)
@@ -64,42 +77,66 @@ if [ "$FIRST_RUN" = "1" ]; then
   "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 -d "$ADMIN" \
     -c "CREATE DATABASE $DB OWNER medawarcre_migration" >/dev/null
 
-  # One login per service role, each a member of exactly one group. Passwords
-  # are generated here and printed ONCE; they are not stored by this script.
-  # Put them in your secret store and inject them as the DSNs below.
+  # One login per service role, each a member of exactly one group.
+  #
+  # The passwords are written to a mode-0600 file and NEVER to stdout. The
+  # first version of this script echoed them, which put six live credentials
+  # into terminal scrollback, shell transcript and any log capturing this
+  # run -- the exact thing deploy/DEPLOY.md's secret rules forbid, in the
+  # script whose job is to establish them.
   echo "--- service logins"
+  umask 077
+  : > "$ENV_FILE"
+  {
+    echo "# MedawarCRE service DSNs. Generated $(date -u +%Y-%m-%dT%H:%M:%SZ)."
+    echo "# Mode 0600. Move these into your managed secret store; this file is"
+    echo "# a bootstrap artifact, not the production source of truth."
+  } >> "$ENV_FILE"
   for role in migration app admission oauth backup admin; do
     password=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40)
     inherit="INHERIT TRUE"
+    noinherit=""
     case "$role" in
-      migration|admission|oauth) inherit="INHERIT FALSE" ;;
+      migration|admission|oauth) inherit="INHERIT FALSE"; noinherit="NOINHERIT" ;;
     esac
     "$PSQL" --no-psqlrc -v ON_ERROR_STOP=1 -d "$ADMIN" -c "
       DROP ROLE IF EXISTS medawarcre_${role}_login;
-      CREATE ROLE medawarcre_${role}_login LOGIN PASSWORD '${password}'
-        $( [ "$inherit" = "INHERIT FALSE" ] && echo NOINHERIT );
+      CREATE ROLE medawarcre_${role}_login LOGIN PASSWORD '${password}' ${noinherit};
       GRANT medawarcre_${role} TO medawarcre_${role}_login
         WITH ADMIN FALSE, ${inherit}, SET TRUE;
     " >/dev/null
-    echo "    medawarcre_${role}_login  ${password}"
+    printf '%s="host=%s port=%s dbname=%s user=medawarcre_%s_login password=%s"\n' \
+      "$(_dsn_var "$role")" "$SOCK" "$PGPORT" "$DB" "$role" "$password" >> "$ENV_FILE"
+    unset password
+    echo "    medawarcre_${role}_login  written"
   done
+  chmod 600 "$ENV_FILE"
   echo
-  echo "    ^ Copy these into your secret store now. They are not saved here."
+  echo "    Six DSNs written to $ENV_FILE (mode 0600). Nothing was printed."
 fi
 
-export MEDAWARCRE_MIGRATION_DATABASE_URL="host=$SOCK port=$PGPORT dbname=$DB user=medawarcre_migration_login password=${MIGRATION_PASSWORD:-}"
-if [ -z "${MIGRATION_PASSWORD:-}" ]; then
-  # First run, or the caller did not supply it: use the local trust socket as
-  # the cluster owner, which only works from this machine's filesystem.
-  export MEDAWARCRE_MIGRATION_DATABASE_URL="host=$SOCK port=$PGPORT dbname=$DB user=postgres"
-fi
+# Migrate as the dedicated migration login. `postgres` is a superuser and
+# `assert_migration_session` refuses it -- the same exact-group check that
+# refuses a superuser DSN everywhere else in this codebase. Using it here fails
+# with `migration_failed` and no explanation, which is how the first run of
+# this script failed.
+set -a
+. "$ENV_FILE"
+set +a
 
 echo "--- migrate"
 PYTHONPATH="$ROOT/src" "$ROOT/.venv/bin/python" -m cre_mcp.postgres.cli migrate
 
+# The same readiness gate `build_postgres_hosted_persistence` runs before it
+# binds a socket. Checking it here means a schema problem surfaces during
+# provisioning rather than as a refusal to start at cutover.
+echo "--- readiness"
+PYTHONPATH="$ROOT/src" "$ROOT/.venv/bin/python" "$ROOT/deploy/_readiness.py"
+
 echo
 echo "Durable PostgreSQL is up."
 echo "  data      $DATA"
+echo "  DSNs      $ENV_FILE (mode 0600)"
 echo "  socket    $SOCK"
 echo "  port      $PGPORT (Unix socket only; no TCP listener)"
 echo
