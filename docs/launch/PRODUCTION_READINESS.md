@@ -17,7 +17,8 @@ PYTHONPATH=$PWD/src .venv/bin/python -m pytest tests -q
 
 Last run: `5,228 passed, 4 skipped`. Staging probe: migrations `1..13` applied,
 hosted MCP healthy on `127.0.0.1:8791`, unauthenticated `initialize` refused
-`401`, no local state file created.
+`401`, no local state file created, and the scheduled-search worker ticking
+against the same database on its own admin connection.
 
 ## What is proven
 

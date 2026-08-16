@@ -75,6 +75,8 @@ CREATE ROLE staging_oauth LOGIN NOINHERIT;
 GRANT medawarcre_oauth TO staging_oauth WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
 CREATE ROLE staging_backup LOGIN;
 GRANT medawarcre_backup TO staging_backup WITH ADMIN FALSE, INHERIT TRUE, SET TRUE;
+CREATE ROLE staging_admin LOGIN;
+GRANT medawarcre_admin TO staging_admin WITH ADMIN FALSE, INHERIT TRUE, SET TRUE;
 " >/dev/null
 
 export MEDAWARCRE_MIGRATION_DATABASE_URL="$DSN_BASE user=staging_migration"
@@ -122,6 +124,32 @@ echo "    HTTP $STATUS"
 echo "--- probe: the hosted path created no local state file"
 [ -e "$CRE_CACHE_DB_PATH" ] && { echo "FAIL: $CRE_CACHE_DB_PATH exists"; exit 1; }
 echo "    OK"
+
+echo "--- probe: the scheduled-search worker starts against the same database"
+# The worker is a separate process holding an admin connection the server does
+# not have. Started once, ticked, and stopped -- enough to prove it can reach
+# the queue and that its refusals are configuration, not code.
+STAGING_OWNER="$DSN_BASE user=postgres"
+STAFF_ID=$("$PSQL" --no-psqlrc -tA -v ON_ERROR_STOP=1 -d "$STAGING_OWNER" -c "
+INSERT INTO medawarcre.users(email,name) VALUES ('staging-worker@example.test','Staging Worker')
+  ON CONFLICT DO NOTHING;
+INSERT INTO medawarcre.staff_roles(user_id,role,active)
+  SELECT id,'admin',true FROM medawarcre.users WHERE email='staging-worker@example.test'
+  ON CONFLICT (user_id) DO UPDATE SET active=true;
+SELECT id FROM medawarcre.users WHERE email='staging-worker@example.test';
+" | tail -1) || { echo "FAIL: could not seed the worker staff identity"; exit 1; }
+[ -n "$STAFF_ID" ] || { echo "FAIL: worker staff identity is empty"; exit 1; }
+
+MEDAWARCRE_WORKER_DATABASE_URL="$DSN_BASE user=staging_admin" \
+MEDAWARCRE_WORKER_ACTOR_USER_ID="$STAFF_ID" \
+"$ROOT/.venv/bin/python" -c "
+from cre_mcp.postgres.worker import build_worker
+loop = build_worker(worker_id='staging-probe')
+try:
+    print('    tick:', loop.tick())
+finally:
+    loop.queue.close()
+"
 
 echo
 echo "Private staging is healthy on http://127.0.0.1:$PORT/mcp"
