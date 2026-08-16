@@ -4916,6 +4916,48 @@ on it.
 No provider chosen, no infrastructure provisioned, no deployment, no DNS, no
 billing, no spend. Tests and documentation only; no source change.
 
+## Ledger reconciliation 2026-08-16: the boot blocker is lifted
+
+The rows above were written while `build_postgres_hosted_persistence` refused
+unconditionally. Eight commits from `f5955ec` to `6b2972f` changed that, so the
+statuses are re-derived here rather than left to be read as current. No row is
+deleted; this section is their disposition.
+
+| Row | Was | Is | Why it moved |
+| --- | --- | --- | --- |
+| Combined opportunity index | 🔴 | 🟢 | `f5955ec` (Phase 5K) predates this work and the row predates it |
+| Clerk identity and connection flow | 🟡 | 🟡 | Unchanged. Local engineering complete; a real Clerk test instance is still the one external gate |
+| Internal Operations Console | 🟡 | 🟢 | Reads the real PostgreSQL rows, proven in `test_platform_bridge_runtime.py`. Found and fixed a bare column under `GROUP BY` that would have broken every Console workspace search on PostgreSQL |
+| Scheduled saved searches | 🔴 | 🟢 | `postgres/jobs.py` and `postgres/worker.py`; idempotent enqueue, `SKIP LOCKED` claiming, lease expiry, backoff, live entitlement and territory recheck, and a running loop |
+| Stripe test integration | 🟡 | 🟢 | All eight requirements proven on the hosted PostgreSQL path in `test_stripe_lifecycle_postgres.py`. A real Stripe test-account run remains an external gate |
+| Skool reconciliation | 🟡 | 🟢 | The launch gate now runs on the real hosted path, including that the *scheduled* worker stops for a revoked member |
+| Privacy and retention | 🔴 | 🟢 | `postgres/privacy.py` plus `medawarcre-postgres privacy {list,submit,advance,export}` |
+| Production secret boundary | 🟡 | 🟢 | The inventory refused an unlisted worker credential twice, which is the boundary working |
+| Private staging | 🔴 | 🟢 | `deploy/local_staging.sh`, asserting a 401 on an unauthenticated initialize, no local state file, and a worker tick |
+| Integrated security audit | 🔴 | 🟡 | Run. Four confirmed defects in migration 0012, all closed by 0013 and pinned by `test_projection_is_a_projection.py`. A confirmatory re-review is the remaining step |
+| Production-readiness packet | 🔴 | 🟢 | `docs/launch/PRODUCTION_READINESS.md` |
+| Public production cutover | 🔴 | 🔴 | Unchanged, and deliberately so |
+| Proxy credential reaches a log in trusted-local stdio | 🔴 | 🔴 | Unchanged. Not touched by this work and not hosted-reachable |
+
+**What the audit found, recorded because it is the most important thing in this
+round.** Migration 0012's projection accepted the values it wrote as arguments
+and never checked them against the platform authority, while its own header
+claimed the opposite. A hand-built context naming a workspace that does not
+exist was projected and admitted. Three consequences followed, one of which was
+a launch-gate violation: a revoked Skool member's projected grant stayed active,
+and the scheduler's documented "live entitlement recheck" reads that row, so the
+worker would have kept running their saved searches. `tools/call` was correctly
+shut; this was the back door. Migration 0013 makes both functions read the
+`platform_*` relations and refuse when the row is not there.
+
+Two corrections to this program's own tests came out of the same audit. One
+assertion — "a refused admission leaves no tenant behind" — was made through an
+RLS-filtered connection where the count is zero for every input, so it asserted
+nothing; the reviewer confirmed the row was there. The other was a claim in a
+test docstring that extending the projection needed a pin widened, which stopped
+being true when the pin was widened deliberately.
+
+
 ## Phase evidence template
 
 For each phase, append:
