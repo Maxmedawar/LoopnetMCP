@@ -67,19 +67,38 @@ def bind_persistence_lifespan(app: Any, bundle: HostedPersistenceBundle) -> Any:
     return app
 
 
-def build_postgres_hosted_persistence() -> HostedPersistenceBundle:
+def build_postgres_hosted_persistence(
+    config: Any | None = None,
+) -> HostedPersistenceBundle:
     """Build the production bundle or reject startup before local state exists.
 
-    The certified pool and schema readiness checks are active now. Domain
-    repository wiring is intentionally fail-closed until its parity phase is
-    complete, so a healthy database alone cannot accidentally revive SQLite or
-    file-backed hosted authority.
+    Order matters and is deliberate:
 
-    The production secret preflight runs first, before any connection attempt,
-    so a deployment whose managed secret store has not injected a required
-    credential stops with the missing variable *names* rather than with a
-    connection error whose real cause is a missing credential.
+    1. The production secret preflight runs before any connection attempt, so a
+       deployment whose managed secret store has not injected a credential stops
+       with the missing variable *names* rather than with a connection error
+       whose real cause is a missing credential.
+    2. The certified pool opens and schema readiness is checked. An unready
+       database stops here, before any store exists to write to it.
+    3. The PostgreSQL platform backend is installed **before** ``PlatformApi``
+       is constructed. Every platform store resolves its backend at connect
+       time through ``cre_mcp.platform.dbapi``, so installing first is what
+       makes the twelve authority stores PostgreSQL-backed rather than
+       file-backed. Constructing the API first would produce a process whose
+       authority silently lived in a SQLite file — which is the exact failure
+       this boundary exists to prevent, and it would look identical from
+       outside.
+    4. Only then are the audit sink and the domain repository provider built.
+
+    Anything that fails after the backend is installed unwinds it, so a failed
+    start cannot leave a half-installed backend behind for the next attempt.
     """
+
+    from cre_mcp.config import CreConfig
+    from cre_mcp.platform.dbapi import install_platform_backend
+    from cre_mcp.postgres.access_audit import PostgresAccessAuditLog
+    from cre_mcp.postgres.platform_bridge import PostgresPlatformBackend
+    from cre_mcp.postgres.request_scope import HostedDomainRepositoryProvider
 
     try:
         verify_production_secrets()
@@ -104,8 +123,10 @@ def build_postgres_hosted_persistence() -> HostedPersistenceBundle:
                 f"hosted PostgreSQL is not release-ready ({readiness.code})"
             )
     except HostedPersistenceUnavailable:
+        database.close()
         raise
     except Exception as error:
+        database.close()
         # Deliberately not chained. psycopg echoes the token it could not parse,
         # and for a DSN it cannot read as a URL — one leading space is enough,
         # which is an ordinary managed-store or copy-paste artifact — that token
@@ -115,12 +136,97 @@ def build_postgres_hosted_persistence() -> HostedPersistenceBundle:
         raise HostedPersistenceUnavailable(
             f"hosted PostgreSQL is unavailable ({type(error).__name__})"
         ) from None
-    finally:
-        database.close()
 
-    raise HostedPersistenceUnavailable(
-        "hosted PostgreSQL domain repositories are not yet certified"
+    selected_config = config if config is not None else CreConfig()
+    backend = PostgresPlatformBackend(
+        settings.dsn,
+        min_size=settings.min_size,
+        max_size=settings.max_size,
+        timeout=settings.acquire_timeout,
     )
+    installed = False
+    try:
+        backend.open(wait=True)
+        install_platform_backend(backend)
+        installed = True
+
+        from cre_mcp.platform.api import PlatformApi
+
+        platform_api = PlatformApi(selected_config)
+        audit_log = PostgresAccessAuditLog(backend)
+        provider = HostedDomainRepositoryProvider(
+            database, config=selected_config
+        )
+        oauth_authority = _build_oauth_authority()
+        admission_repository = _build_admission_repository()
+    except HostedPersistenceUnavailable:
+        _unwind(database, backend, installed)
+        raise
+    except Exception as error:
+        _unwind(database, backend, installed)
+        raise HostedPersistenceUnavailable(
+            f"hosted platform authority is unavailable ({type(error).__name__})"
+        ) from None
+
+    def _close() -> None:
+        _unwind(database, backend, True)
+        for closable in (oauth_authority, admission_repository):
+            closer = getattr(closable, "close", None)
+            if callable(closer):
+                try:
+                    closer()
+                except Exception:  # pragma: no cover - shutdown is best effort
+                    pass
+
+    return HostedPersistenceBundle(
+        platform_api=platform_api,
+        audit_log=audit_log,
+        domain_repository_provider=provider,
+        oauth_authority=oauth_authority,
+        admission_repository=admission_repository,
+        backend="postgres",
+        close_callback=_close,
+    )
+
+
+def _unwind(database: Any, backend: Any, installed: bool) -> None:
+    """Return the process to the file-backed default and drop both pools."""
+    from cre_mcp.platform.dbapi import clear_platform_backend
+
+    if installed:
+        clear_platform_backend()
+    for closable in (backend, database):
+        try:
+            closable.close()
+        except Exception:  # pragma: no cover - shutdown is best effort
+            pass
+
+
+def _build_oauth_authority() -> Any:
+    """Open the OAuth authority on its own least-privilege DSN.
+
+    Deliberately ``from_env`` rather than the application settings: this
+    repository asserts an exact ``medawarcre_oauth`` group session and refuses
+    the application role, so handing it ``MEDAWARCRE_DATABASE_URL`` fails to
+    boot. The separation is the point — a compromised application connection
+    cannot mint authority.
+    """
+    from cre_mcp.postgres.oauth_authority import (
+        PostgresOAuthAuthorityRepository,
+    )
+
+    repository = PostgresOAuthAuthorityRepository.from_env()
+    repository.open(wait=True)
+    return repository
+
+
+def _build_admission_repository() -> Any:
+    """Open atomic admission on its own least-privilege DSN, for the same reason."""
+    from cre_mcp.postgres.admission import PostgresAdmissionRepository
+
+    repository = PostgresAdmissionRepository.from_env()
+    repository.open(wait=True)
+    return repository
 
 
 __all__ = [

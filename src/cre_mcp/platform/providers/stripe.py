@@ -30,6 +30,7 @@ from cre_mcp.platform.providers.core import (
     ProviderSyncService,
     ProviderValidationError,
 )
+from cre_mcp.platform.dbapi import platform_connection
 
 STRIPE_SUBSCRIPTION_EVENT_TYPES = frozenset(
     {
@@ -328,14 +329,12 @@ class StripeReconciliationService:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.db_path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        try:
+        with platform_connection(
+            self.db_path,
+            timeout=30,
+            transactional=False,
+        ) as connection:
             yield connection
-        finally:
-            connection.close()
 
     @staticmethod
     def _actor(

@@ -262,8 +262,10 @@ def test_the_database_is_closed_even_when_the_gate_refuses(tmp_path, monkeypatch
     assert closed == [True]
 
 
-def test_the_terminal_refusal_is_the_last_statement_of_the_builder(tmp_path, monkeypatch):
-    """A healthy database alone must not produce a hosted persistence bundle.
+def test_a_healthy_database_alone_does_not_produce_file_backed_authority(
+    tmp_path, monkeypatch
+):
+    """A healthy database alone must not produce file-backed hosted authority.
 
     This is the door the builder's own docstring says keeps a reachable
     PostgreSQL from accidentally reviving SQLite or file-backed hosted
@@ -322,17 +324,41 @@ def test_the_terminal_refusal_is_the_last_statement_of_the_builder(tmp_path, mon
         "function body containing a single return statement"
     )
 
-    returns = [node for node in ast.walk(function) if isinstance(node, ast.Return)]
-    assert not returns, (
-        "build_postgres_hosted_persistence returned a bundle; the hosted "
-        "domain repositories are not certified, so it must only refuse"
+    # Until the domain-repository parity phase landed, this test asserted the
+    # builder contained no `return` at all. That pin has been retired on
+    # purpose: the builder now returns a bundle, which is the whole point of
+    # the phase. What replaces it is the property the old pin was standing in
+    # for — that a reachable database cannot produce file-backed hosted
+    # authority — expressed as an ordering the builder must obey.
+    #
+    # `install_platform_backend` must be called BEFORE `PlatformApi` is
+    # constructed. Every platform store resolves its backend at connect time,
+    # so constructing the API first yields a process whose twelve authority
+    # stores quietly write to a SQLite file while every gate above reports a
+    # healthy PostgreSQL. That process looks identical from outside, which is
+    # exactly why it needs a test rather than a review.
+    call_lines = {}
+    for node in ast.walk(function):
+        if isinstance(node, ast.Call):
+            name_node = node.func
+            called = getattr(name_node, "id", None) or getattr(
+                name_node, "attr", None
+            )
+            if called in {"install_platform_backend", "PlatformApi"}:
+                call_lines.setdefault(called, node.lineno)
+
+    assert "install_platform_backend" in call_lines, (
+        "the builder never installs the PostgreSQL platform backend; the "
+        "authority stores would fall through to their SQLite default"
+    )
+    assert "PlatformApi" in call_lines, "the builder never builds the platform API"
+    assert call_lines["install_platform_backend"] < call_lines["PlatformApi"], (
+        "PlatformApi is constructed before the PostgreSQL platform backend is "
+        "installed; its twelve stores would bind to a local file"
     )
 
-    final = function.body[-1]
-    assert isinstance(final, ast.Raise), "the builder no longer ends in a refusal"
-
-    # And the refusal actually fires: every gate above it having passed still
-    # yields no bundle.
+    # And the refusal still fires when the platform authority is unreachable,
+    # with every gate above it having passed.
     _clear_inventory_environment(monkeypatch)
     for name in _REQUIRED_DATABASE_URLS:
         monkeypatch.setenv(name, "postgresql://u:p@127.0.0.1:1/db")
@@ -344,11 +370,11 @@ def test_the_terminal_refusal_is_the_last_statement_of_the_builder(tmp_path, mon
         lambda database, expected: SimpleNamespace(ok=True, code="ok"),
     )
 
-    with pytest.raises(RuntimeError, match="not yet certified"):
+    with pytest.raises(RuntimeError, match="hosted platform authority is unavailable"):
         runtime.build_postgres_hosted_persistence()
 
     config = _config(cache_db_path=tmp_path / "certified-must-not-exist.db")
-    with pytest.raises(RuntimeError, match="not yet certified"):
+    with pytest.raises(RuntimeError, match="hosted platform authority is unavailable"):
         create_http_app(config=config)
     assert not config.cache_db_path.exists()
     assert not (tmp_path / "access" / "registry.json").exists()
@@ -499,7 +525,7 @@ def test_the_module_entrypoint_stays_a_pure_shim():
 
 @pytest.mark.parametrize("entrypoint", _HOSTED_ENTRYPOINTS)
 @pytest.mark.parametrize("environment", ["stripped", "production_shaped"])
-def test_no_entrypoint_recovers_from_the_terminal_refusal(
+def test_no_entrypoint_recovers_from_a_hosted_persistence_refusal(
     tmp_path, monkeypatch, entrypoint, environment
 ):
     """Refusing in the builder is worth nothing if a caller catches it.
@@ -590,7 +616,7 @@ def test_no_entrypoint_recovers_from_the_terminal_refusal(
         "main": lambda: main(["--http"]),
     }
 
-    with pytest.raises(RuntimeError, match="not yet certified"):
+    with pytest.raises(RuntimeError, match="hosted platform authority is unavailable"):
         calls[entrypoint]()
 
     assert not config.cache_db_path.exists()

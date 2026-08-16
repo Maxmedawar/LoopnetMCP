@@ -11,9 +11,12 @@ from cre_mcp.postgres.migrations import load_migrations
 from cre_mcp.postgres.pool import INTERNAL_ROLES
 from cre_mcp.postgres.authority import ADMISSION_ROLE, SERVICE_ROLES
 from cre_mcp.postgres.schema import (
+    AUDIT_SINK_TABLES,
+    CERTIFIED_TABLES,
     EXPECTED_CATALOG_FINGERPRINT,
     EXPECTED_RLS_TABLES,
     EXPECTED_TABLES,
+    PLATFORM_AUTHORITY_TABLES,
     TENANT_TABLES,
 )
 
@@ -72,11 +75,29 @@ def test_launch_schema_inventory_covers_every_required_domain() -> None:
         "internal_opportunities",
         "legacy_id_aliases",
     } <= TENANT_TABLES
-    assert EXPECTED_RLS_TABLES == EXPECTED_TABLES - {
+    # Every certified relation carries row-level security except the three that
+    # hold no tenant data. The exception list is written out rather than
+    # widened, because "everything except a set that grows quietly" is not an
+    # invariant. Two sets are excluded by name and for stated reasons:
+    #
+    #   PLATFORM_AUTHORITY_TABLES — the sign-in/OAuth/session stores, which run
+    #   before a workspace context exists, so there is no ``app.workspace_id``
+    #   for a policy to read. Their tenancy is enforced in the store code, and
+    #   migration 0010 enables no RLS on them.
+    #
+    #   AUDIT_SINK_TABLES — access_audit_log, whose workspace column is the
+    #   public identifier string rather than the uuid every RLS policy compares.
+    assert EXPECTED_RLS_TABLES == CERTIFIED_TABLES - {
         "schema_migrations",
         "plans",
         "oauth_clients",
     }
+    assert not (PLATFORM_AUTHORITY_TABLES & EXPECTED_RLS_TABLES)
+    assert not (AUDIT_SINK_TABLES & EXPECTED_RLS_TABLES)
+    assert (
+        EXPECTED_TABLES
+        == CERTIFIED_TABLES | PLATFORM_AUTHORITY_TABLES | AUDIT_SINK_TABLES
+    )
     assert ADMISSION_ROLE == "medawarcre_admission"
     assert set(SERVICE_ROLES.values()) == {
         "medawarcre_oauth",

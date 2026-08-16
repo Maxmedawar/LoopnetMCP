@@ -22,6 +22,7 @@ from typing import Protocol
 from cre_mcp.config import CreConfig
 from cre_mcp.platform.models import normalize_platform_email
 from cre_mcp.platform.schema import create_schema
+from cre_mcp.platform.dbapi import platform_connection
 
 
 def _now() -> datetime:
@@ -220,17 +221,13 @@ class _SqliteStore:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.db_path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        try:
+        with platform_connection(
+            self.db_path,
+            timeout=30,
+            ensure_parent=True,
+        ) as connection:
             create_schema(connection)
-            with connection:
-                yield connection
-        finally:
-            connection.close()
+            yield connection
 
 
 def _create_connection_tables(connection: sqlite3.Connection) -> None:

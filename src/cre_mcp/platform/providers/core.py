@@ -30,6 +30,7 @@ from cre_mcp.platform.entitlements import (
     provider_object_stream_hash,
     provider_restrictive_state_input_hash,
 )
+from cre_mcp.platform.dbapi import platform_connection
 
 
 OPERATOR_ONLY_ACCOUNT_STATES = frozenset(
@@ -310,14 +311,12 @@ class ProviderSyncService:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.db_path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        try:
+        with platform_connection(
+            self.db_path,
+            timeout=30,
+            transactional=False,
+        ) as connection:
             yield connection
-        finally:
-            connection.close()
 
     @staticmethod
     def _attempt(

@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 from cre_mcp.platform.migrations import Migration, apply_migrations
 from cre_mcp.platform.schema import create_schema
+from cre_mcp.platform.dbapi import platform_connection
 
 DEFAULT_AUDIENCE = "medawarcre-mcp"
 DEFAULT_RESOURCE = "https://mcp.medawarcre.com/mcp"
@@ -287,16 +288,12 @@ class OAuthSessionStore:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.db_path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        try:
-            with connection:
-                yield connection
-        finally:
-            connection.close()
+        with platform_connection(
+            self.db_path,
+            timeout=30,
+            ensure_parent=True,
+        ) as connection:
+            yield connection
 
     def _ensure_schema(self) -> None:
         with self._connect() as connection:

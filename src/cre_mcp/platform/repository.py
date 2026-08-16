@@ -48,6 +48,7 @@ from cre_mcp.platform.models import (
 )
 from cre_mcp.platform.schema import create_schema
 from cre_mcp.source_rights.output import safe_error_message, sanitize_payload
+from cre_mcp.platform.dbapi import platform_connection
 
 logger = logging.getLogger(__name__)
 
@@ -139,18 +140,14 @@ class PlatformRepository:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.db_path, timeout=10)
-        try:
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA journal_mode=WAL")
-            connection.execute("PRAGMA foreign_keys=ON")
-            connection.execute("PRAGMA busy_timeout=10000")
+        with platform_connection(
+            self.db_path,
+            timeout=10,
+            ensure_parent=True,
+            journal_wal=True,
+        ) as connection:
             create_schema(connection)
-            with connection:
-                yield connection
-        finally:
-            connection.close()
+            yield connection
 
     @staticmethod
     def _now() -> str:

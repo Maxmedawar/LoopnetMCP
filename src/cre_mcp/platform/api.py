@@ -63,6 +63,7 @@ from cre_mcp.platform.providers.stripe import (
     StripeReconciliationService,
     parse_stripe_event,
 )
+from cre_mcp.platform.dbapi import platform_connection
 
 def _jsonable(value: Any) -> Any:
     if isinstance(value, BaseModel):
@@ -228,8 +229,7 @@ class PlatformApi:
 
     @staticmethod
     def _connection_state(db_path, user_id: int) -> tuple[dict[str, Any] | None, list[str]]:
-        with sqlite3.connect(db_path) as connection:
-            connection.row_factory = sqlite3.Row
+        with platform_connection(db_path, transactional=False) as connection:
             user = connection.execute(
                 "SELECT id,email,name FROM platform_users WHERE id=?",
                 (user_id,),

@@ -31,6 +31,7 @@ from cre_mcp.platform.models import (
     normalize_platform_email,
 )
 from cre_mcp.platform.schema import create_schema
+from cre_mcp.platform.dbapi import platform_connection
 
 ADMIN_SCOPE = "admin:controls"
 ADMIN_GRANT_SOURCES = ("manual", "jv", "promotion")
@@ -189,14 +190,12 @@ class AdminControlStore:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.db_path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        try:
+        with platform_connection(
+            self.db_path,
+            timeout=30,
+            transactional=False,
+        ) as connection:
             yield connection
-        finally:
-            connection.close()
 
     @staticmethod
     def _workspace(

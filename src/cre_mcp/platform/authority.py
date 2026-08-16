@@ -23,6 +23,7 @@ from cre_mcp.platform.auth import (
     OAuthSessionStore,
 )
 from cre_mcp.platform.entitlements import AccountRecord, EffectiveAccess
+from cre_mcp.platform.dbapi import platform_connection
 
 ACCESS_ENABLED_ACCOUNT_STATES = frozenset({"active", "past_due", "grace_period"})
 _PROFILE_RANK = {
@@ -119,15 +120,11 @@ class AuthorityResolver:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.db_path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
-        try:
-            with connection:
-                yield connection
-        finally:
-            connection.close()
+        with platform_connection(
+            self.db_path,
+            timeout=30,
+        ) as connection:
+            yield connection
 
     def resolve(self, bearer_token: str) -> AuthorityOutcome | None:
         session = self.sessions.validate_access(

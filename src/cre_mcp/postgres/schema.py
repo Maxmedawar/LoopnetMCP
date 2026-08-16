@@ -69,7 +69,63 @@ TENANT_TABLES = frozenset(
     }
 )
 
-EXPECTED_TABLES = GLOBAL_TABLES | TENANT_TABLES
+#: The hosted platform authority tables, ported from the SQLite ``platform_*``
+#: schema by migration 0010 so the hosted process can boot on PostgreSQL.
+#:
+#: They are deliberately kept out of the certified role model below. These are
+#: the identity and authority stores that run *before* a workspace context
+#: exists — sign-in, OAuth, session issue — so there is no ``app.workspace_id``
+#: for row-level security to filter on, and no tenant grant shape for the
+#: certified ``APP_*``/``ADMIN_*`` sets to describe. Their tenancy is enforced
+#: in the store code, exactly as it was under SQLite; migration 0010 grants the
+#: application role table privileges directly and enables no RLS on them.
+PLATFORM_AUTHORITY_TABLES = frozenset(
+    {
+        "platform_access_grants",
+        "platform_accounts",
+        "platform_admin_audit",
+        "platform_browser_sessions",
+        "platform_connected_clients",
+        "platform_consents",
+        "platform_external_accounts",
+        "platform_human_identities",
+        "platform_integration_events",
+        "platform_internal_admins",
+        "platform_memberships",
+        "platform_notes",
+        "platform_oauth_authorization_requests",
+        "platform_oauth_clients",
+        "platform_oauth_codes",
+        "platform_oauth_refresh_history",
+        "platform_oauth_sessions",
+        "platform_operator_sessions",
+        "platform_outcomes",
+        "platform_plans",
+        "platform_privacy_requests",
+        "platform_provider_event_attempts",
+        "platform_provider_events",
+        "platform_saved_deals",
+        "platform_schema_versions",
+        "platform_skool_join_tasks",
+        "platform_skool_reconciliations",
+        "platform_subscriptions",
+        "platform_territories",
+        "platform_users",
+        "platform_workspaces",
+    }
+)
+
+#: The durable access-decision audit sink (migration 0011). Not a tenant table:
+#: its workspace column is the public identifier string, not a uuid, because
+#: the ``AuditLog`` interface it implements has no uuid to offer.
+AUDIT_SINK_TABLES = frozenset({"access_audit_log"})
+
+#: Everything the certified Phase 2 role model describes. The ``APP_*`` and
+#: ``ADMIN_*`` sets below derive from this, not from ``EXPECTED_TABLES``, so
+#: adding a platform authority table does not silently widen a certified grant.
+CERTIFIED_TABLES = GLOBAL_TABLES | TENANT_TABLES
+
+EXPECTED_TABLES = CERTIFIED_TABLES | PLATFORM_AUTHORITY_TABLES | AUDIT_SINK_TABLES
 EXPECTED_RLS_TABLES = TENANT_TABLES | frozenset(
     {
         "users",
@@ -527,7 +583,7 @@ ADMIN_COLUMN_READS = {
         }
     ),
 }
-ADMIN_READ_TABLES = EXPECTED_TABLES - frozenset(ADMIN_COLUMN_READS)
+ADMIN_READ_TABLES = CERTIFIED_TABLES - frozenset(ADMIN_COLUMN_READS)
 SERVICE_OWNED_TABLES = frozenset(
     {
         "human_identities",
@@ -560,24 +616,29 @@ ADMIN_INSERT_ONLY_TABLES = frozenset(
     {"staff_audit_log", "internal_opportunity_reviews"}
 )
 ADMIN_MUTATION_TABLES = (
-    EXPECTED_TABLES
+    CERTIFIED_TABLES
     - MIGRATION_MANAGED_TABLES
     - CONTROL_PLANE_TABLES
     - SERVICE_OWNED_TABLES
     - IMMUTABLE_TABLES
 )
-EXPECTED_MIGRATION_VERSION = 9
+EXPECTED_MIGRATION_VERSION = 11
 SCHEMA_NAME = "medawarcre"
 
 # Generated from ``catalog.catalog_fingerprint()`` on the reviewed PostgreSQL
-# 16 launch schema. Any schema migration must update this value deliberately.
+# launch schema. Any schema migration must update this value deliberately.
+# Moved at migrations 0010 (platform authority) and 0011 (access audit log);
+# the previous value was
+# e452f1486a6d2c22731b0f854498d9a4728a9375ac602a5ab217629265a1cbf6.
 EXPECTED_CATALOG_FINGERPRINT = (
-    "e452f1486a6d2c22731b0f854498d9a4728a9375ac602a5ab217629265a1cbf6"
+    "7a4c98bfa5d0e4c1df810091c6507a3b955860486a6d531dfd2e880dc49d7f56"
 )
 
 __all__ = [
     "EXPECTED_MIGRATION_VERSION",
     "EXPECTED_CATALOG_FINGERPRINT",
+    "AUDIT_SINK_TABLES",
+    "CERTIFIED_TABLES",
     "EXPECTED_RLS_TABLES",
     "EXPECTED_TABLES",
     "GLOBAL_TABLES",
@@ -596,6 +657,7 @@ __all__ = [
     "CONTROL_PLANE_TABLES",
     "IMMUTABLE_TABLES",
     "MIGRATION_MANAGED_TABLES",
+    "PLATFORM_AUTHORITY_TABLES",
     "SCHEMA_NAME",
     "SERVICE_OWNED_TABLES",
     "TENANT_TABLES",
