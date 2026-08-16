@@ -406,3 +406,52 @@ def test_a_rolled_back_transaction_leaves_nothing_behind(
         "SELECT count(*) FROM platform_users WHERE email=%s",
         ("ghost@example.com",),
     ) == [(0,)]
+
+
+# --- the internal Operations Console's data layer ----------------------------
+
+
+def test_the_operations_console_reads_the_real_postgresql_backend(
+    platform_backend,
+) -> None:
+    """The founder decision that the Console must not sit on SQLite, tested.
+
+    `OperationsReadStore` is what `web/operations` reads through. It opened a
+    SQLite file directly until the authority port; it now resolves the same
+    backend every other platform store does, so this asserts that its answers
+    come from rows written to PostgreSQL rather than from a local prototype
+    database that happens to exist.
+    """
+    from cre_mcp.platform.operations import OperationsReadStore
+
+    _, app_dsn, unused = platform_backend
+    repository = PlatformRepository(config=_config(unused))
+    store = OperationsReadStore(unused)
+
+    baseline = store.health()
+    assert baseline["status"] == "ready"
+    assert baseline["database"] == "reachable"
+
+    async def scenario():
+        workspace = await repository.create_workspace("Console Visible Tenant")
+        user = await repository.create_user("console@example.test", "Console")
+        await repository.add_membership(workspace.public_id, user.id, "owner")
+        return workspace
+
+    workspace = asyncio.run(scenario())
+
+    after = store.health()
+    assert after["workspaces"] == baseline["workspaces"] + 1
+
+    found = store.search_workspaces("Console Visible")
+    names = {item["name"] for item in found["workspaces"]}
+    assert "Console Visible Tenant" in names
+
+    # And the row the Console just reported is genuinely in PostgreSQL, not in
+    # a file the store might have fallen back to.
+    assert _rows(
+        app_dsn,
+        "SELECT name FROM platform_workspaces WHERE public_id=%s",
+        (workspace.public_id,),
+    ) == [("Console Visible Tenant",)]
+    assert not unused.exists()

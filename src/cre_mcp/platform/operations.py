@@ -285,7 +285,15 @@ class OperationsReadStore(_Store):
                     OR lower(COALESCE(workspace.slug,'')) LIKE ? ESCAPE '\\'
                     OR lower(COALESCE(user.email,'')) LIKE ? ESCAPE '\\'
                   )
-                GROUP BY workspace.id
+                -- account.state is listed explicitly. SQLite lets a bare
+                -- column ride along with a GROUP BY and picks an arbitrary row
+                -- from the group; PostgreSQL rejects the query unless the
+                -- column is grouped or aggregated, and only extends that
+                -- courtesy to columns functionally dependent on a grouped
+                -- primary key -- which workspace.* are and account.state is
+                -- not. There is at most one account per workspace, so adding
+                -- it changes no result in either engine.
+                GROUP BY workspace.id, account.state
                 ORDER BY workspace.id
                 LIMIT ?
                 """,
