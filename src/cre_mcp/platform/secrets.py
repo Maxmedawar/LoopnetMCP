@@ -232,6 +232,17 @@ PRODUCTION_SECRETS: tuple[ProductionSecret, ...] = (
         "application writes",
     ),
     ProductionSecret(
+        name="MEDAWARCRE_WORKER_DATABASE_URL",
+        consumer="cre_mcp.postgres.worker and cre_mcp.postgres.cli (privacy)",
+        purpose="admin-runtime connection string for the scheduled-search "
+        "worker and for staff privacy processing",
+        requirement="operator",
+        rotation="rotate the login role's password in the managed store",
+        least_privilege="member of medawarcre_admin only; the serving process "
+        "must never carry it, because holding it would give a customer-facing "
+        "request path the ability to read and mutate every tenant's rows",
+    ),
+    ProductionSecret(
         name="CRE_PROXY_URL",
         aliases=_legacy("CRE_PROXY_URL"),
         consumer="cre_mcp.http.fetch and cre_mcp.http.browser",

@@ -55,6 +55,10 @@ EXPECTED_INVENTORY = frozenset(
         "MEDAWARCRE_MIGRATION_DATABASE_URL",
         "MEDAWARCRE_APP_DATABASE_URL",
         "MEDAWARCRE_BACKUP_DATABASE_URL",
+        # The admin-runtime credential the scheduled-search worker and staff
+        # privacy processing run under. Added deliberately, which is what this
+        # frozen set exists to force. The serving process must never carry it.
+        "MEDAWARCRE_WORKER_DATABASE_URL",
         "CRE_CLERK_SECRET_KEY",
         "CRE_STRIPE_API_KEY",
         "CRE_STRIPE_WEBHOOK_SECRET",

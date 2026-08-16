@@ -20,6 +20,7 @@ Console, never a customer portal.
 from __future__ import annotations
 
 import ast
+import os
 import json
 from contextlib import contextmanager
 from pathlib import Path
@@ -525,9 +526,57 @@ def test_the_internal_desk_is_not_reachable_from_customer_request_scope() -> Non
             offenders.append(str(path.relative_to(source_root)))
 
     assert scanned > 200, f"the scan only visited {scanned} modules"
+    # `postgres/cli.py` is admitted deliberately. It is the operator entrypoint
+    # staff actually process a privacy request through -- there is no customer
+    # portal and the desk needs the `admin` runtime, so putting it behind an
+    # Operations Console route would mean the customer-facing server process
+    # holds an admin database connection. The CLI is not mounted on any route,
+    # is not imported by the server, and reads its DSN from an environment
+    # variable the serving process does not carry.
+    #
+    # That last claim is the one worth checking rather than asserting, so it is
+    # checked below: nothing the hosted app imports may reach the desk.
+    allowed_prefixes = ("cre_mcp/platform/", "cre_mcp/postgres/cli.py")
     assert all(
-        offender.startswith("cre_mcp/platform/") for offender in offenders
+        offender.startswith(allowed_prefixes) for offender in offenders
     ), f"the privacy desk is reachable outside the internal path: {offenders}"
+
+    # The hosted server, loaded exactly as the container loads it, must not
+    # have pulled the desk in by any path.
+    #
+    # In a subprocess, because the assertion is about the module set and this
+    # test session has already imported the CLI itself -- checking `sys.modules`
+    # in-process measures the test runner, not the server, and the first
+    # version of this line failed for exactly that reason.
+    import subprocess
+    import sys
+
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import cre_mcp.server, sys;"
+            "print('cre_mcp.postgres.cli' in sys.modules);"
+            "print('cre_mcp.postgres.privacy' in sys.modules)",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(source_root.parent),
+        env={
+            "PATH": os.environ.get("PATH", ""),
+            "PYTHONPATH": str(source_root),
+            "HOME": os.environ.get("HOME", ""),
+        },
+    )
+    assert probe.returncode == 0, probe.stderr[-2000:]
+    imports_cli, imports_privacy = probe.stdout.split()
+    assert imports_cli == "False", (
+        "the hosted server imports the operator CLI, which carries the desk"
+    )
+    # The module is allowed in the server -- `PostgresPrivacyRepository` is a
+    # bundle field -- so this is recorded rather than forbidden, and it is the
+    # symbol rule above that keeps the desk itself out.
+    assert imports_privacy in {"True", "False"}
 
 
 def test_the_desk_refuses_the_customer_runtime_pool(
