@@ -212,7 +212,10 @@ def _unwind(database: Any, backend: Any, installed: bool) -> None:
     from cre_mcp.platform.dbapi import clear_platform_backend
 
     if installed:
-        clear_platform_backend()
+        # Conditional on this bundle's own backend. An unconditional clear from
+        # a bundle that is shutting down would repoint a newer, still-serving
+        # bundle at a local SQLite file without raising.
+        clear_platform_backend(backend)
     for closable in (backend, database):
         try:
             closable.close()

@@ -193,3 +193,42 @@ def test_the_hosted_app_never_creates_local_state(hosted_environment) -> None:
         assert not (tmp_path / "access" / "audit.jsonl").exists()
     finally:
         app.state.hosted_persistence.close()
+
+
+def test_a_stale_handle_cannot_disarm_the_installed_backend(
+    hosted_environment,
+) -> None:
+    """A shutting-down bundle must uninstall only its own backend.
+
+    Two live bundles cannot coexist -- `install_platform_backend` refuses a
+    second, different one, and `build_postgres_hosted_persistence` surfaces
+    that as `PlatformBackendConflict`, which is asserted below. So the case
+    this guards is narrower and quieter: some handle to a superseded backend
+    calling `clear_platform_backend()` unconditionally.
+    #
+    That would repoint every platform store in the process at a local SQLite
+    file without raising, and the stores would answer from an empty file --
+    the failure mode this program has now twice recorded as producing a
+    plausible wrong answer rather than an error.
+    """
+    from cre_mcp.platform.dbapi import clear_platform_backend
+    from cre_mcp.postgres.platform_bridge import PostgresPlatformBackend
+
+    config, app_dsn, _ = hosted_environment
+    bundle = build_postgres_hosted_persistence(config)
+    try:
+        installed = current_platform_backend()
+        assert installed is not None
+
+        # A second bundle is refused outright rather than silently swapping.
+        with pytest.raises(HostedPersistenceUnavailable):
+            build_postgres_hosted_persistence(config)
+        assert current_platform_backend() is installed
+
+        # And a stale handle to some other backend cannot uninstall this one.
+        stale = PostgresPlatformBackend(app_dsn)
+        assert clear_platform_backend(stale) is False
+        assert current_platform_backend() is installed
+    finally:
+        bundle.close()
+    assert current_platform_backend() is None

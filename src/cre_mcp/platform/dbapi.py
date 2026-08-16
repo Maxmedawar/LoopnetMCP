@@ -62,11 +62,27 @@ def install_platform_backend(backend: PlatformBackend) -> None:
         _BACKEND = backend
 
 
-def clear_platform_backend() -> None:
-    """Return this process to the file-backed default."""
+def clear_platform_backend(backend: PlatformBackend | None = None) -> bool:
+    """Return this process to the file-backed default. Returns whether it did.
+
+    ``backend`` makes the clear conditional: it uninstalls only if that exact
+    object is the one currently installed. A shutting-down bundle passes its
+    own, because two bundles can briefly coexist — an in-process reload, or a
+    test that builds a second app before closing the first — and an
+    unconditional clear from the older one silently repoints the newer one at a
+    local SQLite file. Nothing raises when that happens; the stores answer from
+    an empty file, which this program has now twice recorded as producing a
+    plausible wrong answer rather than an error.
+
+    Called with no argument it still clears unconditionally, which is what a
+    test teardown wants.
+    """
     global _BACKEND
     with _BACKEND_LOCK:
+        if backend is not None and _BACKEND is not backend:
+            return False
         _BACKEND = None
+        return True
 
 
 def current_platform_backend() -> PlatformBackend | None:
