@@ -88,6 +88,16 @@ against the same database on its own admin connection.
   directly. It was *not* safe in the first version of that repair, which is
   recorded in migration `0014` and pinned by
   `test_ending_a_skool_membership_revokes_the_projected_grant`.
+
+  The rule that makes this checkable rather than a judgement call: a
+  **request-scoped** consumer of the certified copy is safe, because the
+  projection refreshed it on that same request. A **background** consumer is
+  not, because the projection never runs for it. There is exactly one of each
+  today — `PostgresProviderRepository` (request-scoped, fine) and
+  `SavedSearchScheduler` (background, now reads the platform relations). Any
+  new background reader of `medawarcre.access_grants`,
+  `medawarcre.workspace_accounts` or `medawarcre.territories` has this bug
+  until it reads the platform row instead.
 - **Two OAuth schemas exist.** `PostgresOAuthAuthorityRepository` and
   `medawarcre.oauth_sessions` are certified, tested, and *not* on the hosted
   path, because issuance writes `platform_oauth_sessions`. Unifying them is
