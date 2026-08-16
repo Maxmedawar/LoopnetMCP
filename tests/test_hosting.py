@@ -933,9 +933,18 @@ def test_hosting_artifacts_are_present_and_keep_secrets_out_of_image():
         or (line.strip().startswith("service:") and "http" in line)
     }
     assert services <= {"http://127.0.0.1:8791", "http_status:404"}, services
-    assert "Status: **not runnable and not approved for public deployment**" in deploy
+    # The runbook said "not runnable and not approved for public deployment"
+    # for as long as the builder refused unconditionally. The first half stopped
+    # being true when the hosted process started booting; the second half is
+    # what these assertions are actually protecting, and it has not moved.
+    assert "public production is not approved" in deploy
     assert "docs/launch/PROGRAM_STATUS.md" in deploy
-    assert "there is no supported deployment command" in deploy
+    assert "there is no supported public deployment" in deploy
+    # A private-staging command is documented deliberately -- it is proven and
+    # it touches nothing outside this machine. The commands that cross the line
+    # into public production stay absent, so the runbook cannot be followed
+    # into a cutover by someone skimming it.
+    assert "deploy/local_staging.sh" in deploy
     assert "docker run -d" not in deploy
     assert "cloudflared tunnel route dns" not in deploy
     assert "claude mcp add --transport http" not in deploy

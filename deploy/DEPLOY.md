@@ -1,51 +1,89 @@
-# MedawarCRE deployment is launch-blocked
+# MedawarCRE deployment
 
-Status: **not runnable and not approved for public deployment**
+Status: **private staging is runnable; public production is not approved**
 
 The current release truth is
-[`docs/launch/PROGRAM_STATUS.md`](../docs/launch/PROGRAM_STATUS.md). This file
-is a safety marker, not a deployment guide. Historical hosting instructions
-remain available in Git history and must not be followed.
+[`docs/launch/PROGRAM_STATUS.md`](../docs/launch/PROGRAM_STATUS.md).
 
-Do not provision a public host, create a tunnel, change DNS, configure a public
-hostname, activate billing, enable a paid integration, or expose customer data
-from this branch. Those actions require Max's explicit approval after the
-production-readiness packet is complete.
+This file said "not runnable and not approved for public deployment" for as
+long as `build_postgres_hosted_persistence` refused unconditionally. The first
+half of that stopped being true when the platform authority port landed: the
+hosted process boots against PostgreSQL, enforces OAuth, and serves MCP. The
+second half has not changed and is not changed by this edit.
 
-## Why startup is intentionally blocked
+Do not change DNS, expose a public hostname, activate live billing, enable a
+paid integration, or admit a real customer from this branch. Those require
+Max's explicit approval after the production-readiness packet is complete.
 
-Hosted HTTP no longer has a compatibility persistence path. The production
-constructor requires a healthy PostgreSQL 16 runtime and then deliberately
-rejects startup because the complete request-scoped domain repository bundle is
-not yet certified. It must fail before binding a socket or creating local
-state.
+## What works, and how to see it for yourself
 
-Migration `0002` and the narrow OAuth authority repository are one bounded
-checkpoint. They do not make the HTTP service launchable. The repository still
-needs all of the following before a deploy procedure can exist:
+One command brings up a disposable PostgreSQL, applies every migration, starts
+the real hosted process on a dedicated loopback port, and asserts that an
+unauthenticated request is refused and that no local state file is created:
 
-1. request-scoped domain repositories with no local or file-backed fallback;
-2. atomic approval, quota, and durable decision-audit admission;
-3. provider ingress and reconciliation repositories with exact service roles;
-4. worker and scheduler claim, lease, retry, and recovery paths;
-5. privacy and retention processors;
-6. a reviewed container and immutable migration procedure;
-7. backup, restore, and point-in-time recovery evidence;
-8. private-staging boot, browser, authorization, isolation, and lifecycle proof;
-9. a final independent security audit and production-readiness packet;
-10. Max's explicit cutover approval.
+```
+zsh deploy/local_staging.sh          # exits when the probes pass
+zsh deploy/local_staging.sh --hold   # leaves it running on 127.0.0.1:8791
+```
+
+It uses port **8791**, not 8000: an unrelated local service holds 8000 on the
+build machine, and a cloudflared tunnel is already running there for other
+services. Neither is touched.
+
+Proven end to end, each by a test that drives the real ASGI app over a real
+socket rather than a mock:
+
+| Claim | Where |
+| --- | --- |
+| The process boots on PostgreSQL and enforces OAuth | `tests/postgres/test_hosted_boot.py` |
+| A Skool member gets MCP access; ending the membership refuses the next call on an already-issued token | `tests/postgres/test_skool_launch_gate.py` |
+| Two tenants share one server and never see each other's data; it survives a restart | `tests/postgres/test_hosted_staging_proof.py` |
+| The twelve authority stores answer from PostgreSQL, and the Operations Console reads the same rows | `tests/postgres/test_platform_bridge_runtime.py` |
+| Backup, clean restore into a separate cluster, and the exact role contract | `tests/postgres/test_backup_restore.py` |
+
+## What is not done
+
+External, needing a credential only Max can supply:
+
+- **Clerk** — a real test-instance key. The browser sign-in journey has not been
+  driven in an actual browser.
+- **Stripe** — a real test-account proof of the webhook lifecycle.
+- **Skool** — the configured relay and the operator runbook, proven privately.
+- **Cloudflare** — create the tunnel, route the hostname, install the
+  credentials file. `deploy/cloudflared-config.example.yml` is ready and inert.
+
+Internal, still open:
+
+- A final independent security review of the current tree.
+- The production-readiness packet and Max's cutover approval.
+
+## Running the background worker
+
+Scheduled saved searches run in a **separate process** from the server. The
+server must not spend its time leasing jobs, and the worker holds an `admin`
+runtime connection the server does not have and should never have.
+
+```
+MEDAWARCRE_WORKER_DATABASE_URL=... \
+MEDAWARCRE_WORKER_ACTOR_USER_ID=... \
+python -m cre_mcp.postgres.worker
+```
+
+It refuses to start without either. The actor is not defaulted because every
+queue mutation writes a `staff_audit_log` row pinned to that identity, and an
+invented one would produce an audit trail naming nobody.
 
 ## Configuration boundary
 
 `.env.example` documents local and disabled integration settings only. It is
-not a production environment template. Database variables will be added there
-only when their consuming hosted paths are launch-certified. Do not infer a
-supported deployment configuration from source-level repository constructors.
+not a production environment template, and the database variables are
+deliberately absent from it: they are injected, and listing them in a file that
+developers copy is how a development credential reaches staging. The table below
+is the configuration reference.
 
-The container may be built locally for artifact verification. Its build runs a
-server-import smoke check, but its HTTP command is expected to fail closed until
-the domain bundle checkpoint is complete. A successful image build is not
-staging proof and is not deployment approval.
+The container's build runs a server-import smoke check. A successful image
+build is not staging proof and is not deployment approval; `local_staging.sh`
+is the former and only Max is the latter.
 
 ## Production secret handling
 
@@ -100,6 +138,8 @@ a connection error whose real cause is an absent credential.
 | `MEDAWARCRE_MIGRATION_DATABASE_URL` | `medawarcre-postgres migrate` | The only credential carrying DDL. Injected for the duration of the command; it must be absent from the serving process. |
 | `MEDAWARCRE_BACKUP_DATABASE_URL` | backup, restore, release check | Member of `medawarcre_backup` only. Read and restore; no application writes. |
 | `MEDAWARCRE_APP_DATABASE_URL` | release smoke check | Member of `medawarcre_app` only; the same underlying role as the request path, rotated with it. |
+| `MEDAWARCRE_WORKER_DATABASE_URL` | `python -m cre_mcp.postgres.worker` | Member of `medawarcre_admin`. The serving process must not hold this. |
+| `MEDAWARCRE_WORKER_ACTOR_USER_ID` | the same worker | Not a secret. The staff user every worker audit row is attributed to; a real `medawarcre.staff_roles` row must exist for it. |
 
 The last three are operator credentials. They are injected for the duration of
 one command and are not part of the running service's environment.
@@ -122,16 +162,11 @@ subject to the source-rights registry regardless of whether a key is present.
 - A secret that has ever been transmitted outside the managed store is rotated,
   not reused.
 
-## Allowed work before approval
+## The line that has not moved
 
-- run trusted local stdio workflows;
-- run unit, integration, packaging, and disposable PostgreSQL tests;
-- inspect image contents and perform local build-time import checks;
-- update the launch ledger with reproducible command evidence;
-- prepare a private-staging plan without provisioning external resources.
-
-If a later certified phase replaces this marker with an executable runbook, the
-runbook must name exact image digests, database roles, environment variables,
-migration and rollback commands, secret sources, health checks, restore proof,
-ingress controls, monitoring, and the founder approval step.
-Until then, there is no supported deployment command.
+Private staging on this machine, with test data and no real customer, is
+allowed and is what `local_staging.sh` does. Everything past that boundary --
+provisioning a public host, creating the tunnel, routing DNS, activating live
+billing, admitting a real customer -- requires Max's explicit approval after
+the production-readiness packet, and there is no supported public deployment
+command until he gives it.
