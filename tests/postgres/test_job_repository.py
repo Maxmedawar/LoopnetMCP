@@ -45,7 +45,7 @@ from cre_mcp.postgres.jobs import (
     saved_search_idempotency_key,
 )
 from cre_mcp.postgres.migrations import MigrationRunner, load_migrations
-from cre_mcp.postgres.pool import PostgresDatabase
+from cre_mcp.postgres.pool import AuthorityContext, PostgresDatabase
 
 _UNAVAILABLE = "job persistence unavailable"
 _ADMIN_USER = "user=medawarcre_test_admin"
@@ -985,3 +985,55 @@ def test_a_deactivated_saved_search_is_refused_rather_than_run(world: World) -> 
     assert by_workspace["ws_job_a"].reason_code == "saved_search_inactive"
     assert by_workspace["ws_job_b"].outcome == "executed"
     queue.close()
+
+
+def test_a_revoked_grant_with_no_end_date_stops_the_scheduler(world) -> None:
+    """The unbounded case a reviewer called out by name.
+
+    A Skool grant carries an ``ends_at``, so even a stale certified copy expired
+    eventually. A ``manual``, ``jv`` or ``promotion`` grant may legally have
+    ``ends_at IS NULL`` (``platform/admin.py::create_grant``), and against the
+    certified copy the reviewer measured a live entitlement **ten years** after
+    revocation. The gate reads the platform row now, so the status alone ends
+    it -- with no request from the revoked member in between, which is the
+    whole point: revocation is what makes that request impossible.
+    """
+    # `world` already seeds; calling _seed again duplicates the plan key.
+    queue = world.queue()
+    scheduler = world.scheduler(queue)
+
+    def gate(now=None):
+        with queue.database.connection(
+            AuthorityContext(
+                workspace_id=None,
+                actor_user_id=world.ids["staff_owner"],
+                internal_role="owner",
+                audit_reason="Verifying the revoked entitlement gate.",
+            )
+        ) as connection:
+            return scheduler.entitlement(
+                connection,
+                workspace_id=world.ids["workspace_a"],
+                actor_user_id=world.ids["user_a"],
+                now=now,
+            )
+
+    try:
+        before = gate()
+        assert before.denial_reason is None
+        assert before.profile == "full_operator"
+
+        with world.owner() as connection:
+            connection.execute(
+                "UPDATE medawarcre.platform_access_grants "
+                "SET status='revoked', ends_at=NULL "
+                "WHERE workspace_id=(SELECT id FROM "
+                "medawarcre.platform_workspaces WHERE public_id='ws_job_a')"
+            )
+
+        # Far future: a stale copy with no end date never expires on its own.
+        after = gate(datetime.now(UTC) + timedelta(days=3650))
+        assert after.denial_reason == "entitlement_missing_or_expired"
+        assert after.profile is None
+    finally:
+        queue.close()
