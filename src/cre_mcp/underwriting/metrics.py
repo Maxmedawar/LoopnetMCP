@@ -321,22 +321,34 @@ def underwrite_listing(
         other_income,
         "listing" if raw_other_income is not None else "assumed",
     )
-    if operating_expenses is None and gross_rent is not None:
-        operating_expenses = gross_rent * assumptions.expense_ratio
-        assumptions_used["expense_ratio"] = _assumption(
-            assumptions.expense_ratio, "assumed"
-        )
-    elif operating_expenses is not None:
-        assumptions_used["operating_expenses"] = _assumption(
-            operating_expenses, "listing"
-        )
-
+    # Vacancy is resolved before expenses because the expense ratio is applied
+    # to effective gross income, not to gross potential rent.
+    #
+    # It used to be applied to GPR, which overstates expenses by the vacancy
+    # fraction of the ratio -- about 6% of NOI at 5% vacancy and a 40% ratio,
+    # and biased the same direction every time. Quoting an expense ratio
+    # against EGI is the standard convention and is what
+    # `underwriting.multifamily` does.
     vacancy = _raw_number(raw, "vacancy_rate")
     if vacancy is None:
         vacancy = assumptions.vacancy_rate
         assumptions_used["vacancy_rate"] = _assumption(vacancy, "assumed")
     else:
         assumptions_used["vacancy_rate"] = _assumption(vacancy, "listing")
+
+    if operating_expenses is None and gross_rent is not None:
+        effective_gross_income = gross_rent * (1 - vacancy) + other_income
+        operating_expenses = effective_gross_income * assumptions.expense_ratio
+        assumptions_used["expense_ratio"] = _assumption(
+            assumptions.expense_ratio, "assumed"
+        )
+        assumptions_used["expense_ratio_basis"] = _assumption(
+            "effective_gross_income", "assumed"
+        )
+    elif operating_expenses is not None:
+        assumptions_used["operating_expenses"] = _assumption(
+            operating_expenses, "listing"
+        )
 
     noi_value = listing.noi_usd
     if noi_value is not None:
