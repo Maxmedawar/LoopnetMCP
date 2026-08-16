@@ -252,13 +252,10 @@ async def test_skool_access_is_granted_and_revoked_on_the_postgresql_path(
             assert UNENTITLED_TOOL in set(CUSTOMER_SURFACE.tools)
             assert UNENTITLED_TOOL not in names
 
-            # 5. A tool call is admitted or fails closed -- never served
-            #    unadmitted. The atomic-admission port is incomplete (see
-            #    `test_a_tool_call_fails_closed_until_atomic_admission_is_ported`
-            #    below for the exact diagnosis), so today this is the closed
-            #    branch. It is asserted rather than skipped because "refused"
-            #    and "served without admission" are the two outcomes that
-            #    matter, and only one of them is acceptable in either state.
+            # 5. One entitled tool call is admitted, executed, and answered
+            #    from PostgreSQL. This is the whole path: atomic admission,
+            #    the request-scoped search repository under row-level security,
+            #    the post-result territory contract, and the final audit.
             allowed = await _raw_mcp_request(
                 client,
                 token,
@@ -271,13 +268,8 @@ async def test_skool_access_is_granted_and_revoked_on_the_postgresql_path(
                 session_id=session_id,
             )
             assert allowed.status_code == 200
-            if allowed.json()["result"]["isError"]:
-                # The exact refusal, not a substring that any denial matches:
-                # this is the admission function reporting that it found no
-                # certified credential row, which is the gap named below.
-                assert allowed.json()["result"]["content"][0]["text"] == (
-                    "access denied: live session authority is unavailable"
-                )
+            assert allowed.json()["result"]["isError"] is False
+            assert allowed.json()["result"]["structuredContent"]["count"] == 0
 
             # 6. The unentitled tool is refused when named directly, not merely
             #    hidden from the listing.
@@ -307,15 +299,18 @@ async def test_skool_access_is_granted_and_revoked_on_the_postgresql_path(
             assert report["oauth_sessions_revoked"] >= 1
 
             # 8. The gate. The same token is well inside its 12-hour TTL, and
-            #    the protected call asserted here is `tools/list` -- which
-            #    succeeded at step 4 under the same token and session, so a
-            #    refusal now can only come from the revocation.
+            #    the protected call asserted here is the one that succeeded at
+            #    step 5 under this same token and session -- so a refusal now
+            #    can only come from the revocation.
             after_revoke = await _raw_mcp_request(
                 client,
                 token,
-                method="tools/list",
+                method="tools/call",
                 request_id=5,
-                params={},
+                params={
+                    "name": ENTITLED_TOOL,
+                    "arguments": {"action": "list_searches", "arguments": {}},
+                },
                 session_id=session_id,
             )
 
@@ -346,61 +341,68 @@ async def test_skool_access_is_granted_and_revoked_on_the_postgresql_path(
     assert not Path(config.cache_db_path).exists()
 
 
-async def test_a_tool_call_fails_closed_until_atomic_admission_is_ported(
+async def test_admission_refuses_identity_that_never_passed_the_resolver(
     hosted_app,
 ):
-    """The one thing the hosted path still refuses, named exactly.
+    """Where the security boundary actually is, pinned rather than assumed.
 
-    `tools/list`, authorization, entitlement filtering, territory and Skool
-    revocation all work on PostgreSQL. `tools/call` does not, and the reason is
-    specific rather than general.
+    Migration 0012 projects identity *and* authority: the session, account,
+    grant, plan quotas and territories that `atomic_admit_tool_call`'s
+    credential CTE reads and that nothing else in the product writes. That is
+    what made the tool call above work, and it has a consequence worth stating
+    plainly rather than discovering later.
 
-    `medawarcre.atomic_admit_tool_call` (migration 0003) re-resolves the whole
-    authority in SQL from a `credential` CTE over `medawarcre.oauth_sessions`,
-    `access_grants`, `plans` and `territories`. Nothing writes those rows: the
-    product issues sessions through `OAuthSessionStore` into
-    `platform_oauth_sessions` and grants through `EntitlementStore` into
-    `platform_access_grants`. So the function finds no credential and returns
-    `authority_missing`, and the middleware refuses.
+    The projection trusts the `TenantContext` it is handed completely. It has
+    to: every value in it was resolved by `AuthorityResolver` against the
+    platform stores on this same request, and there is nothing else for the
+    projection to check against. So admission is no longer an independent
+    second opinion on authority -- it is atomic replay suppression, quota
+    consumption, approval consumption and durable audit, over a context whose
+    authority was already established.
 
-    Migration 0012 closes the identity half of this -- users, workspaces and
-    memberships now project -- which is why admission reaches its authority
-    check at all instead of raising on `_uuid("41")`. Projecting the session,
-    grant, plan and territory rows as well is the remaining work.
+    The boundary is therefore `AuthorityResolver`, and the launch gate above is
+    the proof that it holds: a revoked member is refused 401 before admission
+    is reached at all.
 
-    What this test pins meanwhile is the property that must hold in either
-    state: an unadmitted tool call is refused with a fail-closed message and is
-    never executed. If someone makes admission optional to get a green tool
-    call, this fails.
+    What is still pinned here is that admission will not accept identity that
+    never went through that resolver. `AuthorityResolver` emits the derived
+    certified uuids when the PostgreSQL backend is installed; a raw platform
+    row id -- the shape any code path bypassing the resolver would produce --
+    is refused rather than projected.
     """
     app, config, dsn = hosted_app
     bundle = app.state.hosted_persistence
 
     from cre_mcp.access.context import TenantContext
 
-    context = TenantContext(
-        workspace_id="ws_absent_from_certified_schema",
+    raw_platform_identity = TenantContext(
+        workspace_id="ws_never_resolved",
         profile="local_scout",
         plan="local",
         quota_limits={"search": 100},
         territories=("TX",),
         active=True,
         trusted=False,
-        display_name="Unprojected",
+        display_name="Unresolved",
+        # A platform row id, not a derived certified uuid. This is what reaches
+        # admission if anything ever calls it without going through the
+        # resolver.
         actor_id="4242",
-        session_id="sess_unprojected",
+        session_id="sess_never_resolved",
     )
-    outcome = bundle.admission_repository.admit(
-        context,
-        "cre_pipeline",
-        {"action": "list_searches"},
-        quota_bucket="search",
-        requires_approval=False,
-    )
-    assert outcome.decision == "denied"
-    assert outcome.reason_code == "authority_missing"
-    # The identity projection still ran and returned the platform's own
-    # identifiers, so a fix to the authority half does not also have to
-    # re-derive these.
-    assert outcome.actor_user_id == "4242"
-    assert outcome.session_id == "sess_unprojected"
+    with pytest.raises(ValueError, match="must be a UUID"):
+        bundle.admission_repository.admit(
+            raw_platform_identity,
+            "cre_pipeline",
+            {"action": "list_searches"},
+            quota_bucket="search",
+            requires_approval=False,
+        )
+
+    # And nothing was projected for it: a refused admission must not leave a
+    # tenant behind.
+    assert _one(
+        dsn,
+        "SELECT count(*) FROM workspaces WHERE public_id=%s",
+        ("ws_never_resolved",),
+    )[0] == 0

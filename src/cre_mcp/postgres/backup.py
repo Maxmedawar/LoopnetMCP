@@ -1017,6 +1017,11 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
             "project_platform_identity",
             "uuid, text, text, text, uuid, text, text, text",
         ): {ADMISSION_ROLE, "medawarcre_admin"},
+        (
+            "project_platform_authority",
+            "uuid, uuid, uuid, text, text[], text, text, timestamp with time zone, "
+            "text, text, jsonb, uuid[], text[]",
+        ): {ADMISSION_ROLE, "medawarcre_admin"},
     }
     if functions != set(function_contract):
         raise BackupVerificationError(

@@ -456,6 +456,16 @@ GRANT EXECUTE ON FUNCTION medawarcre.project_platform_identity(
     uuid, text, text, text, uuid, text, text, text
 ) TO medawarcre_admission, medawarcre_admin;
 
+REVOKE ALL ON FUNCTION medawarcre.project_platform_authority(
+    uuid, uuid, uuid, text, text[], text, text, timestamptz, text, text,
+    jsonb, uuid[], text[]
+) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION medawarcre.project_platform_authority(
+    uuid, uuid, uuid, text, text[], text, text, timestamptz, text, text,
+    jsonb, uuid[], text[]
+) TO medawarcre_admission, medawarcre_admin;
+
 ALTER DEFAULT PRIVILEGES FOR ROLE medawarcre_migration IN SCHEMA medawarcre
     REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE medawarcre_migration IN SCHEMA medawarcre

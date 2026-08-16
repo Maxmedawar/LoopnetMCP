@@ -11,22 +11,32 @@ This module closes that without giving the product a second authority. The
 uuids are *derived*, not allocated: `uuid5` over one fixed namespace and the
 platform key, so the same platform row always yields the same certified row and
 no mapping table can drift. `medawarcre.project_platform_identity` (migration
-0012) writes the minimum certified identity a request needs, and the admission
-outcome is handed back carrying the platform's own identifiers, so the equality
-checks the domain repositories make against `TenantContext` still hold.
+0012) writes the minimum certified identity and authority a request needs.
+
+The derivation happens once, in `AuthorityResolver`, so the context, the
+admission outcome, the row-level-security session variables and every domain
+repository's equality check all read the same values. Translating at this
+boundary instead satisfies admission and finalization and silently breaks RLS.
 """
 
 from __future__ import annotations
 
-import dataclasses
+from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID
 
 import psycopg
+from psycopg.types.json import Jsonb
 
-#: Fixed and never changed. Every derived identifier below is a function of it,
-#: so moving it re-points every hosted request at a tenant that does not exist.
-IDENTITY_NAMESPACE = uuid5(NAMESPACE_URL, "https://medawarcre.com/identity/v1")
+from cre_mcp.platform.auth import DEFAULT_AUDIENCE, DEFAULT_RESOURCE
+from cre_mcp.platform.projected_ids import (
+    IDENTITY_NAMESPACE,
+    ProjectedIdentityError,
+    session_uuid,
+    territory_uuid,
+    user_uuid,
+    workspace_uuid,
+)
 
 _PLATFORM_TO_CERTIFIED_ROLE = {
     "owner": "owner",
@@ -41,28 +51,11 @@ class IdentityProjectionUnavailable(RuntimeError):
     """One platform identity could not be projected for this request."""
 
 
-def workspace_uuid(public_id: str) -> UUID:
-    """The certified uuid for one platform workspace public identifier."""
-    normalized = (public_id or "").strip()
-    if not normalized:
-        raise IdentityProjectionUnavailable("workspace public id is required")
-    return uuid5(IDENTITY_NAMESPACE, f"workspace/{normalized}")
-
-
-def user_uuid(platform_user_id: Any) -> UUID:
-    """The certified uuid for one platform user row identifier."""
-    normalized = str(platform_user_id or "").strip()
-    if not normalized:
-        raise IdentityProjectionUnavailable("actor identifier is required")
-    return uuid5(IDENTITY_NAMESPACE, f"user/{normalized}")
-
-
-def session_uuid(platform_session_id: Any) -> UUID:
-    """The certified uuid for one platform OAuth session identifier."""
-    normalized = str(platform_session_id or "").strip()
-    if not normalized:
-        raise IdentityProjectionUnavailable("session identifier is required")
-    return uuid5(IDENTITY_NAMESPACE, f"session/{normalized}")
+# The derivation helpers live in `cre_mcp.platform.projected_ids` so
+# `platform/authority.py` can use them without importing this package, and they
+# raise `ProjectedIdentityError` rather than the class above. Callers of this
+# module should catch either, so it is re-exported by name rather than
+# swallowed into one type that would hide which layer refused.
 
 
 def certified_role(platform_role: str) -> str:
@@ -132,6 +125,62 @@ class PlatformIdentityProjection:
             raise IdentityProjectionUnavailable("identity projection returned no row")
         return UUID(str(row[0])), target_user
 
+    def ensure_authority(
+        self,
+        *,
+        workspace_id: UUID,
+        user_id: UUID,
+        session_id: UUID,
+        client_id: str,
+        scopes: tuple[str, ...],
+        audience: str,
+        resource: str,
+        access_expires_at: Any,
+        profile: str,
+        plan_key: str | None,
+        daily_quotas: dict[str, int] | None,
+        territories: tuple[str, ...],
+        workspace_public_id: str,
+    ) -> None:
+        """Project the authority rows admission's credential CTE reads."""
+        territory_values = [
+            value.strip() for value in territories if value and value.strip()
+        ]
+        territory_ids = [
+            territory_uuid(workspace_public_id, index, value)
+            for index, value in enumerate(territory_values)
+        ]
+        try:
+            with psycopg.connect(self._dsn) as connection:
+                connection.execute("SET search_path TO pg_catalog")
+                connection.execute("SET ROLE medawarcre_admission")
+                connection.execute(
+                    "SELECT medawarcre.project_platform_authority("
+                    "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        workspace_id,
+                        user_id,
+                        session_id,
+                        client_id,
+                        list(scopes) or ["mcp:tools"],
+                        audience,
+                        resource,
+                        access_expires_at,
+                        profile,
+                        plan_key,
+                        Jsonb(dict(daily_quotas or {})),
+                        territory_ids,
+                        territory_values,
+                    ),
+                )
+                connection.commit()
+        except IdentityProjectionUnavailable:
+            raise
+        except psycopg.Error as error:
+            raise IdentityProjectionUnavailable(
+                f"authority projection failed ({type(error).__name__})"
+            ) from None
+
 
 class ProjectingAdmissionRepository:
     """Admit a platform-identified request against the certified schema.
@@ -144,15 +193,23 @@ class ProjectingAdmissionRepository:
     carrying `"41"` would be refused by every one of them.
     """
 
-    def __init__(self, inner: Any, projection: PlatformIdentityProjection) -> None:
+    def __init__(
+        self,
+        inner: Any,
+        projection: PlatformIdentityProjection,
+        *,
+        session_ttl: timedelta = timedelta(minutes=15),
+    ) -> None:
         self._inner = inner
         self._projection = projection
+        self._session_ttl = session_ttl
 
     def admit(self, context: Any, tool_name: str, arguments: dict, **kwargs: Any):
         actor = getattr(context, "actor_id", "")
         session = getattr(context, "session_id", "")
-        self._projection.ensure(
-            workspace_public_id=getattr(context, "workspace_id", ""),
+        workspace_public_id = getattr(context, "workspace_id", "")
+        workspace_id, projected_user = self._projection.ensure(
+            workspace_public_id=workspace_public_id,
             workspace_name=getattr(context, "display_name", "") or "",
             plan_key=getattr(context, "plan", None),
             platform_user_id=actor,
@@ -160,18 +217,45 @@ class ProjectingAdmissionRepository:
             user_name=f"platform-user-{actor}",
             role="owner" if getattr(context, "profile", "") else "member",
         )
-        projected = context.model_copy(
-            update={
-                "actor_id": str(user_uuid(actor)),
-                "session_id": str(session_uuid(session)),
-            }
+        self._projection.ensure_authority(
+            workspace_id=workspace_id,
+            user_id=projected_user,
+            session_id=session_uuid(session),
+            client_id=f"projected-{session_uuid(session)}",
+            scopes=("mcp:tools",),
+            audience=self._audience(),
+            resource=self._resource(),
+            # The projected session must not outlive the live one by more than
+            # the window this request needs. It is bounded rather than copied
+            # because `TenantContext` carries no expiry -- the live session was
+            # already validated by AuthorityResolver on this request, and the
+            # next request revalidates it before reaching here.
+            access_expires_at=datetime.now(UTC) + self._session_ttl,
+            profile=getattr(context, "profile", ""),
+            plan_key=getattr(context, "plan", None),
+            daily_quotas=dict(getattr(context, "quota_limits", {}) or {}),
+            territories=tuple(getattr(context, "territories", ()) or ()),
+            workspace_public_id=workspace_public_id,
         )
-        outcome = self._inner.admit(projected, tool_name, arguments, **kwargs)
-        return dataclasses.replace(
-            outcome,
-            actor_user_id=str(actor),
-            session_id=str(session),
-        )
+        # No translation on the way in or out. `AuthorityResolver` already puts
+        # the certified uuids in the context when the PostgreSQL backend is
+        # installed, so the context, the admission outcome, the RLS session
+        # variables and every domain repository's `compare_digest` check all
+        # see the same values. An earlier version translated here instead and
+        # restored the platform ids on the outcome; that satisfied admission
+        # and finalization and silently broke row-level security, because
+        # `admitted_connection` sets `app.actor_user_id` from the outcome.
+        return self._inner.admit(context, tool_name, arguments, **kwargs)
+
+    def _audience(self) -> str:
+        # Admission passes its own configured constants as `p_expected_*` and
+        # the CTE compares them to the session row, so the projection has to
+        # match the *repository's* values, not whatever the platform session
+        # happened to record.
+        return getattr(self._inner, "audience", DEFAULT_AUDIENCE)
+
+    def _resource(self) -> str:
+        return getattr(self._inner, "resource", DEFAULT_RESOURCE)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
@@ -180,6 +264,7 @@ class ProjectingAdmissionRepository:
 __all__ = [
     "IDENTITY_NAMESPACE",
     "IdentityProjectionUnavailable",
+    "ProjectedIdentityError",
     "PlatformIdentityProjection",
     "ProjectingAdmissionRepository",
     "certified_role",

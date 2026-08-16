@@ -28,6 +28,30 @@ ADMISSION_FUNCTIONS = frozenset(
             "project_platform_identity",
             "uuid, text, text, text, uuid, text, text, text",
         ),
+        # Migration 0012, second half, added with the same deliberateness --
+        # and it is the larger of the two, so it gets the larger justification.
+        #
+        # `atomic_admit_tool_call` re-resolves authority from oauth_sessions,
+        # oauth_clients, workspace_accounts, access_grants, plans and
+        # territories. Nothing writes those rows — the product writes the
+        # platform_* relations — so it found no credential and every hosted
+        # tool call was refused `authority_missing`. The alternative to this
+        # grant was giving medawarcre_admission INSERT and UPDATE on six
+        # certified tenant relations: strictly more capability with strictly
+        # less review than one SECURITY DEFINER function whose body is in the
+        # migration and whose every write is an upsert to a value the platform
+        # authority resolved on this same request.
+        #
+        # What it costs is stated in the migration rather than hidden here:
+        # admission's authority re-resolution becomes a consistency check on
+        # projected values rather than an independent second opinion. The
+        # independent check that still runs is AuthorityResolver, live, against
+        # the platform stores, before admission is reached at all.
+        (
+            "project_platform_authority",
+            "uuid, uuid, uuid, text, text[], text, text, timestamp with time zone, "
+            "text, text, jsonb, uuid[], text[]",
+        ),
     }
 )
 SERVICE_ROLES = {

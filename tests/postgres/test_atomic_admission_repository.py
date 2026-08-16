@@ -372,6 +372,15 @@ def test_migrations_through_0012_and_exact_admission_function_inventory() -> Non
             "project_platform_identity",
             "uuid, text, text, text, uuid, text, text, text",
         ),
+        # Migration 0012, second half. Projects the session, account, grant,
+        # plan quotas and territories that `atomic_admit_tool_call`'s credential
+        # CTE reads and that nothing else writes. The trade it makes is recorded
+        # in `postgres/authority.py` next to the same tuple.
+        (
+            "project_platform_authority",
+            "uuid, uuid, uuid, text, text[], text, text, timestamp with time zone, "
+            "text, text, jsonb, uuid[], text[]",
+        ),
     }
 
 

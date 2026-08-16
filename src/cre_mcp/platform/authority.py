@@ -23,7 +23,11 @@ from cre_mcp.platform.auth import (
     OAuthSessionStore,
 )
 from cre_mcp.platform.entitlements import AccountRecord, EffectiveAccess
-from cre_mcp.platform.dbapi import platform_connection
+from cre_mcp.platform.dbapi import (
+    platform_backend_is_remote,
+    platform_connection,
+)
+from cre_mcp.platform.projected_ids import session_uuid, user_uuid
 
 ACCESS_ENABLED_ACCOUNT_STATES = frozenset({"active", "past_due", "grace_period"})
 _PROFILE_RANK = {
@@ -97,6 +101,39 @@ class AuthorityOutcome:
     @property
     def access_allowed(self) -> bool:
         return self.context is not None
+
+
+def _certified_actor_id(membership: object) -> str:
+    """The actor identifier this request's context will carry.
+
+    On the local file-backed default this is the platform row id, exactly as it
+    always was. On the hosted PostgreSQL backend it is the derived certified
+    uuid, and it has to be derived *here* rather than anywhere downstream.
+
+    Three consumers read it and all three must agree: atomic admission parses
+    it as a uuid, ``admitted_connection`` sets it as ``app.actor_user_id`` for
+    row-level security, and every request-scoped domain repository compares the
+    context against the admission with ``hmac.compare_digest``. Translating at
+    the admission boundary instead — which is what the first version of this
+    did — satisfies the first two and silently breaks the third: RLS sees a
+    non-uuid, ``current_actor_user_id()`` returns NULL, every policy denies, and
+    the tool returns an empty result that the territory gate then refuses with
+    a message about territory. Three layers away from the cause.
+    """
+    if membership is None:
+        return ""
+    raw = str(membership.user_id)
+    if not platform_backend_is_remote():
+        return raw
+    return str(user_uuid(raw))
+
+
+def _certified_session_id(session_id: object) -> str:
+    """The session identifier this request's context will carry."""
+    raw = str(session_id)
+    if not platform_backend_is_remote():
+        return raw
+    return str(session_uuid(raw))
 
 
 class AuthorityResolver:
@@ -328,8 +365,8 @@ class AuthorityResolver:
                 active=True,
                 trusted=False,
                 display_name=workspace.name,
-                actor_id=str(membership.user_id) if membership is not None else "",
-                session_id=session.session_id,
+                actor_id=_certified_actor_id(membership),
+                session_id=_certified_session_id(session.session_id),
             )
 
         return AuthorityOutcome(
