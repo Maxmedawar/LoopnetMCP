@@ -21,6 +21,7 @@ import pytest
 from cre_mcp.access.context import TenantContext
 from cre_mcp.platform.auth import OAuthSessionStore
 from cre_mcp.platform.repository import PlatformRepository
+from cre_mcp.platform.projected_ids import workspace_uuid as workspace_uuid_for
 from cre_mcp.postgres.identity_projection import IdentityProjectionUnavailable
 from tests.postgres.test_skool_launch_gate import (  # noqa: F401
     MCP_SCOPE,
@@ -253,21 +254,90 @@ async def test_ending_a_skool_membership_revokes_the_projected_grant(hosted_app)
     )
     assert report["grant_status"] != "active"
 
-    # The next projection -- which is what any worker or request triggers --
-    # must carry the revocation across. Under 0012 this stayed ('active', None).
-    # Admission denies rather than raising: the projection succeeds (it copies
-    # the revocation) and the credential CTE then finds no live grant.
-    after = _admit(bundle, context)
-    assert after.decision == "denied"
-    status, ends_at = _owner_one(
-        dsn, "SELECT status, ends_at FROM access_grants WHERE source='manual'"
+    # THE TEST THAT MATTERS, and the one whose first version was wrong.
+    #
+    # It previously called `_admit` again here and asserted the projection
+    # carried the revocation across. That passes, and it proves nothing about
+    # production: a revoked member is refused 401 by the OAuth verifier before
+    # admission is reached, so the "next projection" never happens. An
+    # independent reviewer drove the real sequence and got a live entitlement
+    # back from the scheduler -- unbounded for a grant with no end date.
+    #
+    # So the assertion is made where the worker actually looks, with no further
+    # request from the revoked member in between.
+    from cre_mcp.postgres.config import PostgresSettings
+    from cre_mcp.postgres.jobs import (
+        InternalJobQueue,
+        SavedSearchScheduler,
+        WorkerIdentity,
     )
-    assert status == "revoked" or (ends_at is not None and ends_at <= datetime.now(UTC))
+    from cre_mcp.postgres.pool import PostgresDatabase
 
-    # And the projected session carries the revocation rather than being
-    # un-revoked. 0012 set `revoked_at = NULL` unconditionally on every upsert.
-    revoked_at = _owner_one(dsn, "SELECT revoked_at FROM oauth_sessions LIMIT 1")
-    assert revoked_at is None or revoked_at[0] is not None
+    admin_dsn = dsn.replace("user=medawarcre_test_app", "user=medawarcre_test_admin")
+    database = PostgresDatabase(
+        PostgresSettings(dsn=admin_dsn, runtime_mode="admin", min_size=0, max_size=2)
+    )
+    database.open(wait=True)
+    try:
+        staff = _owner_one(dsn, "SELECT user_id FROM staff_roles LIMIT 1")
+        if staff is None:
+            with psycopg.connect(_owner(dsn)) as connection:
+                connection.execute("SET search_path TO medawarcre, pg_catalog")
+                staff_id = connection.execute(
+                    "INSERT INTO users(email,name) VALUES "
+                    "('projection-staff@example.test','Projection Staff') "
+                    "RETURNING id"
+                ).fetchone()[0]
+                connection.execute(
+                    "INSERT INTO staff_roles(user_id,role,active) "
+                    "VALUES (%s,'admin',true)",
+                    (staff_id,),
+                )
+                connection.commit()
+            staff = (staff_id,)
+        queue = InternalJobQueue(
+            database,
+            identity=WorkerIdentity(
+                actor_user_id=str(staff[0]),
+                role="admin",
+                reason_code="scheduled_run",
+                reason="Scheduled saved-search worker run.",
+            ),
+        )
+        scheduler = SavedSearchScheduler(database, queue)
+        with database.connection(
+            __import__(
+                "cre_mcp.postgres.pool", fromlist=["AuthorityContext"]
+            ).AuthorityContext(
+                workspace_id=None,
+                actor_user_id=str(staff[0]),
+                internal_role="admin",
+                audit_reason="Verifying the revoked entitlement gate.",
+            )
+        ) as connection:
+            entitlement = scheduler.entitlement(
+                connection,
+                workspace_id=str(workspace_uuid_for(workspace.public_id)),
+                actor_user_id=str(user_uuid(str(customer.id))),
+            )
+    finally:
+        database.close()
+
+    assert entitlement.denial_reason is not None, (
+        "the scheduler still sees a live entitlement for a revoked member; a "
+        "worker would keep running their saved searches"
+    )
+    assert entitlement.profile is None
+    # The certified copy is deliberately left stale here, and that is safe for
+    # a stated reason rather than by luck: nothing reads it for this decision
+    # any more. A request from the revoked member is refused 401 at the OAuth
+    # verifier before admission, and if one ever did reach admission the
+    # projection would refresh the copy first. Asserting the copy had flipped
+    # was the mistake the first version of this test made -- it made the copy
+    # flip by calling admission itself, which production cannot do.
+    assert _owner_one(
+        dsn, "SELECT status FROM access_grants WHERE source='manual'"
+    ) == ("active",)
 
 
 async def test_the_customer_role_cannot_make_itself_a_platform_admin(hosted_app):

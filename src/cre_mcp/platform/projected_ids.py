@@ -72,34 +72,10 @@ def session_uuid(platform_session_id: object) -> UUID:
     return uuid5(IDENTITY_NAMESPACE, f"session/{normalized}")
 
 
-def territory_uuid(workspace_public_id: str, index: int, value: str) -> UUID:
-    """A territory id whose *text* ordering reproduces the resolved order.
-
-    This is not decoration. ``atomic_admit_tool_call`` rebuilds the territory
-    array as ``array_agg(value ORDER BY min(territory.id::text))`` and compares
-    it to the ordered list admission was handed. A plain ``uuid5`` sorts
-    arbitrarily as text, so a workspace with one territory would pass and a
-    workspace with two would fail as ``authority_changed`` — which is exactly
-    the shape of defect that reaches production, because the single-territory
-    case is the one anybody tests first.
-
-    The first four bytes carry the index and the rest carries the identity. The
-    result is a well-formed uuid, deterministic, and sorts as text in resolved
-    order.
-    """
-    if index < 0 or index > 0xFFFFFFFF:
-        raise ProjectedIdentityError("territory index is out of range")
-    identity = uuid5(
-        IDENTITY_NAMESPACE, f"territory/{workspace_public_id}/{value}"
-    ).bytes
-    return UUID(bytes=index.to_bytes(4, "big") + identity[4:])
-
-
 __all__ = [
     "IDENTITY_NAMESPACE",
     "ProjectedIdentityError",
     "session_uuid",
-    "territory_uuid",
     "user_uuid",
     "workspace_uuid",
 ]

@@ -159,10 +159,10 @@ def test_migration_0002_inventory_is_explicit() -> None:
     # The literal is kept rather than derived so that adding a migration
     # cannot pass unnoticed -- which is the only reason this line exists.
     assert [migration.version for migration in migrations] == [
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
     ]
     assert migrations[1].name == "hosted lifecycle and oauth authority"
-    assert EXPECTED_MIGRATION_VERSION == 13
+    assert EXPECTED_MIGRATION_VERSION == 14
     assert LIFECYCLE_TABLES <= EXPECTED_TABLES
     assert LIFECYCLE_TABLES <= EXPECTED_RLS_TABLES
     assert "state text NOT NULL" in migrations[1].sql

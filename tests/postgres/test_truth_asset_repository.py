@@ -279,10 +279,10 @@ def test_migration_0006_adds_truth_asset_authority() -> None:
     # The literal is kept rather than derived so that adding a migration
     # cannot pass unnoticed -- which is the only reason this line exists.
     assert [migration.version for migration in migrations] == [
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
     ]
     assert migrations[5].name == "truth asset persistence"
-    assert EXPECTED_MIGRATION_VERSION == 13
+    assert EXPECTED_MIGRATION_VERSION == 14
     assert {
         "truth_document_blobs",
         "truth_documents",

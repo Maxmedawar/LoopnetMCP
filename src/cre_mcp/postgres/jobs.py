@@ -1062,27 +1062,43 @@ def saved_search_idempotency_key(saved_search_id: str, window: datetime) -> str:
 
 
 _ENTITLEMENT_QUERY = """
+-- Read against the platform authority, not the certified copy of it.
+--
+-- This query previously read medawarcre.access_grants, workspace_accounts,
+-- plans and territories. Nothing writes those rows except the identity
+-- projection, and the projection only runs on a customer request -- so a
+-- revoked member's projected grant was refreshed by exactly the request the
+-- revocation makes impossible. An independent reviewer drove the sequence and
+-- got a live entitlement back after `manual_revoke`, unbounded for any grant
+-- whose ends_at is NULL. The scheduler would have kept running that
+-- workspace's saved searches forever.
+--
+-- The certified uuids the scheduler holds are resolved back to platform keys
+-- through the two values the projection copies verbatim and both schemas keep
+-- unique: the workspace public id, and the user's email.
 WITH target AS (
-    SELECT workspace.id AS workspace_id,
-           workspace.state AS workspace_state,
-           membership.state AS membership_state,
-           user_record.state AS user_state,
+    SELECT platform_workspace.id AS platform_workspace_id,
+           platform_user.id AS platform_user_id,
            account.state AS account_state
     FROM medawarcre.workspaces workspace
-    JOIN medawarcre.memberships membership
-      ON membership.workspace_id = workspace.id
-     AND membership.user_id = %(actor)s
     JOIN medawarcre.users user_record
-      ON user_record.id = membership.user_id
-    LEFT JOIN medawarcre.workspace_accounts account
-      ON account.workspace_id = workspace.id
+      ON user_record.id = %(actor)s
+    JOIN medawarcre.platform_workspaces platform_workspace
+      ON platform_workspace.public_id = workspace.public_id
+    JOIN medawarcre.platform_users platform_user
+      ON lower(platform_user.email) = lower(user_record.email)
+    JOIN medawarcre.platform_memberships membership
+      ON membership.workspace_id = platform_workspace.id
+     AND membership.user_id = platform_user.id
+    LEFT JOIN medawarcre.platform_accounts account
+      ON account.workspace_id = platform_workspace.id
     WHERE workspace.id = %(workspace)s
 ),
 valid_grant AS (
     SELECT access_grant.id,
            access_grant.profile,
            access_grant.plan_key,
-           access_grant.updated_at,
+           (access_grant.updated_at)::timestamptz AS updated_at,
            CASE access_grant.profile
                WHEN 'full_operator' THEN 4
                WHEN 'national_scout' THEN 3
@@ -1090,19 +1106,20 @@ valid_grant AS (
                WHEN 'jv_partner' THEN 1
                ELSE 0
            END AS profile_rank
-    FROM medawarcre.access_grants access_grant
-    JOIN target ON target.workspace_id = access_grant.workspace_id
+    FROM medawarcre.platform_access_grants access_grant
+    JOIN target ON target.platform_workspace_id = access_grant.workspace_id
     WHERE access_grant.status IN ('active', 'overridden', 'expiring')
       AND access_grant.source IN ('stripe', 'skool', 'manual', 'jv', 'promotion')
-      AND access_grant.starts_at <= %(now)s
-      AND (access_grant.ends_at IS NULL OR access_grant.ends_at > %(now)s)
+      AND (access_grant.starts_at)::timestamptz <= %(now)s
+      AND (access_grant.ends_at IS NULL
+           OR (access_grant.ends_at)::timestamptz > %(now)s)
       AND (access_grant.source NOT IN ('stripe', 'skool')
            OR access_grant.ends_at IS NOT NULL)
       AND ((access_grant.scope = 'workspace'
             AND access_grant.source = 'jv'
             AND access_grant.subject_user_id IS NULL)
         OR (access_grant.scope = 'subject'
-            AND access_grant.subject_user_id = %(actor)s))
+            AND access_grant.subject_user_id = target.platform_user_id))
 ),
 selected_grant AS (
     SELECT valid_grant.*
@@ -1114,33 +1131,36 @@ selected_grant AS (
 ),
 selected_plan AS (
     SELECT plan.id,
-           plan.active,
            NOT EXISTS (
                SELECT 1
-               FROM pg_catalog.jsonb_each(plan.daily_quotas) quota
+               FROM pg_catalog.jsonb_each((plan.daily_quotas)::jsonb) quota
                WHERE length(btrim(quota.key)) = 0
                   OR pg_catalog.jsonb_typeof(quota.value) <> 'number'
                   OR quota.value::text !~ '^(0|[1-9][0-9]*)$'
            ) AS quotas_valid
     FROM selected_grant
-    LEFT JOIN medawarcre.plans plan
-      ON plan.plan_key = selected_grant.plan_key
+    LEFT JOIN medawarcre.platform_plans plan
+      ON plan.key = selected_grant.plan_key
 ),
 territory_summary AS (
     SELECT array_agg(territory_value.value ORDER BY territory_value.first_id)
                AS territories
     FROM (
-        SELECT btrim(COALESCE(territory.state_code,
-                              territory.market,
+        -- NULLIF rather than a bare COALESCE, matching
+        -- AuthorityResolver's `row["state"] or row["market"] or row["name"]`:
+        -- an empty string is falsy in Python and is not NULL in SQL, and the
+        -- difference silently produced a different territory set.
+        SELECT btrim(COALESCE(NULLIF(btrim(territory.state), ''),
+                              NULLIF(btrim(territory.market), ''),
                               territory.name)) AS value,
-               min(territory.id::text) AS first_id
-        FROM medawarcre.territories territory
-        JOIN target ON target.workspace_id = territory.workspace_id
-        WHERE length(btrim(COALESCE(territory.state_code,
-                                    territory.market,
+               min(territory.id) AS first_id
+        FROM medawarcre.platform_territories territory
+        JOIN target ON target.platform_workspace_id = territory.workspace_id
+        WHERE length(btrim(COALESCE(NULLIF(btrim(territory.state), ''),
+                                    NULLIF(btrim(territory.market), ''),
                                     territory.name))) > 0
-        GROUP BY btrim(COALESCE(territory.state_code,
-                                territory.market,
+        GROUP BY btrim(COALESCE(NULLIF(btrim(territory.state), ''),
+                                NULLIF(btrim(territory.market), ''),
                                 territory.name))
     ) territory_value
 )
@@ -1148,12 +1168,6 @@ SELECT selected_grant.profile,
        selected_grant.plan_key,
        COALESCE(territory_summary.territories, ARRAY[]::text[]),
        CASE
-           WHEN target.user_state <> 'active'
-               THEN 'workspace_not_admissible'
-           WHEN target.workspace_state NOT IN ('active', 'past_due')
-               THEN 'workspace_not_admissible'
-           WHEN target.membership_state <> 'active'
-               THEN 'workspace_not_admissible'
            WHEN target.account_state IS NULL
                THEN 'workspace_not_admissible'
            WHEN target.account_state NOT IN
@@ -1163,7 +1177,6 @@ SELECT selected_grant.profile,
                THEN 'entitlement_missing_or_expired'
            WHEN selected_grant.plan_key IS NULL
                 OR selected_plan.id IS NULL
-                OR NOT selected_plan.active
                 OR NOT selected_plan.quotas_valid
                THEN 'plan_missing_or_invalid'
            ELSE NULL
@@ -1215,14 +1228,18 @@ class SavedSearchScheduler:
     ) -> Entitlement:
         """Resolve the workspace's current entitlement and territory grant.
 
-        The predicates are lifted from
-        ``medawarcre.resolve_bearer_authority`` in migration 0002 — the same
-        grant statuses, the same sources, the same profile ranking, the same
-        plan validity, the same territory projection. That function is keyed on
-        a bearer token hash, and a background job has no bearer token, so the
-        rules are re-expressed against ``(workspace, owner)`` rather than
-        re-invented: a job must not be able to run under a laxer rule than a
-        live request would get.
+        The predicates are the ones ``AuthorityResolver`` applies to a live
+        request, re-expressed against ``(workspace, owner)`` because a job has
+        no bearer token: the same grant statuses and sources, the same profile
+        ranking, the same plan validity, the same territory projection. A job
+        must not run under a laxer rule than a live request would get.
+
+        They are evaluated against the **platform** relations. An earlier
+        version read the certified copies, and the copies are refreshed only by
+        a customer request — so a revoked member's entitlement never expired,
+        because revocation is precisely what stops them making the request that
+        would have refreshed it. That is not a staleness window; for a grant
+        with no end date it never closed at all.
         """
         row = connection.execute(
             _ENTITLEMENT_QUERY,

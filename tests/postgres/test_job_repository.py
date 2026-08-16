@@ -160,6 +160,62 @@ def _seed(world: World) -> None:
                 "workspace_id,name,state_code) VALUES (%s,'Texas','TX')",
                 (workspace,),
             )
+        # The platform authority, which is what the scheduler's entitlement
+        # gate now reads. The certified rows above are the projection of these;
+        # seeding only the copies made every gate answer
+        # `workspace_not_admissible`, which is the gate working.
+        connection.execute(
+            "INSERT INTO medawarcre.platform_plans"
+            "(key,name,daily_quotas,created_at,updated_at) "
+            "VALUES ('operator','Operator','{\"search\": 500}',"
+            "'2026-01-01','2026-01-01')"
+        )
+        connection.execute(
+            "INSERT INTO medawarcre.platform_users"
+            "(email,name,created_at,updated_at) VALUES "
+            "('a@example.test','A','2026-01-01','2026-01-01'),"
+            "('b@example.test','B','2026-01-01','2026-01-01')"
+        )
+        for public_id, email in (("ws_job_a", "a@example.test"),
+                                 ("ws_job_b", "b@example.test")):
+            connection.execute(
+                "INSERT INTO medawarcre.platform_workspaces"
+                "(public_id,name,plan_id,created_at,updated_at) SELECT %s,%s,"
+                "plan.id,'2026-01-01','2026-01-01' FROM medawarcre.platform_plans "
+                "plan WHERE plan.key='operator'",
+                (public_id, f"Workspace {public_id[-1].upper()}"),
+            )
+            connection.execute(
+                "INSERT INTO medawarcre.platform_memberships"
+                "(workspace_id,user_id,role,created_at,updated_at) "
+                "SELECT w.id,u.id,'owner','2026-01-01','2026-01-01' "
+                "FROM medawarcre.platform_workspaces w, medawarcre.platform_users u "
+                "WHERE w.public_id=%s AND u.email=%s",
+                (public_id, email),
+            )
+            connection.execute(
+                "INSERT INTO medawarcre.platform_accounts"
+                "(workspace_id,state,updated_at) SELECT w.id,'active','2026-01-01' "
+                "FROM medawarcre.platform_workspaces w WHERE w.public_id=%s",
+                (public_id,),
+            )
+            connection.execute(
+                "INSERT INTO medawarcre.platform_access_grants"
+                "(workspace_id,subject_user_id,scope,source,external_ref,"
+                "profile,plan_key,status,starts_at,ends_at,created_at,updated_at) "
+                "SELECT w.id,u.id,'subject','manual',%s,'full_operator','operator',"
+                "'active','2026-01-01T00:00:00+00:00',NULL,'2026-01-01','2026-01-01' "
+                "FROM medawarcre.platform_workspaces w, medawarcre.platform_users u "
+                "WHERE w.public_id=%s AND u.email=%s",
+                (f"grant-{public_id}", public_id, email),
+            )
+            connection.execute(
+                "INSERT INTO medawarcre.platform_territories"
+                "(workspace_id,name,state,created_at,updated_at) "
+                "SELECT w.id,'Texas','TX','2026-01-01','2026-01-01' "
+                "FROM medawarcre.platform_workspaces w WHERE w.public_id=%s",
+                (public_id,),
+            )
         for search, workspace, user in (
             (ids["search_a"], ids["workspace_a"], ids["user_a"]),
             (ids["search_b"], ids["workspace_b"], ids["user_b"]),
@@ -786,9 +842,10 @@ def test_a_workspace_that_lost_entitlement_is_refused_and_not_retried(
     # Entitled at enqueue; revoked before the worker gets there.
     with world.owner() as connection:
         connection.execute(
-            "UPDATE medawarcre.access_grants SET status='revoked' "
-            "WHERE workspace_id=%s",
-            (world.ids["workspace_a"],),
+            "UPDATE medawarcre.platform_access_grants SET status='revoked' "
+            "WHERE workspace_id=(SELECT id FROM medawarcre.platform_workspaces "
+            "WHERE public_id=%s)",
+            ("ws_job_a",),
         )
 
     outcomes = [
@@ -812,9 +869,10 @@ def test_a_workspace_that_lost_entitlement_is_refused_and_not_retried(
     # success once the grant is restored.
     with world.owner() as connection:
         connection.execute(
-            "UPDATE medawarcre.access_grants SET status='active' "
-            "WHERE workspace_id=%s",
-            (world.ids["workspace_a"],),
+            "UPDATE medawarcre.platform_access_grants SET status='active' "
+            "WHERE workspace_id=(SELECT id FROM medawarcre.platform_workspaces "
+            "WHERE public_id=%s)",
+            ("ws_job_a",),
         )
     assert (
         scheduler.run_once("runner", now=moment + timedelta(minutes=5)).outcome
@@ -841,9 +899,11 @@ def test_a_search_outside_the_current_territory_is_refused(world: World) -> None
 
     with world.owner() as connection:
         connection.execute(
-            "UPDATE medawarcre.territories SET state_code='CA', name='California' "
-            "WHERE workspace_id=%s",
-            (world.ids["workspace_a"],),
+            "UPDATE medawarcre.platform_territories SET state='CA', "
+            "name='California' "
+            "WHERE workspace_id=(SELECT id FROM medawarcre.platform_workspaces "
+            "WHERE public_id=%s)",
+            ("ws_job_a",),
         )
 
     outcomes = [

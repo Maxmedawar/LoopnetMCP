@@ -26,26 +26,15 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
-from psycopg.types.json import Jsonb
 
 from cre_mcp.platform.auth import DEFAULT_AUDIENCE, DEFAULT_RESOURCE
 from cre_mcp.platform.projected_ids import (
     IDENTITY_NAMESPACE,
     ProjectedIdentityError,
     session_uuid,
-    territory_uuid,
     user_uuid,
     workspace_uuid,
 )
-
-_PLATFORM_TO_CERTIFIED_ROLE = {
-    "owner": "owner",
-    "admin": "admin",
-    "member": "member",
-    "viewer": "viewer",
-    "jv_partner": "jv_partner",
-}
-
 
 class IdentityProjectionUnavailable(RuntimeError):
     """One platform identity could not be projected for this request."""
@@ -231,7 +220,6 @@ __all__ = [
     "ProjectedIdentityError",
     "PlatformIdentityProjection",
     "ProjectingAdmissionRepository",
-    "certified_role",
     "session_uuid",
     "user_uuid",
     "workspace_uuid",

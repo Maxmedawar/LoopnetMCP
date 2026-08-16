@@ -15,7 +15,7 @@ zsh deploy/local_staging.sh          # PostgreSQL + migrations + hosted MCP
 PYTHONPATH=$PWD/src .venv/bin/python -m pytest tests -q
 ```
 
-Last run: `5,228 passed, 4 skipped`. Staging probe: migrations `1..13` applied,
+Last run: `5,233 passed, 4 skipped`. Staging probe: migrations `1..14` applied,
 hosted MCP healthy on `127.0.0.1:8791`, unauthenticated `initialize` refused
 `401`, no local state file created, and the scheduled-search worker ticking
 against the same database on its own admin connection.
@@ -27,7 +27,7 @@ against the same database on its own admin connection.
 | The hosted process boots on PostgreSQL and enforces OAuth | `tests/postgres/test_hosted_boot.py` |
 | The twelve platform authority stores answer from PostgreSQL, with no SQLite file | `tests/postgres/test_platform_bridge_runtime.py` |
 | A Skool member gets MCP access; ending it refuses the next call on an already-issued 12-hour token, `401 invalid_token` | `tests/postgres/test_skool_launch_gate.py` |
-| A revoked member's *scheduled* work also stops — the projected grant carries the revocation | `tests/postgres/test_projection_is_a_projection.py` |
+| A revoked member's *scheduled* work also stops — asserted at the scheduler's own gate, with no further request from the revoked member | `tests/postgres/test_projection_is_a_projection.py` |
 | The full Stripe test-mode lifecycle: signatures, replay, ordering, activation, upgrade, downgrade, failure, recovery, cancellation, period-end | `tests/postgres/test_stripe_lifecycle_postgres.py` |
 | Two tenants share one server and never see each other's data; it survives a restart | `tests/postgres/test_hosted_staging_proof.py` |
 | A customer cannot reach an internal route | same file |
@@ -81,6 +81,13 @@ against the same database on its own admin connection.
   current store writes the same rows without it.
 - **Delivery for scheduled searches is not built.** The job engine is complete
   and runs; notification is an explicit staging integration.
+- **The certified copy of an entitlement can be stale.** It is refreshed only
+  by a customer request, and a revoked member cannot make one. That is safe
+  because nothing reads it for a decision that matters: a revoked member is
+  refused 401 before admission, and the scheduler reads the platform relations
+  directly. It was *not* safe in the first version of that repair, which is
+  recorded in migration `0014` and pinned by
+  `test_ending_a_skool_membership_revokes_the_projected_grant`.
 - **Two OAuth schemas exist.** `PostgresOAuthAuthorityRepository` and
   `medawarcre.oauth_sessions` are certified, tested, and *not* on the hosted
   path, because issuance writes `platform_oauth_sessions`. Unifying them is
