@@ -1,13 +1,48 @@
-# LAUNCH BLOCKED. Historical ingress shape only. Do not create a tunnel, route
-# DNS, or replace these placeholders until deploy/DEPLOY.md is replaced by an
-# approved executable runbook.
+# Private-staging ingress for MedawarCRE. Inert until someone fills in the two
+# placeholders and runs the commands in deploy/DEPLOY.md.
+#
+# STATUS, 2026-08-16. The previous version of this file said "LAUNCH BLOCKED …
+# until the hosted service can start at all". That is no longer true: the hosted
+# process boots against PostgreSQL and serves an OAuth-enforcing MCP endpoint.
+# What remains before this file should be applied is listed in DEPLOY.md; none
+# of it is a reason to leave a stale blocker notice here, because a stale notice
+# is indistinguishable from a live one to whoever reads it next.
+#
+# Applying this still requires a Cloudflare account action only Max can take —
+# creating the tunnel, routing the hostname, and installing the credentials
+# file. Nothing in this repository does that for him, deliberately.
+#
+# PORT CHOICE, recorded 2026-08-07 and unchanged. Port 8000 is NOT used here.
+# An unrelated local service already listens on 127.0.0.1:8000 on the build
+# machine, and there is already a cloudflared tunnel running for other services
+# that must not be disturbed. Private staging uses 8791.
+#
+# The Dockerfile still declares EXPOSE 8000 and CRE_HTTP_PORT=8000 for the
+# container's own network namespace, which is correct and should stay: the
+# collision is on the host, not inside the container. Publish the container as
+#
+#     -p 127.0.0.1:8791:8000
+#
+# and point the tunnel at 8791. Never publish it on 0.0.0.0 for private
+# staging — the tunnel is the only intended path in.
+#
+# Do NOT add an ingress rule for PostgreSQL or for any internal/admin route.
+# The Operations Console and the database are internal surfaces; the only thing
+# that belongs on a public hostname is the customer MCP endpoint and the
+# sign-in/connection screens it needs.
+
 tunnel: <TUNNEL_UUID>
 credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
 
 ingress:
-  # `cre-mcp` is the container name on the shared Docker network. If cloudflared
-  # runs on the host instead, use http://localhost:8000 and publish the app only
-  # on 127.0.0.1:8000.
-  - hostname: mcp.example.com
-    service: http://cre-mcp:8000
+  # If cloudflared runs on the host (the case on the Mac mini), use
+  # http://127.0.0.1:8791 and publish the app only on 127.0.0.1:8791.
+  # If cloudflared runs as a container on the same Docker network, `cre-mcp` is
+  # the container name and port 8000 is its in-namespace port.
+  - hostname: <STAGING_HOSTNAME>
+    service: http://127.0.0.1:8791
+
+  # Required catch-all. Anything not matched above is refused rather than
+  # forwarded, so adding a second hostname to the tunnel later cannot
+  # accidentally reach this service.
   - service: http_status:404
