@@ -274,9 +274,15 @@ def _asset(
 
 def test_migration_0006_adds_truth_asset_authority() -> None:
     migrations = load_migrations()
-    assert [migration.version for migration in migrations] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    # Extended deliberately from [1..9] at migrations 0010 (platform
+    # authority), 0011 (access audit log) and 0012 (identity projection).
+    # The literal is kept rather than derived so that adding a migration
+    # cannot pass unnoticed -- which is the only reason this line exists.
+    assert [migration.version for migration in migrations] == [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+    ]
     assert migrations[5].name == "truth asset persistence"
-    assert EXPECTED_MIGRATION_VERSION == 9
+    assert EXPECTED_MIGRATION_VERSION == 12
     assert {
         "truth_document_blobs",
         "truth_documents",

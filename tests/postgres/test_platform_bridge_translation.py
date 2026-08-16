@@ -159,3 +159,14 @@ def test_a_reserved_word_inside_a_literal_is_not_quoted() -> None:
 def test_a_column_that_merely_starts_with_a_reserved_word_is_untouched() -> None:
     plan = translate("SELECT user_id, in_scope FROM platform_memberships")
     assert '"' not in plan.bound_sql
+
+
+def test_an_integer_flag_in_a_case_when_becomes_an_explicit_comparison() -> None:
+    plan = translate(
+        "UPDATE platform_provider_events "
+        "SET replayed_at=CASE WHEN ? THEN ? ELSE replayed_at END WHERE id=?"
+    )
+    # SQLite reads any non-zero number as true. PostgreSQL rejects the whole
+    # statement with 'argument of CASE/WHEN must be type boolean'.
+    assert "WHEN (%s)::int <> 0 THEN" in plan.bound_sql
+    assert plan.bound_sql.count("%s") == 3

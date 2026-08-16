@@ -1243,9 +1243,14 @@ GRANT SELECT, INSERT ON medawarcre.platform_admin_audit TO medawarcre_app;
 
 -- Every platform_* identity column owns a sequence, and INSERT without a
 -- sequence privilege fails. One statement covers all of them; migrations
--- 0001-0009 create no sequences of their own, so this grants nothing extra.
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA medawarcre TO medawarcre_app;
 
+-- Deliberately no sequence grant. These are IDENTITY columns, not `serial`:
+-- PostgreSQL uses the backing sequence internally on INSERT and requires no
+-- USAGE privilege on it, so a grant here buys nothing. It also costs: an
+-- explicit ACL on an identity sequence is not reproduced by pg_dump/pg_restore,
+-- so the restored catalog fingerprint stops matching the manifest and the
+-- disaster-recovery verification fails. That is exactly how this line was
+-- found -- by `test_native_dump_clean_restore_and_service_smoke`, not by review.
 GRANT SELECT ON
     medawarcre.platform_schema_versions,
     medawarcre.platform_users,

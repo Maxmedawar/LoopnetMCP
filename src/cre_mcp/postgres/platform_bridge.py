@@ -308,8 +308,16 @@ def _quote_reserved_identifiers(statement: str) -> str:
     return statement
 
 
+#: ``CASE WHEN ? THEN`` where the bound value is an integer flag. SQLite treats
+#: any non-zero number as true; PostgreSQL requires an actual boolean and
+#: rejects the statement outright. The stores pass ``int(flag)``, so the
+#: condition is made explicit rather than the call sites being changed.
+_CASE_WHEN_FLAG = re.compile(r"\bWHEN\s+\?\s+THEN\b", re.IGNORECASE)
+
+
 def _translate_expressions(statement: str) -> str:
     statement = _quote_reserved_identifiers(statement)
+    statement = _CASE_WHEN_FLAG.sub("WHEN (?)::int <> 0 THEN", statement)
     statement = _rewrite_function(
         statement, "julianday", lambda inner: f"(({inner})::timestamptz)"
     )

@@ -15,6 +15,19 @@ ADMISSION_FUNCTIONS = frozenset(
             "record_tool_call_final",
             "uuid, uuid, text, uuid, uuid, text, boolean, text, text",
         ),
+        # Migration 0012. Added deliberately, which is what this exact-set pin
+        # exists to force. The admission role has to project the platform
+        # authority's bigint-keyed identity into the certified uuid-keyed
+        # tenant tables before it can admit a request at all, and the
+        # alternative was granting it INSERT on users, workspaces and
+        # memberships — which would let any hosted request invent a tenant.
+        # This is that capability narrowed to one SECURITY DEFINER call that
+        # can only write rows the caller read from the platform authority, and
+        # that never updates or deletes.
+        (
+            "project_platform_identity",
+            "uuid, text, text, text, uuid, text, text, text",
+        ),
     }
 )
 SERVICE_ROLES = {

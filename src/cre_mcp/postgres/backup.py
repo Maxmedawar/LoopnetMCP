@@ -53,7 +53,10 @@ from cre_mcp.postgres.schema import (
     APP_WRITE_TABLES,
     EXPECTED_CATALOG_FINGERPRINT,
     EXPECTED_RLS_TABLES,
+    AUDIT_SINK_TABLES,
     EXPECTED_TABLES,
+    PLATFORM_APP_MUTABLE_TABLES,
+    PLATFORM_AUTHORITY_TABLES,
     SCHEMA_NAME,
 )
 
@@ -796,15 +799,33 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
 
     for table in EXPECTED_TABLES:
         qualified = f"{SCHEMA_NAME}.{table}"
+        # The platform authority tables (0010) and the audit sink (0011) are
+        # outside the certified APP_*/ADMIN_* role model -- they run before a
+        # workspace context exists and carry no RLS -- so their expected grants
+        # are stated here rather than derived from sets that deliberately
+        # exclude them. Leaving them out would have made this check expect no
+        # privileges at all on thirty-two relations the migrations grant.
+        platform_readable = (
+            table in PLATFORM_AUTHORITY_TABLES or table in AUDIT_SINK_TABLES
+        )
+        platform_mutable = table in PLATFORM_APP_MUTABLE_TABLES
         expected_by_role = {
             "medawarcre_app": (
-                table in APP_READ_TABLES,
-                table in APP_WRITE_TABLES or table in APP_INSERT_ONLY_TABLES,
-                table in APP_WRITE_TABLES,
-                table in APP_WRITE_TABLES or table in APP_DELETE_TABLES,
+                table in APP_READ_TABLES or platform_readable,
+                (
+                    table in APP_WRITE_TABLES
+                    or table in APP_INSERT_ONLY_TABLES
+                    or platform_readable
+                ),
+                table in APP_WRITE_TABLES or platform_mutable,
+                (
+                    table in APP_WRITE_TABLES
+                    or table in APP_DELETE_TABLES
+                    or platform_mutable
+                ),
             ),
             "medawarcre_admin": (
-                table in ADMIN_READ_TABLES,
+                table in ADMIN_READ_TABLES or platform_readable,
                 table in ADMIN_MUTATION_TABLES
                 or table in ADMIN_INSERT_ONLY_TABLES,
                 table in ADMIN_MUTATION_TABLES,
@@ -852,12 +873,14 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
             for column_name, can_select, can_insert, can_update in column_rows:
                 expected_select = role == "medawarcre_app" and (
                     table in APP_READ_TABLES
+                    or platform_readable
                     or str(column_name)
                     in APP_COLUMN_READS.get(table, frozenset())
                 )
                 if role == "medawarcre_admin":
                     expected_select = (
                         table in ADMIN_READ_TABLES
+                        or platform_readable
                         or str(column_name)
                         in ADMIN_COLUMN_READS.get(table, frozenset())
                     )
@@ -866,6 +889,7 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
                 expected_insert = (
                     table in APP_WRITE_TABLES
                     or table in APP_INSERT_ONLY_TABLES
+                    or platform_readable
                     or str(column_name)
                     in APP_COLUMN_INSERTS.get(table, frozenset())
                     if role == "medawarcre_app"
@@ -877,6 +901,7 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
                 )
                 expected_update = (
                     table in APP_WRITE_TABLES
+                    or platform_mutable
                     or str(column_name)
                     in APP_COLUMN_UPDATES.get(table, frozenset())
                     if role == "medawarcre_app"
@@ -973,6 +998,25 @@ def _verify_exact_privileges(connection: psycopg.Connection) -> None:
             "resolve_oauth_authority",
             "bytea, text, text",
         ): {SERVICE_ROLES["oauth"]},
+        # Migrations 0010 and 0011: the platform authority's own triggers,
+        # translated from the SQLite schema those stores were written against.
+        # Trigger functions, so no role holds EXECUTE on any of them.
+        ("access_audit_log_append_only", ""): set(),
+        ("platform_admin_audit_append_only", ""): set(),
+        ("platform_grant_scope_binding", ""): set(),
+        ("platform_provider_event_binding_immutable", ""): set(),
+        ("platform_provider_event_binding_insert", ""): set(),
+        ("platform_provider_event_binding_update", ""): set(),
+        ("platform_provider_event_entitlement_binding", ""): set(),
+        ("platform_provider_event_entitlement_binding_immutable", ""): set(),
+        ("platform_provider_mapping_subject_binding", ""): set(),
+        ("platform_subject_grants_membership_delete", ""): set(),
+        # Migration 0012: the identity projection. SECURITY DEFINER, and the
+        # only new function any role may call.
+        (
+            "project_platform_identity",
+            "uuid, text, text, text, uuid, text, text, text",
+        ): {ADMISSION_ROLE, "medawarcre_admin"},
     }
     if functions != set(function_contract):
         raise BackupVerificationError(
@@ -1081,17 +1125,32 @@ def _verify_restored_database(
                 (SCHEMA_NAME, MIGRATION_ROLE),
             ).fetchone()[0]
         )
-        if (
-            invalid_foreign_keys
-            or rls_tables != EXPECTED_RLS_TABLES
-            or disabled_triggers
-            or schema_owner != MIGRATION_ROLE
-            or non_migration_tables
-            or catalog_fingerprint(connection) != manifest.schema_fingerprint
-            or manifest.schema_fingerprint != EXPECTED_CATALOG_FINGERPRINT
-        ):
+        # Named individually rather than as one boolean. A restore that fails
+        # this check is a disaster-recovery exercise going wrong, and "one of
+        # these four things" is the worst possible message to read at that
+        # moment. None of these names is a credential.
+        failures = []
+        if invalid_foreign_keys:
+            failures.append(f"invalid_foreign_keys={invalid_foreign_keys}")
+        if rls_tables != EXPECTED_RLS_TABLES:
+            extra = sorted(rls_tables - EXPECTED_RLS_TABLES)
+            missing = sorted(EXPECTED_RLS_TABLES - rls_tables)
+            failures.append(f"rls_extra={extra} rls_missing={missing}")
+        if disabled_triggers:
+            failures.append(f"disabled_triggers={disabled_triggers}")
+        if schema_owner != MIGRATION_ROLE:
+            failures.append(f"schema_owner={schema_owner}")
+        if non_migration_tables:
+            failures.append(f"non_migration_tables={non_migration_tables}")
+        restored_fingerprint = catalog_fingerprint(connection)
+        if restored_fingerprint != manifest.schema_fingerprint:
+            failures.append("restored_fingerprint_differs_from_manifest")
+        if manifest.schema_fingerprint != EXPECTED_CATALOG_FINGERPRINT:
+            failures.append("manifest_fingerprint_differs_from_expected")
+        if failures:
             raise BackupVerificationError(
-                "restored constraints, RLS, triggers, or ownership are invalid"
+                "restored constraints, RLS, triggers, or ownership are invalid: "
+                + "; ".join(failures)
             )
         _verify_exact_privileges(connection)
     return row_counts

@@ -2787,7 +2787,7 @@ def starlette_app(
         build_postgres_hosted_persistence,
     )
 
-    bundle = build_postgres_hosted_persistence()
+    bundle = build_postgres_hosted_persistence(config)
     try:
         if getattr(bundle, "backend", None) != "postgres":
             raise RuntimeError("hosted HTTP requires PostgreSQL persistence")

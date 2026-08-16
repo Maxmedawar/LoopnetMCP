@@ -301,8 +301,14 @@ GRANT INSERT ON medawarcre.staff_audit_log TO medawarcre_admin;
 -- table's triggers reject UPDATE and DELETE.
 GRANT INSERT ON medawarcre.internal_opportunity_reviews TO medawarcre_admin;
 GRANT SELECT ON ALL TABLES IN SCHEMA medawarcre TO medawarcre_backup;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA medawarcre
-TO medawarcre_app, medawarcre_admin;
+-- No sequence grant to the application or admin roles. Before migration 0010
+-- the schema had no sequences at all -- every key was a uuid -- so this line
+-- was a no-op that happened to match. 0010 and 0011 introduced twenty-seven
+-- IDENTITY sequences, which PostgreSQL drives internally and which therefore
+-- need no USAGE grant; re-granting them here made the restored catalog differ
+-- from the source it was dumped from, and the fingerprint check caught it.
+-- The backup role's SELECT below is kept because ALTER DEFAULT PRIVILEGES
+-- already gives new sequences exactly that, so the two agree.
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA medawarcre TO medawarcre_backup;
 
 GRANT EXECUTE ON FUNCTION medawarcre.current_workspace_id()
@@ -326,6 +332,129 @@ GRANT EXECUTE ON FUNCTION medawarcre.bind_admitted_request(
 GRANT EXECUTE ON FUNCTION medawarcre.resolve_oauth_authority(
     bytea, text, text
 ) TO medawarcre_oauth;
+
+
+-- Migrations 0010 (platform authority), 0011 (access audit log) and 0012
+-- (identity projection), copied verbatim from those files rather than
+-- retyped.
+--
+-- This file REVOKEs everything in the schema and then re-grants an enumerated
+-- set, so an object it does not name comes back from a restore with no
+-- privileges at all -- and the restored catalog fingerprint stops matching the
+-- manifest, which is how the omission was found rather than discovered in a
+-- recovery. Any future migration that grants must add its grants here too.
+
+REVOKE ALL ON FUNCTION medawarcre.platform_admin_audit_append_only()
+    FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION medawarcre.platform_grant_scope_binding() FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION medawarcre.platform_subject_grants_membership_delete()
+    FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION medawarcre.platform_provider_mapping_subject_binding()
+    FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION medawarcre.platform_provider_event_binding_insert()
+    FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION medawarcre.platform_provider_event_binding_update()
+    FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION medawarcre.platform_provider_event_binding_immutable()
+    FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION
+    medawarcre.platform_provider_event_entitlement_binding() FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION
+    medawarcre.platform_provider_event_entitlement_binding_immutable()
+    FROM PUBLIC;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+    medawarcre.platform_schema_versions,
+    medawarcre.platform_users,
+    medawarcre.platform_plans,
+    medawarcre.platform_workspaces,
+    medawarcre.platform_memberships,
+    medawarcre.platform_territories,
+    medawarcre.platform_connected_clients,
+    medawarcre.platform_saved_deals,
+    medawarcre.platform_notes,
+    medawarcre.platform_outcomes,
+    medawarcre.platform_consents,
+    medawarcre.platform_integration_events,
+    medawarcre.platform_privacy_requests,
+    medawarcre.platform_human_identities,
+    medawarcre.platform_browser_sessions,
+    medawarcre.platform_operator_sessions,
+    medawarcre.platform_oauth_clients,
+    medawarcre.platform_oauth_sessions,
+    medawarcre.platform_oauth_codes,
+    medawarcre.platform_oauth_refresh_history,
+    medawarcre.platform_oauth_authorization_requests,
+    medawarcre.platform_internal_admins,
+    medawarcre.platform_external_accounts,
+    medawarcre.platform_skool_join_tasks,
+    medawarcre.platform_skool_reconciliations,
+    medawarcre.platform_accounts,
+    medawarcre.platform_subscriptions,
+    medawarcre.platform_access_grants,
+    medawarcre.platform_provider_events,
+    medawarcre.platform_provider_event_attempts
+TO medawarcre_app;
+
+GRANT SELECT, INSERT ON medawarcre.platform_admin_audit TO medawarcre_app;
+
+GRANT SELECT ON
+    medawarcre.platform_schema_versions,
+    medawarcre.platform_users,
+    medawarcre.platform_plans,
+    medawarcre.platform_workspaces,
+    medawarcre.platform_memberships,
+    medawarcre.platform_territories,
+    medawarcre.platform_connected_clients,
+    medawarcre.platform_saved_deals,
+    medawarcre.platform_notes,
+    medawarcre.platform_outcomes,
+    medawarcre.platform_consents,
+    medawarcre.platform_integration_events,
+    medawarcre.platform_privacy_requests,
+    medawarcre.platform_human_identities,
+    medawarcre.platform_browser_sessions,
+    medawarcre.platform_operator_sessions,
+    medawarcre.platform_oauth_clients,
+    medawarcre.platform_oauth_sessions,
+    medawarcre.platform_oauth_codes,
+    medawarcre.platform_oauth_refresh_history,
+    medawarcre.platform_oauth_authorization_requests,
+    medawarcre.platform_internal_admins,
+    medawarcre.platform_external_accounts,
+    medawarcre.platform_admin_audit,
+    medawarcre.platform_skool_join_tasks,
+    medawarcre.platform_skool_reconciliations,
+    medawarcre.platform_accounts,
+    medawarcre.platform_subscriptions,
+    medawarcre.platform_access_grants,
+    medawarcre.platform_provider_events,
+    medawarcre.platform_provider_event_attempts
+TO medawarcre_admin, medawarcre_backup;
+
+REVOKE ALL ON FUNCTION medawarcre.access_audit_log_append_only() FROM PUBLIC;
+
+REVOKE ALL ON medawarcre.access_audit_log FROM PUBLIC;
+
+GRANT SELECT, INSERT ON medawarcre.access_audit_log TO medawarcre_app;
+
+GRANT SELECT ON medawarcre.access_audit_log TO medawarcre_admin, medawarcre_backup;
+
+REVOKE ALL ON FUNCTION medawarcre.project_platform_identity(
+    uuid, text, text, text, uuid, text, text, text
+) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION medawarcre.project_platform_identity(
+    uuid, text, text, text, uuid, text, text, text
+) TO medawarcre_admission, medawarcre_admin;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE medawarcre_migration IN SCHEMA medawarcre
     REVOKE ALL ON TABLES FROM PUBLIC;

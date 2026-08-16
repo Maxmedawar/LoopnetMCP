@@ -157,7 +157,25 @@ def build_postgres_hosted_persistence(
         provider = HostedDomainRepositoryProvider(
             database, config=selected_config
         )
-        oauth_authority = _build_oauth_authority()
+        # The live authority is `PlatformApi.authority` — an `AuthorityResolver`
+        # over the `platform_*` relations, which is where sign-in, OAuth issue,
+        # membership, grants and territory actually live, and which this phase
+        # moved onto PostgreSQL.
+        #
+        # It is deliberately NOT `PostgresOAuthAuthorityRepository`. That
+        # repository is certified and correct, but it resolves against
+        # `medawarcre.oauth_sessions`, and nothing in the product writes a row
+        # there: issuance goes through `OAuthSessionStore` into
+        # `platform_oauth_sessions`. Wiring it here would produce a process
+        # that denies every bearer token while every gate reported healthy —
+        # which is precisely what the first run of the PostgreSQL Skool launch
+        # gate produced, a 401 on a token that had just been issued.
+        #
+        # Unifying the two OAuth schemas is a real piece of work and is not
+        # this phase. Until it happens, the certified repository stays in the
+        # tree, tested, and off the hosted path, and this comment is the reason
+        # rather than an absence someone has to rediscover.
+        oauth_authority = platform_api.authority
         admission_repository = _build_admission_repository()
     except HostedPersistenceUnavailable:
         _unwind(database, backend, installed)
@@ -221,12 +239,32 @@ def _build_oauth_authority() -> Any:
 
 
 def _build_admission_repository() -> Any:
-    """Open atomic admission on its own least-privilege DSN, for the same reason."""
+    """Open atomic admission on its own least-privilege DSN, for the same reason.
+
+    Wrapped in the identity projection: the platform authority keys identity
+    with bigints and the certified tenant schema with uuids, and admission
+    parses its actor and session as uuids. Without the wrapper every hosted
+    tool call fails with "request admission is unavailable" while every layer
+    above it works.
+    """
+    import os
+
     from cre_mcp.postgres.admission import PostgresAdmissionRepository
+    from cre_mcp.postgres.identity_projection import (
+        PlatformIdentityProjection,
+        ProjectingAdmissionRepository,
+    )
 
     repository = PostgresAdmissionRepository.from_env()
     repository.open(wait=True)
-    return repository
+    dsn = os.environ.get("MEDAWARCRE_ADMISSION_DATABASE_URL", "").strip()
+    if not dsn:
+        raise HostedPersistenceUnavailable(
+            "hosted admission requires MEDAWARCRE_ADMISSION_DATABASE_URL"
+        )
+    return ProjectingAdmissionRepository(
+        repository, PlatformIdentityProjection(dsn)
+    )
 
 
 __all__ = [

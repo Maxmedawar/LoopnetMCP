@@ -305,7 +305,7 @@ def create_http_app(
         build_postgres_hosted_persistence,
     )
 
-    bundle = build_postgres_hosted_persistence()
+    bundle = build_postgres_hosted_persistence(config)
     try:
         if getattr(bundle, "backend", None) != "postgres":
             raise RuntimeError("hosted HTTP requires PostgreSQL persistence")
@@ -355,7 +355,7 @@ def run_server(
         from cre_mcp.postgres.runtime import build_postgres_hosted_persistence
         from cre_mcp.surface import CUSTOMER_SURFACE
 
-        bundle = build_postgres_hosted_persistence()
+        bundle = build_postgres_hosted_persistence(config)
         uninstall = None
         try:
             platform = bundle.platform_api

@@ -61,5 +61,12 @@ FOR EACH ROW EXECUTE FUNCTION medawarcre.access_audit_log_append_only();
 
 REVOKE ALL ON medawarcre.access_audit_log FROM PUBLIC;
 GRANT SELECT, INSERT ON medawarcre.access_audit_log TO medawarcre_app;
+
+-- Deliberately no sequence grant. These are IDENTITY columns, not `serial`:
+-- PostgreSQL uses the backing sequence internally on INSERT and requires no
+-- USAGE privilege on it, so a grant here buys nothing. It also costs: an
+-- explicit ACL on an identity sequence is not reproduced by pg_dump/pg_restore,
+-- so the restored catalog fingerprint stops matching the manifest and the
+-- disaster-recovery verification fails. That is exactly how this line was
+-- found -- by `test_native_dump_clean_restore_and_service_smoke`, not by review.
 GRANT SELECT ON medawarcre.access_audit_log TO medawarcre_admin, medawarcre_backup;
-GRANT USAGE, SELECT ON SEQUENCE medawarcre.access_audit_log_id_seq TO medawarcre_app;
